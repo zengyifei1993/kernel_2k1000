@@ -13,6 +13,7 @@
  */
 #include <linux/bug.h>
 #include <linux/compiler.h>
+#include <linux/context_tracking.h>
 #include <linux/kexec.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
@@ -1046,7 +1047,7 @@ asmlinkage void do_cpu(struct pt_regs *regs)
 	unsigned long old_epc, old31;
 	unsigned int opcode;
 	unsigned int cpid;
-	int status;
+	int status, err;
 	unsigned long __maybe_unused flags;
 
 	die_if_kernel("do_cpu invoked from kernel context!", regs);
@@ -1117,19 +1118,19 @@ asmlinkage void do_cpu(struct pt_regs *regs)
 
 	case 1:
 		if (used_math())	/* Using the FPU again.	 */
-			own_fpu(1);
+			err = own_fpu(1);
 		else {			/* First time FPU user.	 */
-			init_fpu();
+			err = init_fpu();
 			set_used_math();
 		}
 
-		if (!raw_cpu_has_fpu) {
+		if (!raw_cpu_has_fpu || err) {
 			int sig;
 			void __user *fault_addr = NULL;
 			sig = fpu_emulator_cop1Handler(regs,
 						       &current->thread.fpu,
 						       0, &fault_addr);
-			if (!process_fpemu_return(sig, fault_addr))
+			if (!process_fpemu_return(sig, fault_addr) && !err)
 				mt_ase_fp_affinity();
 		}
 
