@@ -67,6 +67,7 @@ void start_thread(struct pt_regs * regs, unsigned long pc, unsigned long sp)
 	clear_fpu_owner();
 	if (cpu_has_dsp)
 		__init_dsp();
+	clear_thread_flag(TIF_USEDMSA);
 	clear_thread_flag(TIF_MSA_CTX_LIVE);
 	disable_msa();
 	regs->cp0_epc = pc;
@@ -149,6 +150,8 @@ int copy_thread(unsigned long clone_flags, unsigned long usp,
 	childregs->cp0_tcstatus &= ~(ST0_CU2|ST0_CU1);
 #endif
 	clear_tsk_thread_flag(p, TIF_USEDFPU);
+	clear_tsk_thread_flag(p, TIF_USEDMSA);
+	clear_tsk_thread_flag(p, TIF_MSA_CTX_LIVE);
 
 #ifdef CONFIG_MIPS_MT_FPAFF
 	clear_tsk_thread_flag(p, TIF_FPUBOUND);
