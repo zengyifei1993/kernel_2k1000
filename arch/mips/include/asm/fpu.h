@@ -162,7 +162,6 @@ static inline int init_fpu(void)
 {
 	int ret = 0;
 
-	preempt_disable();
 	if (cpu_has_fpu) {
 		ret = __own_fpu();
 		if (!ret)
@@ -171,7 +170,6 @@ static inline int init_fpu(void)
 		fpu_emulator_init_fpu();
 	}
 
-	preempt_enable();
 	return ret;
 }
 
