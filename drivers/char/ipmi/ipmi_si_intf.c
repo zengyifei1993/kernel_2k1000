@@ -2597,6 +2597,9 @@ static int of_ipmi_probe(struct platform_device *dev)
 	if (!match)
 		return -ENODEV;
 
+	if (!of_device_is_available(np))
+		return -EINVAL;
+
 	ret = of_address_to_resource(np, 0, &resource);
 	if (ret) {
 		dev_warn(&dev->dev, PFX "invalid address from OF\n");
