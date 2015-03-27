@@ -34,7 +34,6 @@
 	.endm
 
 	.set	noreorder
-	.set	mips3
 
 LEAF(_save_fp_context)
 	.set	push
@@ -102,6 +101,7 @@ LEAF(_save_fp_context)
 	/* Save 32-bit process floating point context */
 LEAF(_save_fp_context32)
 	.set push
+	.set MIPS_ISA_ARCH_LEVEL_RAW
 	SET_HARDFLOAT
 	cfc1	t1, fcr31
 
