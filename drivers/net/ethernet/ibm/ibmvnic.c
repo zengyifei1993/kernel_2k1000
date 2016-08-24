@@ -2776,12 +2776,6 @@ static void handle_control_ras_rsp(union ibmvnic_crq *crq,
 	}
 }
 
-static int ibmvnic_fw_comp_open(struct inode *inode, struct file *file)
-{
-	file->private_data = inode->i_private;
-	return 0;
-}
-
 static ssize_t trace_read(struct file *file, char __user *user_buf, size_t len,
 			  loff_t *ppos)
 {
@@ -2833,7 +2827,7 @@ static ssize_t trace_read(struct file *file, char __user *user_buf, size_t len,
 
 static const struct file_operations trace_ops = {
 	.owner		= THIS_MODULE,
-	.open		= ibmvnic_fw_comp_open,
+	.open		= simple_open,
 	.read		= trace_read,
 };
 
@@ -2883,7 +2877,7 @@ static ssize_t paused_write(struct file *file, const char __user *user_buf,
 
 static const struct file_operations paused_ops = {
 	.owner		= THIS_MODULE,
-	.open		= ibmvnic_fw_comp_open,
+	.open		= simple_open,
 	.read		= paused_read,
 	.write		= paused_write,
 };
@@ -2931,7 +2925,7 @@ static ssize_t tracing_write(struct file *file, const char __user *user_buf,
 
 static const struct file_operations tracing_ops = {
 	.owner		= THIS_MODULE,
-	.open		= ibmvnic_fw_comp_open,
+	.open		= simple_open,
 	.read		= tracing_read,
 	.write		= tracing_write,
 };
@@ -2984,7 +2978,7 @@ static ssize_t error_level_write(struct file *file, const char __user *user_buf,
 
 static const struct file_operations error_level_ops = {
 	.owner		= THIS_MODULE,
-	.open		= ibmvnic_fw_comp_open,
+	.open		= simple_open,
 	.read		= error_level_read,
 	.write		= error_level_write,
 };
@@ -3035,7 +3029,7 @@ static ssize_t trace_level_write(struct file *file, const char __user *user_buf,
 
 static const struct file_operations trace_level_ops = {
 	.owner		= THIS_MODULE,
-	.open		= ibmvnic_fw_comp_open,
+	.open		= simple_open,
 	.read		= trace_level_read,
 	.write		= trace_level_write,
 };
@@ -3088,7 +3082,7 @@ static ssize_t trace_buff_size_write(struct file *file,
 
 static const struct file_operations trace_size_ops = {
 	.owner		= THIS_MODULE,
-	.open		= ibmvnic_fw_comp_open,
+	.open		= simple_open,
 	.read		= trace_buff_size_read,
 	.write		= trace_buff_size_write,
 };
