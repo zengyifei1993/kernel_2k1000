@@ -8,6 +8,7 @@
 #ifndef _ASM_ELF_H
 #define _ASM_ELF_H
 
+#include <linux/mm_types.h>
 
 /* ELF header e_flags defines. */
 /* MIPS architecture level. */
@@ -259,6 +260,9 @@ struct mips_abi;
 extern struct mips_abi mips_abi;
 extern struct mips_abi mips_abi_32;
 extern struct mips_abi mips_abi_n32;
+
+void mips_dump_regs32(u32 *uregs, const struct pt_regs *regs);
+void mips_dump_regs64(u64 *uregs, const struct pt_regs *regs);
 
 #ifdef CONFIG_32BIT
 

@@ -554,3 +554,47 @@ unsigned long arch_align_stack(unsigned long sp)
 
 	return sp & ALMASK;
 }
+
+#if defined(CONFIG_32BIT) || defined(CONFIG_MIPS32_O32)
+void mips_dump_regs32(u32 *uregs, const struct pt_regs *regs)
+{
+	unsigned int i;
+
+	for (i = EF_R1; i <= EF_R31; i++) {
+		/* k0/k1 are copied as zero. */
+		if (i == EF_R26 || i == EF_R27)
+			uregs[i] = 0;
+		else
+			uregs[i] = regs->regs[i - EF_R0];
+	}
+
+	uregs[EF_LO] = regs->lo;
+	uregs[EF_HI] = regs->hi;
+	uregs[EF_CP0_EPC] = regs->cp0_epc;
+	uregs[EF_CP0_BADVADDR] = regs->cp0_badvaddr;
+	uregs[EF_CP0_STATUS] = regs->cp0_status;
+	uregs[EF_CP0_CAUSE] = regs->cp0_cause;
+}
+#endif /* CONFIG_32BIT || CONFIG_MIPS32_O32 */
+
+#ifdef CONFIG_64BIT
+void mips_dump_regs64(u64 *uregs, const struct pt_regs *regs)
+{
+	unsigned int i;
+
+	for (i = EF_R1; i <= EF_R31; i++) {
+		/* k0/k1 are copied as zero. */
+		if (i == EF_R26 || i == EF_R27)
+			uregs[i] = 0;
+		else
+			uregs[i] = regs->regs[i - EF_R0];
+	}
+
+	uregs[EF_LO] = regs->lo;
+	uregs[EF_HI] = regs->hi;
+	uregs[EF_CP0_EPC] = regs->cp0_epc;
+	uregs[EF_CP0_BADVADDR] = regs->cp0_badvaddr;
+	uregs[EF_CP0_STATUS] = regs->cp0_status;
+	uregs[EF_CP0_CAUSE] = regs->cp0_cause;
+}
+#endif /* CONFIG_64BIT */
