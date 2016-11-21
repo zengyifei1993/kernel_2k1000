@@ -217,6 +217,9 @@ typedef elf_fpreg_t elf_fpregset_t[ELF_NFPREG];
  */
 #define ELF_CLASS	ELFCLASS32
 
+#define ELF_CORE_COPY_REGS(dest, regs) \
+	mips_dump_regs32((u32 *)&(dest), (regs));
+
 #endif /* CONFIG_32BIT */
 
 #ifdef CONFIG_64BIT
@@ -240,6 +243,9 @@ typedef elf_fpreg_t elf_fpregset_t[ELF_NFPREG];
  * These are used to set parameters in the core dumps.
  */
 #define ELF_CLASS	ELFCLASS64
+
+#define ELF_CORE_COPY_REGS(dest, regs) \
+	mips_dump_regs64((u64 *)&(dest), (regs));
 
 #endif /* CONFIG_64BIT */
 
