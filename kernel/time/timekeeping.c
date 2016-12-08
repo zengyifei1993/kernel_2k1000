@@ -202,10 +202,10 @@ static inline cycle_t timekeeping_get_delta(struct tk_read_base *tkr)
 	return delta;
 }
 
-static inline s64 timekeeping_delta_to_ns(struct tk_read_base *tkr,
+static inline u64 timekeeping_delta_to_ns(struct tk_read_base *tkr,
 					  cycle_t delta)
 {
-	s64 nsec;
+	u64 nsec;
 
 	nsec = delta * tkr->mult + tkr->xtime_nsec;
 	nsec >>= tkr->shift;
