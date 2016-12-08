@@ -214,7 +214,7 @@ static inline u64 timekeeping_delta_to_ns(struct tk_read_base *tkr,
 	return nsec + arch_gettimeoffset();
 }
 
-static inline s64 timekeeping_get_ns(struct tk_read_base *tkr)
+static inline u64 timekeeping_get_ns(struct tk_read_base *tkr)
 {
 	cycle_t delta;
 
@@ -337,8 +337,8 @@ u64 ktime_get_raw_fast_ns(void)
 }
 EXPORT_SYMBOL_GPL(ktime_get_raw_fast_ns);
 
-static inline s64 timekeeping_cycles_to_ns(struct tk_read_base *tkr,
-					    cycle_t cycles)
+static inline u64 timekeeping_cycles_to_ns(struct tk_read_base *tkr,
+					   cycle_t cycles)
 {
 	cycle_t delta;
 
@@ -459,7 +459,7 @@ static void timekeeping_forward_now(struct timekeeper *tk)
 {
 	cycle_t cycle_now, delta;
 	struct clocksource *clock;
-	s64 nsec;
+	u64 nsec;
 
 	clock = tk->tkr_mono.clock;
 	cycle_now = clock->read(clock);
@@ -489,7 +489,7 @@ int __getnstimeofday64(struct timespec64 *ts)
 {
 	struct timekeeper *tk = &timekeeper;
 	unsigned long seq;
-	s64 nsecs = 0;
+	u64 nsecs;
 
 	do {
 		seq = read_seqcount_begin(&timekeeper_seq);
@@ -528,7 +528,7 @@ ktime_t ktime_get(void)
 {
 	struct timekeeper *tk = &timekeeper;
 	unsigned int seq;
-	s64 secs, nsecs;
+	u64 secs, nsecs;
 
 	WARN_ON(timekeeping_suspended);
 
@@ -555,7 +555,7 @@ ktime_t ktime_get_raw(void)
 	struct timekeeper *tk = &timekeeper;
 	unsigned int seq;
 	ktime_t base;
-	s64 nsecs;
+	u64 nsecs;
 
 	do {
 		seq = read_seqcount_begin(&timekeeper_seq);
@@ -580,8 +580,8 @@ void ktime_get_ts64(struct timespec64 *ts)
 {
 	struct timekeeper *tk = &timekeeper;
 	struct timespec64 tomono;
-	s64 nsec;
 	unsigned int seq;
+	u64 nsec;
 
 	WARN_ON(timekeeping_suspended);
 
@@ -779,7 +779,7 @@ int get_device_system_crosststamp(int (*get_time_fn)
 	cycle_t cycles, now, interval_start;
 	unsigned int clock_was_set_seq = 0;
 	ktime_t base_real, base_raw;
-	s64 nsec_real, nsec_raw;
+	u64 nsec_real, nsec_raw;
 	u8 cs_was_changed_seq;
 	unsigned long seq;
 	bool do_interp;
@@ -980,8 +980,8 @@ void ktime_get_snapshot(struct system_time_snapshot *systime_snapshot)
 	unsigned long seq;
 	ktime_t base_raw;
 	ktime_t base_real;
-	s64 nsec_raw;
-	s64 nsec_real;
+	u64 nsec_raw;
+	u64 nsec_real;
 	cycle_t now;
 
 	WARN_ON_ONCE(timekeeping_suspended);
@@ -1135,7 +1135,7 @@ void getrawmonotonic64(struct timespec64 *ts)
 	struct timekeeper *tk = &timekeeper;
 	struct timespec64 ts64;
 	unsigned long seq;
-	s64 nsecs;
+	u64 nsecs;
 
 	do {
 		seq = read_seqcount_begin(&timekeeper_seq);
@@ -1383,7 +1383,7 @@ static void timekeeping_resume(void)
 		u64 num, max = ULLONG_MAX;
 		u32 mult = clock->mult;
 		u32 shift = clock->shift;
-		s64 nsec = 0;
+		u64 nsec = 0;
 
 		cycle_delta = clocksource_delta(cycle_now, clock->cycle_last,
 						clock->mask);
@@ -1924,7 +1924,7 @@ void get_monotonic_boottime(struct timespec *ts)
 {
 	struct timekeeper *tk = &timekeeper;
 	struct timespec64 tomono, sleep, ret;
-	s64 nsec;
+	u64 nsec;
 	unsigned int seq;
 
 	WARN_ON(timekeeping_suspended);
