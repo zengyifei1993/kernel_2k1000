@@ -184,7 +184,7 @@ static struct page *get_arg_page(struct linux_binprm *bprm, unsigned long pos,
 
 #ifdef CONFIG_STACK_GROWSUP
 	if (write) {
-		ret = expand_downwards(bprm->vma, pos);
+		ret = expand_downwards(bprm->vma, pos, 0);
 		if (ret < 0)
 			return NULL;
 	}
