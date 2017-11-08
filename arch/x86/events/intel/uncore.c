@@ -1,4 +1,3 @@
-#include <linux/crash_dump.h>
 #include "uncore.h"
 
 static struct intel_uncore_type *empty_uncore[] = { NULL, };
@@ -729,6 +728,7 @@ static int uncore_pmu_register(struct intel_uncore_pmu *pmu)
 			.start		= uncore_pmu_event_start,
 			.stop		= uncore_pmu_event_stop,
 			.read		= uncore_pmu_event_read,
+			.module		= THIS_MODULE,
 		};
 	} else {
 		pmu->pmu = *pmu->type->pmu;
@@ -1389,9 +1389,6 @@ static int __init intel_uncore_init(void)
 		return -ENODEV;
 
 	if (cpu_has_hypervisor)
-		return -ENODEV;
-
-	if (is_kdump_kernel())
 		return -ENODEV;
 
 	max_packages = topology_max_packages();

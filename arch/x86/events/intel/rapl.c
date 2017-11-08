@@ -150,7 +150,13 @@ static u64 rapl_timer_ms;
 
 static inline struct rapl_pmu *cpu_to_rapl_pmu(unsigned int cpu)
 {
-	return rapl_pmus->pmus[topology_logical_package_id(cpu)];
+	unsigned int pkgid = topology_logical_package_id(cpu);
+
+	/*
+	 * The unsigned check also catches the '-1' return value for non
+	 * existent mappings in the topology map.
+	 */
+	return pkgid < rapl_pmus->maxpkg ? rapl_pmus->pmus[pkgid] : NULL;
 }
 
 static inline u64 rapl_read_counter(struct perf_event *event)
@@ -385,6 +391,8 @@ static int rapl_pmu_event_init(struct perf_event *event)
 
 	/* must be done before validate_group */
 	pmu = cpu_to_rapl_pmu(event->cpu);
+	if (!pmu)
+		return -EINVAL;
 	event->cpu = pmu->cpu;
 	event->pmu_private = pmu;
 	event->hw.event_base = msr;
@@ -521,14 +529,14 @@ const struct attribute_group *rapl_attr_groups[] = {
 	NULL,
 };
 
-static void rapl_cpu_exit(int cpu)
+static int rapl_cpu_offline(unsigned int cpu)
 {
 	struct rapl_pmu *pmu = cpu_to_rapl_pmu(cpu);
 	int target;
 
 	/* Check if exiting cpu is used for collecting rapl events */
 	if (!cpumask_test_and_clear_cpu(cpu, &rapl_cpu_mask))
-		return;
+		return 0;
 
 	pmu->cpu = -1;
 	/* Find a new cpu to collect rapl events */
@@ -540,12 +548,27 @@ static void rapl_cpu_exit(int cpu)
 		pmu->cpu = target;
 		perf_pmu_migrate_context(pmu->pmu, cpu, target);
 	}
+	return 0;
 }
 
-static void rapl_cpu_init(int cpu)
+static int rapl_cpu_online(unsigned int cpu)
 {
 	struct rapl_pmu *pmu = cpu_to_rapl_pmu(cpu);
 	int target;
+
+	if (!pmu) {
+		pmu = kzalloc_node(sizeof(*pmu), GFP_KERNEL, cpu_to_node(cpu));
+		if (!pmu)
+			return -ENOMEM;
+
+		raw_spin_lock_init(&pmu->lock);
+		INIT_LIST_HEAD(&pmu->active_list);
+		pmu->pmu = &rapl_pmus->pmu;
+		pmu->timer_interval = ms_to_ktime(rapl_timer_ms);
+		rapl_hrtimer_init(pmu);
+
+		rapl_pmus->pmus[topology_logical_package_id(cpu)] = pmu;
+	}
 
 	/*
 	 * Check if there is an online cpu in the package which collects rapl
@@ -553,30 +576,10 @@ static void rapl_cpu_init(int cpu)
 	 */
 	target = cpumask_any_and(&rapl_cpu_mask, topology_core_cpumask(cpu));
 	if (target < nr_cpu_ids)
-		return;
+		return 0;
 
 	cpumask_set_cpu(cpu, &rapl_cpu_mask);
 	pmu->cpu = cpu;
-}
-
-static int rapl_cpu_prepare(int cpu)
-{
-	struct rapl_pmu *pmu = cpu_to_rapl_pmu(cpu);
-
-	if (pmu)
-		return 0;
-
-	pmu = kzalloc_node(sizeof(*pmu), GFP_KERNEL, cpu_to_node(cpu));
-	if (!pmu)
-		return -ENOMEM;
-
-	raw_spin_lock_init(&pmu->lock);
-	INIT_LIST_HEAD(&pmu->active_list);
-	pmu->pmu = &rapl_pmus->pmu;
-	pmu->timer_interval = ms_to_ktime(rapl_timer_ms);
-	pmu->cpu = -1;
-	rapl_hrtimer_init(pmu);
-	rapl_pmus->pmus[topology_logical_package_id(cpu)] = pmu;
 	return 0;
 }
 
@@ -586,17 +589,13 @@ static int rapl_cpu_notifier(struct notifier_block *self,
 	unsigned int cpu = (long)hcpu;
 
 	switch (action & ~CPU_TASKS_FROZEN) {
-	case CPU_UP_PREPARE:
-		rapl_cpu_prepare(cpu);
-		break;
-
 	case CPU_DOWN_FAILED:
 	case CPU_ONLINE:
-		rapl_cpu_init(cpu);
+		rapl_cpu_online(cpu);
 		break;
 
 	case CPU_DOWN_PREPARE:
-		rapl_cpu_exit(cpu);
+		rapl_cpu_offline(cpu);
 		break;
 	}
 	return NOTIFY_OK;
@@ -662,10 +661,9 @@ static int __init rapl_prepare_cpus(void)
 		if (rapl_pmus->pmus[pkg])
 			continue;
 
-		ret = rapl_cpu_prepare(cpu);
+		ret = rapl_cpu_online(cpu);
 		if (ret)
 			return ret;
-		rapl_cpu_init(cpu);
 	}
 	return 0;
 }
@@ -698,6 +696,7 @@ static int __init init_rapl_pmus(void)
 	rapl_pmus->pmu.start		= rapl_pmu_event_start;
 	rapl_pmus->pmu.stop		= rapl_pmu_event_stop;
 	rapl_pmus->pmu.read		= rapl_pmu_event_read;
+	rapl_pmus->pmu.module		= THIS_MODULE;
 	return 0;
 }
 
