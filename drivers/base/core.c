@@ -1340,6 +1340,7 @@ void device_del(struct device *dev)
 	kobject_del(&dev->kobj);
 	/* This free's the allocation done in device_add() */
 	kfree(dev->device_rh);
+	dev->device_rh = NULL;
 	put_device(parent);
 }
 
