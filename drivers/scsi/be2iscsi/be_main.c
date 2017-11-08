@@ -1195,7 +1195,7 @@ beiscsi_get_wrb_handle(struct hwi_wrb_context *pwrb_context,
 
 	spin_lock_bh(&pwrb_context->wrb_lock);
 	if (!pwrb_context->wrb_handles_available) {
-		spin_unlock_irqrestore(&pwrb_context->wrb_lock, flags);
+		spin_unlock_bh(&pwrb_context->wrb_lock);
 		return NULL;
 	}
 	pwrb_handle = pwrb_context->pwrb_handle_base[pwrb_context->alloc_index];
@@ -1468,11 +1468,11 @@ hwi_complete_drvr_msgs(struct beiscsi_conn *beiscsi_conn,
 	pwrb_context = &phwi_ctrlr->wrb_context[cri_index];
 	pwrb_handle = pwrb_context->pwrb_handle_basestd[wrb_index];
 	session = beiscsi_conn->conn->session;
-	spin_lock_bh(&session->back_lock);
+	spin_lock_bh(&session->lock);
 	task = pwrb_handle->pio_handle;
 	if (task)
 		__iscsi_put_task(task);
-	spin_unlock_bh(&session->back_lock);
+	spin_unlock_bh(&session->lock);
 }
 
 static void
@@ -1574,10 +1574,10 @@ static void hwi_complete_cmd(struct beiscsi_conn *beiscsi_conn,
 	pwrb_handle = pwrb_context->pwrb_handle_basestd[
 		      csol_cqe.wrb_index];
 
-	spin_lock_bh(&session->back_lock);
+	spin_lock_bh(&session->lock);
 	task = pwrb_handle->pio_handle;
 	if (!task) {
-		spin_unlock_bh(&session->back_lock);
+		spin_unlock_bh(&session->lock);
 		return;
 	}
 	pwrb = pwrb_handle->pwrb;
@@ -4642,6 +4642,7 @@ beiscsi_free_mgmt_task_handles(struct beiscsi_conn *beiscsi_conn,
 	}
 
 	if (io_task->psgl_handle) {
+		spin_lock_bh(&phba->mgmt_sgl_lock);
 		free_mgmt_sgl_handle(phba, io_task->psgl_handle);
 		io_task->psgl_handle = NULL;
 		spin_unlock_bh(&phba->mgmt_sgl_lock);
