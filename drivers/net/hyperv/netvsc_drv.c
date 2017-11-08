@@ -362,18 +362,14 @@ static int netvsc_start_xmit(struct sk_buff *skb, struct net_device *net)
 	struct rndis_message *rndis_msg;
 	struct rndis_packet *rndis_pkt;
 	u32 rndis_msg_size;
-	bool isvlan;
-	bool linear = false;
 	struct rndis_per_packet_info *ppi;
 	struct ndis_tcp_ip_checksum_info *csum_info;
-	struct ndis_tcp_lso_info *lso_info;
-	int  hdr_offset;
+	int  hdr_offset = 0; /* silence GCC4.8 complains in RHEL7 */
 	u32 net_trans_info;
 	u32 hash;
 	u32 skb_length;
 	struct hv_page_buffer page_buf[MAX_PAGE_BUFFER_COUNT];
 	struct hv_page_buffer *pb = page_buf;
-	struct netvsc_stats *tx_stats = this_cpu_ptr(net_device_ctx->tx_stats);
 
 	/* We will atmost need two pages to describe the rndis
 	 * header. We can only transmit MAX_PAGE_BUFFER_COUNT number
@@ -381,22 +377,20 @@ static int netvsc_start_xmit(struct sk_buff *skb, struct net_device *net)
 	 * more pages we try linearizing it.
 	 */
 
-check_size:
 	skb_length = skb->len;
 	num_data_pgs = netvsc_get_slots(skb) + 2;
-	if (num_data_pgs > MAX_PAGE_BUFFER_COUNT && linear) {
-		net_alert_ratelimited("packet too big: %u pages (%u bytes)\n",
-				      num_data_pgs, skb->len);
-		ret = -EFAULT;
-		goto drop;
-	} else if (num_data_pgs > MAX_PAGE_BUFFER_COUNT) {
-		if (skb_linearize(skb)) {
-			net_alert_ratelimited("failed to linearize skb\n");
-			ret = -ENOMEM;
+
+	if (unlikely(num_data_pgs > MAX_PAGE_BUFFER_COUNT)) {
+		++net_device_ctx->eth_stats.tx_scattered;
+
+		if (skb_linearize(skb))
+			goto no_memory;
+
+		num_data_pgs = netvsc_get_slots(skb) + 2;
+		if (num_data_pgs > MAX_PAGE_BUFFER_COUNT) {
+			++net_device_ctx->eth_stats.tx_too_big;
 			goto drop;
 		}
-		linear = true;
-		goto check_size;
 	}
 
 	/*
@@ -405,11 +399,9 @@ check_size:
 	 * structure.
 	 */
 	ret = skb_cow_head(skb, RNDIS_AND_PPI_SIZE);
-	if (ret) {
-		netdev_err(net, "unable to alloc hv_netvsc_packet\n");
-		ret = -ENOMEM;
-		goto drop;
-	}
+	if (ret)
+		goto no_memory;
+
 	/* Use the skb control buffer for building up the packet */
 	BUILD_BUG_ON(sizeof(struct hv_netvsc_packet) >
 			FIELD_SIZEOF(struct sk_buff, cb));
@@ -423,8 +415,6 @@ check_size:
 	rndis_msg = (struct rndis_message *)skb->head;
 
 	memset(rndis_msg, 0, RNDIS_AND_PPI_SIZE);
-
-	isvlan = skb->vlan_tci & VLAN_TAG_PRESENT;
 
 	/* Add the rndis header */
 	rndis_msg->ndis_msg_type = RNDIS_MSG_PACKET;
@@ -444,7 +434,7 @@ check_size:
 		*(u32 *)((void *)ppi + ppi->ppi_offset) = hash;
 	}
 
-	if (isvlan) {
+	if (skb_vlan_tag_present(skb)) {
 		struct ndis_pkt_8021q_info *vlan;
 
 		rndis_msg_size += NDIS_VLAN_PPI_SIZE;
@@ -458,92 +448,63 @@ check_size:
 	}
 
 	net_trans_info = get_net_transport_info(skb, &hdr_offset);
-	if (net_trans_info == TRANSPORT_INFO_NOT_IP)
-		goto do_send;
 
 	/*
 	 * Setup the sendside checksum offload only if this is not a
 	 * GSO packet.
 	 */
-	if (skb_is_gso(skb))
-		goto do_lso;
+	if ((net_trans_info & (INFO_TCP | INFO_UDP)) && skb_is_gso(skb)) {
+		struct ndis_tcp_lso_info *lso_info;
 
-	if ((skb->ip_summed == CHECKSUM_NONE) ||
-	    (skb->ip_summed == CHECKSUM_UNNECESSARY))
-		goto do_send;
+		rndis_msg_size += NDIS_LSO_PPI_SIZE;
+		ppi = init_ppi_data(rndis_msg, NDIS_LSO_PPI_SIZE,
+				    TCP_LARGESEND_PKTINFO);
 
-	rndis_msg_size += NDIS_CSUM_PPI_SIZE;
-	ppi = init_ppi_data(rndis_msg, NDIS_CSUM_PPI_SIZE,
-			    TCPIP_CHKSUM_PKTINFO);
+		lso_info = (struct ndis_tcp_lso_info *)((void *)ppi +
+							ppi->ppi_offset);
 
-	csum_info = (struct ndis_tcp_ip_checksum_info *)((void *)ppi +
-			ppi->ppi_offset);
+		lso_info->lso_v2_transmit.type = NDIS_TCP_LARGE_SEND_OFFLOAD_V2_TYPE;
+		if (net_trans_info & (INFO_IPV4 << 16)) {
+			lso_info->lso_v2_transmit.ip_version =
+				NDIS_TCP_LARGE_SEND_OFFLOAD_IPV4;
+			ip_hdr(skb)->tot_len = 0;
+			ip_hdr(skb)->check = 0;
+			tcp_hdr(skb)->check =
+				~csum_tcpudp_magic(ip_hdr(skb)->saddr,
+						   ip_hdr(skb)->daddr, 0, IPPROTO_TCP, 0);
+		} else {
+			lso_info->lso_v2_transmit.ip_version =
+				NDIS_TCP_LARGE_SEND_OFFLOAD_IPV6;
+			ipv6_hdr(skb)->payload_len = 0;
+			tcp_hdr(skb)->check =
+				~csum_ipv6_magic(&ipv6_hdr(skb)->saddr,
+						 &ipv6_hdr(skb)->daddr, 0, IPPROTO_TCP, 0);
+		}
+		lso_info->lso_v2_transmit.tcp_header_offset = hdr_offset;
+		lso_info->lso_v2_transmit.mss = skb_shinfo(skb)->gso_size;
+	} else if (skb->ip_summed == CHECKSUM_PARTIAL) {
+		if (net_trans_info & INFO_TCP) {
+			rndis_msg_size += NDIS_CSUM_PPI_SIZE;
+			ppi = init_ppi_data(rndis_msg, NDIS_CSUM_PPI_SIZE,
+					    TCPIP_CHKSUM_PKTINFO);
 
-	if (net_trans_info & (INFO_IPV4 << 16))
-		csum_info->transmit.is_ipv4 = 1;
-	else
-		csum_info->transmit.is_ipv6 = 1;
+			csum_info = (struct ndis_tcp_ip_checksum_info *)((void *)ppi +
+									 ppi->ppi_offset);
 
-	if (net_trans_info & INFO_TCP) {
-		csum_info->transmit.tcp_checksum = 1;
-		csum_info->transmit.tcp_header_offset = hdr_offset;
-	} else if (net_trans_info & INFO_UDP) {
-		/* UDP checksum offload is not supported on ws2008r2.
-		 * Furthermore, on ws2012 and ws2012r2, there are some
-		 * issues with udp checksum offload from Linux guests.
-		 * (these are host issues).
-		 * For now compute the checksum here.
-		 */
-		struct udphdr *uh;
-		u16 udp_len;
+			if (net_trans_info & (INFO_IPV4 << 16))
+				csum_info->transmit.is_ipv4 = 1;
+			else
+				csum_info->transmit.is_ipv6 = 1;
 
-		ret = skb_cow_head(skb, 0);
-		if (ret)
-			goto drop;
-
-		uh = udp_hdr(skb);
-		udp_len = ntohs(uh->len);
-		uh->check = 0;
-		uh->check = csum_tcpudp_magic(ip_hdr(skb)->saddr,
-					      ip_hdr(skb)->daddr,
-					      udp_len, IPPROTO_UDP,
-					      csum_partial(uh, udp_len, 0));
-		if (uh->check == 0)
-			uh->check = CSUM_MANGLED_0;
-
-		csum_info->transmit.udp_checksum = 0;
+			csum_info->transmit.tcp_checksum = 1;
+			csum_info->transmit.tcp_header_offset = hdr_offset;
+		} else {
+			/* UDP checksum (and other) offload is not supported. */
+			if (skb_checksum_help(skb))
+				goto drop;
+		}
 	}
-	goto do_send;
 
-do_lso:
-	rndis_msg_size += NDIS_LSO_PPI_SIZE;
-	ppi = init_ppi_data(rndis_msg, NDIS_LSO_PPI_SIZE,
-			    TCP_LARGESEND_PKTINFO);
-
-	lso_info = (struct ndis_tcp_lso_info *)((void *)ppi +
-			ppi->ppi_offset);
-
-	lso_info->lso_v2_transmit.type = NDIS_TCP_LARGE_SEND_OFFLOAD_V2_TYPE;
-	if (net_trans_info & (INFO_IPV4 << 16)) {
-		lso_info->lso_v2_transmit.ip_version =
-			NDIS_TCP_LARGE_SEND_OFFLOAD_IPV4;
-		ip_hdr(skb)->tot_len = 0;
-		ip_hdr(skb)->check = 0;
-		tcp_hdr(skb)->check =
-		~csum_tcpudp_magic(ip_hdr(skb)->saddr,
-				   ip_hdr(skb)->daddr, 0, IPPROTO_TCP, 0);
-	} else {
-		lso_info->lso_v2_transmit.ip_version =
-			NDIS_TCP_LARGE_SEND_OFFLOAD_IPV6;
-		ipv6_hdr(skb)->payload_len = 0;
-		tcp_hdr(skb)->check =
-		~csum_ipv6_magic(&ipv6_hdr(skb)->saddr,
-				&ipv6_hdr(skb)->daddr, 0, IPPROTO_TCP, 0);
-	}
-	lso_info->lso_v2_transmit.tcp_header_offset = hdr_offset;
-	lso_info->lso_v2_transmit.mss = skb_shinfo(skb)->gso_size;
-
-do_send:
 	/* Start filling in the page buffers with the rndis hdr */
 	rndis_msg->msg_len += rndis_msg_size;
 	packet->total_data_buflen = rndis_msg->msg_len;
@@ -554,21 +515,33 @@ do_send:
 	skb_tx_timestamp(skb);
 	ret = netvsc_send(net_device_ctx->device_ctx, packet,
 			  rndis_msg, &pb, skb);
+	if (likely(ret == 0)) {
+		struct netvsc_stats *tx_stats = this_cpu_ptr(net_device_ctx->tx_stats);
 
-drop:
-	if (ret == 0) {
 		u64_stats_update_begin(&tx_stats->syncp);
 		tx_stats->packets++;
 		tx_stats->bytes += skb_length;
 		u64_stats_update_end(&tx_stats->syncp);
-	} else {
-		if (ret != -EAGAIN) {
-			dev_kfree_skb_any(skb);
-			net->stats.tx_dropped++;
-		}
+		return NETDEV_TX_OK;
 	}
 
-	return (ret == -EAGAIN) ? NETDEV_TX_BUSY : NETDEV_TX_OK;
+	if (ret == -EAGAIN) {
+		++net_device_ctx->eth_stats.tx_busy;
+		return NETDEV_TX_BUSY;
+	}
+
+	if (ret == -ENOSPC)
+		++net_device_ctx->eth_stats.tx_no_space;
+
+drop:
+	dev_kfree_skb_any(skb);
+	net->stats.tx_dropped++;
+
+	return NETDEV_TX_OK;
+
+no_memory:
+	++net_device_ctx->eth_stats.tx_no_memory;
+	goto drop;
 }
 
 /*
@@ -1015,6 +988,51 @@ static int netvsc_set_mac_addr(struct net_device *ndev, void *p)
 	return err;
 }
 
+static const struct {
+	char name[ETH_GSTRING_LEN];
+	u16 offset;
+} netvsc_stats[] = {
+	{ "tx_scattered", offsetof(struct netvsc_ethtool_stats, tx_scattered) },
+	{ "tx_no_memory",  offsetof(struct netvsc_ethtool_stats, tx_no_memory) },
+	{ "tx_no_space",  offsetof(struct netvsc_ethtool_stats, tx_no_space) },
+	{ "tx_too_big",	  offsetof(struct netvsc_ethtool_stats, tx_too_big) },
+	{ "tx_busy",	  offsetof(struct netvsc_ethtool_stats, tx_busy) },
+};
+
+static int netvsc_get_sset_count(struct net_device *dev, int string_set)
+{
+	switch (string_set) {
+	case ETH_SS_STATS:
+		return ARRAY_SIZE(netvsc_stats);
+	default:
+		return -EINVAL;
+	}
+}
+
+static void netvsc_get_ethtool_stats(struct net_device *dev,
+				     struct ethtool_stats *stats, u64 *data)
+{
+	struct net_device_context *ndc = netdev_priv(dev);
+	const void *nds = &ndc->eth_stats;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(netvsc_stats); i++)
+		data[i] = *(unsigned long *)(nds + netvsc_stats[i].offset);
+}
+
+static void netvsc_get_strings(struct net_device *dev, u32 stringset, u8 *data)
+{
+	int i;
+
+	switch (stringset) {
+	case ETH_SS_STATS:
+		for (i = 0; i < ARRAY_SIZE(netvsc_stats); i++)
+			memcpy(data + i * ETH_GSTRING_LEN,
+			       netvsc_stats[i].name, ETH_GSTRING_LEN);
+		break;
+	}
+}
+
 #ifdef CONFIG_NET_POLL_CONTROLLER
 static void netvsc_poll_controller(struct net_device *net)
 {
@@ -1027,6 +1045,9 @@ static void netvsc_poll_controller(struct net_device *net)
 static const struct ethtool_ops ethtool_ops = {
 	.get_drvinfo	= netvsc_get_drvinfo,
 	.get_link	= ethtool_op_get_link,
+	.get_ethtool_stats = netvsc_get_ethtool_stats,
+	.get_sset_count = netvsc_get_sset_count,
+	.get_strings	= netvsc_get_strings,
 	.get_channels   = netvsc_get_channels,
 	.set_channels   = netvsc_set_channels,
 	.get_ts_info	= ethtool_op_get_ts_info,
