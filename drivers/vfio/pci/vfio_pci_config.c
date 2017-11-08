@@ -33,9 +33,8 @@
 
 #define PCI_CFG_SPACE_SIZE	256
 
-/* Useful "pseudo" capabilities */
+/* Fake capability ID for standard config space */
 #define PCI_CAP_ID_BASIC	0
-#define PCI_CAP_ID_INVALID	0xFF
 
 #define is_bar(offset)	\
 	((offset >= PCI_BASE_ADDRESS_0 && offset < PCI_BASE_ADDRESS_5 + 4) || \
@@ -46,7 +45,7 @@
  *   0: Removed from the user visible capability list
  *   FF: Variable length
  */
-static u8 pci_cap_length[] = {
+static const u8 pci_cap_length[PCI_CAP_ID_MAX + 1] = {
 	[PCI_CAP_ID_BASIC]	= PCI_STD_HEADER_SIZEOF, /* pci config header */
 	[PCI_CAP_ID_PM]		= PCI_PM_SIZEOF,
 	[PCI_CAP_ID_AGP]	= PCI_AGP_SIZEOF,
@@ -71,10 +70,10 @@ static u8 pci_cap_length[] = {
 
 /*
  * Lengths of PCIe/PCI-X Extended Config Capabilities
- *   0: Removed or masked from the user visible capabilty list
+ *   0: Removed or masked from the user visible capability list
  *   FF: Variable length
  */
-static u16 pci_ext_cap_length[] = {
+static const u16 pci_ext_cap_length[PCI_EXT_CAP_ID_MAX + 1] = {
 	[PCI_EXT_CAP_ID_ERR]	=	PCI_ERR_ROOT_COMMAND,
 	[PCI_EXT_CAP_ID_VC]	=	0xFF,
 	[PCI_EXT_CAP_ID_DSN]	=	PCI_EXT_CAP_DSN_SIZEOF,
@@ -301,6 +300,23 @@ static int vfio_raw_config_read(struct vfio_pci_device *vdev, int pos,
 	return count;
 }
 
+/* Virt access uses only virtualization */
+static int vfio_virt_config_write(struct vfio_pci_device *vdev, int pos,
+				  int count, struct perm_bits *perm,
+				  int offset, __le32 val)
+{
+	memcpy(vdev->vconfig + pos, &val, count);
+	return count;
+}
+
+static int vfio_virt_config_read(struct vfio_pci_device *vdev, int pos,
+				 int count, struct perm_bits *perm,
+				 int offset, __le32 *val)
+{
+	memcpy(val, vdev->vconfig + pos, count);
+	return count;
+}
+
 /* Default capability regions to read-only, no-virtualization */
 static struct perm_bits cap_perms[PCI_CAP_ID_MAX + 1] = {
 	[0 ... PCI_CAP_ID_MAX] = { .readfn = vfio_direct_config_read }
@@ -319,6 +335,11 @@ static struct perm_bits unassigned_perms = {
 	.writefn = vfio_raw_config_write
 };
 
+static struct perm_bits virt_perms = {
+	.readfn = vfio_virt_config_read,
+	.writefn = vfio_virt_config_write
+};
+
 static void free_perm_bits(struct perm_bits *perm)
 {
 	kfree(perm->virt);
@@ -334,7 +355,7 @@ static int alloc_perm_bits(struct perm_bits *perm, int size)
 	 * ignore whether a read/write exceeds the defined capability
 	 * structure.  We can do this because:
 	 *  - Standard config space is already dword aligned
-	 *  - Capabilities are all dword alinged (bits 0:1 of next reserved)
+	 *  - Capabilities are all dword aligned (bits 0:1 of next reserved)
 	 *  - Express capabilities defined as dword aligned
 	 */
 	size = round_up(size, 4);
@@ -1196,9 +1217,12 @@ static int vfio_cap_len(struct vfio_pci_device *vdev, u8 cap, u8 pos)
 			return pcibios_err_to_errno(ret);
 
 		if (PCI_X_CMD_VERSION(word)) {
-			/* Test for extended capabilities */
-			pci_read_config_dword(pdev, PCI_CFG_SPACE_SIZE, &dword);
-			vdev->extended_caps = (dword != 0);
+			if (pdev->cfg_size > PCI_CFG_SPACE_SIZE) {
+				/* Test for extended capabilities */
+				pci_read_config_dword(pdev, PCI_CFG_SPACE_SIZE,
+						      &dword);
+				vdev->extended_caps = (dword != 0);
+			}
 			return PCI_CAP_PCIX_SIZEOF_V2;
 		} else
 			return PCI_CAP_PCIX_SIZEOF_V0;
@@ -1210,9 +1234,11 @@ static int vfio_cap_len(struct vfio_pci_device *vdev, u8 cap, u8 pos)
 
 		return byte;
 	case PCI_CAP_ID_EXP:
-		/* Test for extended capabilities */
-		pci_read_config_dword(pdev, PCI_CFG_SPACE_SIZE, &dword);
-		vdev->extended_caps = (dword != 0);
+		if (pdev->cfg_size > PCI_CFG_SPACE_SIZE) {
+			/* Test for extended capabilities */
+			pci_read_config_dword(pdev, PCI_CFG_SPACE_SIZE, &dword);
+			vdev->extended_caps = (dword != 0);
+		}
 
 		/* length based on version */
 		if ((pcie_caps_reg(pdev) & PCI_EXP_FLAGS_VERS) == 1)
@@ -1430,6 +1456,8 @@ static int vfio_cap_init(struct vfio_pci_device *vdev)
 				pos + i, map[pos + i], cap);
 		}
 
+		BUILD_BUG_ON(PCI_CAP_ID_MAX >= PCI_CAP_ID_INVALID_VIRT);
+
 		memset(map + pos, cap, len);
 		ret = vfio_fill_vconfig_bytes(vdev, pos, len);
 		if (ret)
@@ -1517,9 +1545,9 @@ static int vfio_ecap_init(struct vfio_pci_device *vdev)
 		/*
 		 * Even though ecap is 2 bytes, we're currently a long way
 		 * from exceeding 1 byte capabilities.  If we ever make it
-		 * up to 0xFF we'll need to up this to a two-byte, byte map.
+		 * up to 0xFE we'll need to up this to a two-byte, byte map.
 		 */
-		BUILD_BUG_ON(PCI_EXT_CAP_ID_MAX >= PCI_CAP_ID_INVALID);
+		BUILD_BUG_ON(PCI_EXT_CAP_ID_MAX >= PCI_CAP_ID_INVALID_VIRT);
 
 		memset(map + epos, ecap, len);
 		ret = vfio_fill_vconfig_bytes(vdev, epos, len);
@@ -1555,10 +1583,10 @@ static int vfio_ecap_init(struct vfio_pci_device *vdev)
  * space which tracks reads and writes to bits that we emulate for
  * the user.  Initial values filled from device.
  *
- * Using shared stuct perm_bits between all vfio-pci devices saves
+ * Using shared struct perm_bits between all vfio-pci devices saves
  * us from allocating cfg_size buffers for virt and write for every
  * device.  We could remove vconfig and allocate individual buffers
- * for each area requring emulated bits, but the array of pointers
+ * for each area requiring emulated bits, but the array of pointers
  * would be comparable in size (at least for standard config space).
  */
 int vfio_config_init(struct vfio_pci_device *vdev)
@@ -1694,6 +1722,9 @@ static ssize_t vfio_config_do_rw(struct vfio_pci_device *vdev, char __user *buf,
 
 	if (cap_id == PCI_CAP_ID_INVALID) {
 		perm = &unassigned_perms;
+		cap_start = *ppos;
+	} else if (cap_id == PCI_CAP_ID_INVALID_VIRT) {
+		perm = &virt_perms;
 		cap_start = *ppos;
 	} else {
 		if (*ppos >= PCI_CFG_SPACE_SIZE) {

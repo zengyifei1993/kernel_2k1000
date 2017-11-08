@@ -108,7 +108,7 @@ static int svc_rdma_bc_sendto(struct svcxprt_rdma *rdma,
 	int ret;
 
 	vec = svc_rdma_get_req_map(rdma);
-	ret = svc_rdma_map_xdr(rdma, sndbuf, vec);
+	ret = svc_rdma_map_xdr(rdma, sndbuf, vec, false);
 	if (ret)
 		goto out_err;
 
@@ -120,7 +120,6 @@ static int svc_rdma_bc_sendto(struct svcxprt_rdma *rdma,
 	ctxt->pages[0] = virt_to_page(rqst->rq_buffer);
 	ctxt->count = 1;
 
-	ctxt->wr_op = IB_WR_SEND;
 	ctxt->direction = DMA_TO_DEVICE;
 	ctxt->sge[0].lkey = rdma->sc_pd->local_dma_lkey;
 	ctxt->sge[0].length = sndbuf->len;
@@ -131,10 +130,11 @@ static int svc_rdma_bc_sendto(struct svcxprt_rdma *rdma,
 		ret = -EIO;
 		goto out_unmap;
 	}
-	atomic_inc(&rdma->sc_dma_used);
+	svc_rdma_count_mappings(rdma, ctxt);
 
 	memset(&send_wr, 0, sizeof(send_wr));
-	send_wr.wr_id = (unsigned long)ctxt;
+	ctxt->cqe.done = svc_rdma_wc_send;
+	send_wr.wr_cqe = &ctxt->cqe;
 	send_wr.sg_list = ctxt->sge;
 	send_wr.num_sge = 1;
 	send_wr.opcode = IB_WR_SEND;
@@ -160,35 +160,40 @@ out_unmap:
 /* Server-side transport endpoint wants a whole page for its send
  * buffer. The client RPC code constructs the RPC header in this
  * buffer before it invokes ->send_request.
- *
- * Returns NULL if there was a temporary allocation failure.
  */
-static void *
-xprt_rdma_bc_allocate(struct rpc_task *task, size_t size)
+static int
+xprt_rdma_bc_allocate(struct rpc_task *task)
 {
 	struct rpc_rqst *rqst = task->tk_rqstp;
-	struct svc_xprt *sxprt = rqst->rq_xprt->bc_xprt;
-	struct svcxprt_rdma *rdma;
+	size_t size = rqst->rq_callsize;
 	struct page *page;
 
-	rdma = container_of(sxprt, struct svcxprt_rdma, sc_xprt);
-
-	/* Prevent an infinite loop: try to make this case work */
-	if (size > PAGE_SIZE)
+	if (size > PAGE_SIZE) {
 		WARN_ONCE(1, "svcrdma: large bc buffer request (size %zu)\n",
 			  size);
+		return -EINVAL;
+	}
 
+	/* svc_rdma_sendto releases this page */
 	page = alloc_page(RPCRDMA_DEF_GFP);
 	if (!page)
-		return NULL;
+		return -ENOMEM;
+	rqst->rq_buffer = page_address(page);
 
-	return page_address(page);
+	rqst->rq_rbuffer = kmalloc(rqst->rq_rcvsize, RPCRDMA_DEF_GFP);
+	if (!rqst->rq_rbuffer) {
+		put_page(page);
+		return -ENOMEM;
+	}
+	return 0;
 }
 
 static void
-xprt_rdma_bc_free(void *buffer)
+xprt_rdma_bc_free(struct rpc_task *task)
 {
-	/* No-op: ctxt and page have already been freed. */
+	struct rpc_rqst *rqst = task->tk_rqstp;
+
+	kfree(rqst->rq_rbuffer);
 }
 
 static int
@@ -351,6 +356,7 @@ xprt_setup_rdma_bc(struct xprt_create *args)
 out_fail:
 	xprt_rdma_free_addresses(xprt);
 	args->bc_xprt->xpt_bc_xprt = NULL;
+	args->bc_xprt->xpt_bc_xps = NULL;
 	xprt_put(xprt);
 	xprt_free(xprt);
 	return ERR_PTR(-EINVAL);

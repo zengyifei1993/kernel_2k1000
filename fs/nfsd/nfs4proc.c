@@ -94,34 +94,20 @@ check_attr_support(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		   u32 *bmval, u32 *writable)
 {
 	struct dentry *dentry = cstate->current_fh.fh_dentry;
+	struct svc_export *exp = cstate->current_fh.fh_export;
 
-	/*
-	 * Check about attributes are supported by the NFSv4 server or not.
-	 * According to spec, unsupported attributes return ERR_ATTRNOTSUPP.
-	 */
-	if ((bmval[0] & ~nfsd_suppattrs0(cstate->minorversion)) ||
-	    (bmval[1] & ~nfsd_suppattrs1(cstate->minorversion)) ||
-	    (bmval[2] & ~nfsd_suppattrs2(cstate->minorversion)))
+	if (!nfsd_attrs_supported(cstate->minorversion, bmval))
 		return nfserr_attrnotsupp;
-
-	/*
-	 * Check FATTR4_WORD0_ACL can be supported
-	 * in current environment or not.
-	 */
-	if (bmval[0] & FATTR4_WORD0_ACL) {
-		if (!IS_POSIXACL(dentry->d_inode))
-			return nfserr_attrnotsupp;
-	}
-
-	/*
-	 * According to spec, read-only attributes return ERR_INVAL.
-	 */
-	if (writable) {
-		if ((bmval[0] & ~writable[0]) || (bmval[1] & ~writable[1]) ||
-		    (bmval[2] & ~writable[2]))
-			return nfserr_inval;
-	}
-
+	if ((bmval[0] & FATTR4_WORD0_ACL) && !IS_POSIXACL(dentry->d_inode))
+		return nfserr_attrnotsupp;
+	if ((bmval[2] & FATTR4_WORD2_SECURITY_LABEL) &&
+			!(exp->ex_flags & NFSEXP_SECURITY_LABEL))
+		return nfserr_attrnotsupp;
+	if (writable && !bmval_is_subset(bmval, writable))
+		return nfserr_inval;
+	if (writable && (bmval[2] & FATTR4_WORD2_MODE_UMASK) &&
+			(bmval[1] & FATTR4_WORD1_MODE))
+		return nfserr_inval;
 	return nfs_ok;
 }
 
@@ -695,9 +681,9 @@ nfsd4_getattr(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	if (getattr->ga_bmval[1] & NFSD_WRITEONLY_ATTRS_WORD1)
 		return nfserr_inval;
 
-	getattr->ga_bmval[0] &= nfsd_suppattrs0(cstate->minorversion);
-	getattr->ga_bmval[1] &= nfsd_suppattrs1(cstate->minorversion);
-	getattr->ga_bmval[2] &= nfsd_suppattrs2(cstate->minorversion);
+	getattr->ga_bmval[0] &= nfsd_suppattrs[cstate->minorversion][0];
+	getattr->ga_bmval[1] &= nfsd_suppattrs[cstate->minorversion][1];
+	getattr->ga_bmval[2] &= nfsd_suppattrs[cstate->minorversion][2];
 
 	getattr->ga_fhp = &cstate->current_fh;
 	return nfs_ok;
@@ -799,9 +785,9 @@ nfsd4_readdir(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	if (readdir->rd_bmval[1] & NFSD_WRITEONLY_ATTRS_WORD1)
 		return nfserr_inval;
 
-	readdir->rd_bmval[0] &= nfsd_suppattrs0(cstate->minorversion);
-	readdir->rd_bmval[1] &= nfsd_suppattrs1(cstate->minorversion);
-	readdir->rd_bmval[2] &= nfsd_suppattrs2(cstate->minorversion);
+	readdir->rd_bmval[0] &= nfsd_suppattrs[cstate->minorversion][0];
+	readdir->rd_bmval[1] &= nfsd_suppattrs[cstate->minorversion][1];
+	readdir->rd_bmval[2] &= nfsd_suppattrs[cstate->minorversion][2];
 
 	if ((cookie == 1) || (cookie == 2) ||
 	    (cookie == 0 && memcmp(readdir->rd_verf.data, zeroverf.data, NFS4_VERIFIER_SIZE)))
@@ -1006,6 +992,97 @@ nfsd4_write(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 
 	write->wr_bytes_written = cnt;
 
+	return status;
+}
+
+static __be32
+nfsd4_verify_copy(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
+		  stateid_t *src_stateid, struct file **src,
+		  stateid_t *dst_stateid, struct file **dst)
+{
+	__be32 status;
+
+	status = nfs4_preprocess_stateid_op(rqstp, cstate, &cstate->save_fh,
+					    src_stateid, RD_STATE, src, NULL);
+	if (status) {
+		dprintk("NFSD: %s: couldn't process src stateid!\n", __func__);
+		goto out;
+	}
+
+	status = nfs4_preprocess_stateid_op(rqstp, cstate, &cstate->current_fh,
+					    dst_stateid, WR_STATE, dst, NULL);
+	if (status) {
+		dprintk("NFSD: %s: couldn't process dst stateid!\n", __func__);
+		goto out_put_src;
+	}
+
+	/* fix up for NFS-specific error code */
+	if (!S_ISREG(file_inode(*src)->i_mode) ||
+	    !S_ISREG(file_inode(*dst)->i_mode)) {
+		status = nfserr_wrong_type;
+		goto out_put_dst;
+	}
+
+out:
+	return status;
+out_put_dst:
+	fput(*dst);
+out_put_src:
+	fput(*src);
+	goto out;
+}
+
+static __be32
+nfsd4_clone(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
+		struct nfsd4_clone *clone)
+{
+	struct file *src, *dst;
+	__be32 status;
+
+	status = nfsd4_verify_copy(rqstp, cstate, &clone->cl_src_stateid, &src,
+				   &clone->cl_dst_stateid, &dst);
+	if (status)
+		goto out;
+
+	status = nfsd4_clone_file_range(src, clone->cl_src_pos,
+			dst, clone->cl_dst_pos, clone->cl_count);
+
+	fput(dst);
+	fput(src);
+out:
+	return status;
+}
+
+static __be32
+nfsd4_copy(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
+		struct nfsd4_copy *copy)
+{
+	struct file *src, *dst;
+	__be32 status;
+	ssize_t bytes;
+
+	status = nfsd4_verify_copy(rqstp, cstate, &copy->cp_src_stateid, &src,
+				   &copy->cp_dst_stateid, &dst);
+	if (status)
+		goto out;
+
+	bytes = nfsd_copy_file_range(src, copy->cp_src_pos,
+			dst, copy->cp_dst_pos, copy->cp_count);
+
+	if (bytes < 0)
+		status = nfserrno(bytes);
+	else {
+		copy->cp_res.wr_bytes_written = bytes;
+		copy->cp_res.wr_stable_how = NFS_UNSTABLE;
+		copy->cp_consecutive = 1;
+		copy->cp_synchronous = 1;
+		gen_boot_verifier(&copy->cp_res.wr_verifier, SVC_NET(rqstp));
+		status = nfs_ok;
+	}
+
+	fput(src);
+	fput(dst);
+out:
 	return status;
 }
 
@@ -1691,6 +1768,12 @@ nfsd4_proc_compound(struct svc_rqst *rqstp,
 			opdesc->op_get_currentstateid(cstate, &op->u);
 		op->status = opdesc->op_func(rqstp, cstate, &op->u);
 
+		/* Only from SEQUENCE */
+		if (cstate->status == nfserr_replay_cache) {
+			dprintk("%s NFS4.1 replay from cache\n", __func__);
+			status = op->status;
+			goto out;
+		}
 		if (!op->status) {
 			if (opdesc->op_set_currentstateid)
 				opdesc->op_set_currentstateid(cstate, &op->u);
@@ -1701,14 +1784,7 @@ nfsd4_proc_compound(struct svc_rqst *rqstp,
 			if (need_wrongsec_check(rqstp))
 				op->status = check_nfsd_access(current_fh->fh_export, rqstp);
 		}
-
 encode_op:
-		/* Only from SEQUENCE */
-		if (cstate->status == nfserr_replay_cache) {
-			dprintk("%s NFS4.1 replay from cache\n", __func__);
-			status = op->status;
-			goto out;
-		}
 		if (op->status == nfserr_replay_me) {
 			op->replay = &cstate->replay_owner->so_replay;
 			nfsd4_encode_replay(&resp->xdr, op);
@@ -1923,6 +1999,18 @@ static inline u32 nfsd4_create_session_rsize(struct svc_rqst *rqstp, struct nfsd
 		2 + /* csr_sequence, csr_flags */\
 		op_encode_channel_attrs_maxsz + \
 		op_encode_channel_attrs_maxsz) * sizeof(__be32);
+}
+
+static inline u32 nfsd4_copy_rsize(struct svc_rqst *rqstp, struct nfsd4_op *op)
+{
+	return (op_encode_hdr_size +
+		1 /* wr_callback */ +
+		op_encode_stateid_maxsz /* wr_callback */ +
+		2 /* wr_count */ +
+		1 /* wr_committed */ +
+		op_encode_verifier_maxsz +
+		1 /* cr_consecutive */ +
+		1 /* cr_synchronous */) * sizeof(__be32);
 }
 
 #ifdef CONFIG_NFSD_PNFS
@@ -2280,6 +2368,18 @@ static struct nfsd4_operation nfsd4_ops[] = {
 		.op_flags = OP_MODIFIES_SOMETHING | OP_CACHEME,
 		.op_name = "OP_DEALLOCATE",
 		.op_rsize_bop = (nfsd4op_rsize)nfsd4_only_status_rsize,
+	},
+	[OP_CLONE] = {
+		.op_func = (nfsd4op_func)nfsd4_clone,
+		.op_flags = OP_MODIFIES_SOMETHING | OP_CACHEME,
+		.op_name = "OP_CLONE",
+		.op_rsize_bop = (nfsd4op_rsize)nfsd4_only_status_rsize,
+	},
+	[OP_COPY] = {
+		.op_func = (nfsd4op_func)nfsd4_copy,
+		.op_flags = OP_MODIFIES_SOMETHING | OP_CACHEME,
+		.op_name = "OP_COPY",
+		.op_rsize_bop = (nfsd4op_rsize)nfsd4_copy_rsize,
 	},
 	[OP_SEEK] = {
 		.op_func = (nfsd4op_func)nfsd4_seek,

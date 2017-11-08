@@ -87,7 +87,7 @@ struct kvmppc_vcore {
 	u8 vcore_state;
 	u8 in_guest;
 	struct kvmppc_vcore *master_vcore;
-	struct list_head runnable_threads;
+	struct kvm_vcpu *runnable_threads[MAX_SMT_THREADS];
 	struct list_head preempt_list;
 	spinlock_t lock;
 	wait_queue_head_t wq;
@@ -103,6 +103,7 @@ struct kvmppc_vcore {
 	ulong dpdes;		/* doorbell state (POWER8) */
 	ulong vtb;		/* virtual timebase */
 	ulong conferring_threads;
+	unsigned int halt_poll_ns;
 };
 
 struct kvmppc_vcpu_book3s {

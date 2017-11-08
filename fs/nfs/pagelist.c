@@ -29,19 +29,6 @@
 static struct kmem_cache *nfs_page_cachep;
 static const struct rpc_call_ops nfs_pgio_common_ops;
 
-static bool nfs_pgarray_set(struct nfs_page_array *p, unsigned int pagecount)
-{
-	p->npages = pagecount;
-	if (pagecount <= ARRAY_SIZE(p->page_array))
-		p->pagevec = p->page_array;
-	else {
-		p->pagevec = kcalloc(pagecount, sizeof(struct page *), GFP_KERNEL);
-		if (!p->pagevec)
-			p->npages = 0;
-	}
-	return p->pagevec != NULL;
-}
-
 struct nfs_pgio_mirror *
 nfs_pgio_current_mirror(struct nfs_pageio_descriptor *desc)
 {
@@ -101,54 +88,48 @@ nfs_page_free(struct nfs_page *p)
 	kmem_cache_free(nfs_page_cachep, p);
 }
 
-static void
-nfs_iocounter_inc(struct nfs_io_counter *c)
-{
-	atomic_inc(&c->io_count);
-}
-
-static void
-nfs_iocounter_dec(struct nfs_io_counter *c)
-{
-	if (atomic_dec_and_test(&c->io_count)) {
-		clear_bit(NFS_IO_INPROGRESS, &c->flags);
-		smp_mb__after_clear_bit();
-		wake_up_bit(&c->flags, NFS_IO_INPROGRESS);
-	}
-}
-
-static int
-__nfs_iocounter_wait(struct nfs_io_counter *c)
-{
-	wait_queue_head_t *wq = bit_waitqueue(&c->flags, NFS_IO_INPROGRESS);
-	DEFINE_WAIT_BIT(q, &c->flags, NFS_IO_INPROGRESS);
-	int ret = 0;
-
-	do {
-		prepare_to_wait(wq, &q.wait, TASK_KILLABLE);
-		set_bit(NFS_IO_INPROGRESS, &c->flags);
-		if (atomic_read(&c->io_count) == 0)
-			break;
-		ret = nfs_wait_bit_killable(&q.key, TASK_KILLABLE);
-	} while (atomic_read(&c->io_count) != 0 && !ret);
-	finish_wait(wq, &q.wait);
-	return ret;
-}
-
 /**
  * nfs_iocounter_wait - wait for i/o to complete
- * @c: nfs_io_counter to use
+ * @l_ctx: nfs_lock_context with io_counter to use
  *
  * returns -ERESTARTSYS if interrupted by a fatal signal.
  * Otherwise returns 0 once the io_count hits 0.
  */
 int
-nfs_iocounter_wait(struct nfs_io_counter *c)
+nfs_iocounter_wait(struct nfs_lock_context *l_ctx)
 {
-	if (atomic_read(&c->io_count) == 0)
-		return 0;
-	return __nfs_iocounter_wait(c);
+	return wait_on_atomic_t(&l_ctx->io_count, nfs_wait_atomic_killable,
+			TASK_KILLABLE);
 }
+
+/**
+ * nfs_async_iocounter_wait - wait on a rpc_waitqueue for I/O
+ * to complete
+ * @task: the rpc_task that should wait
+ * @l_ctx: nfs_lock_context with io_counter to check
+ *
+ * Returns true if there is outstanding I/O to wait on and the
+ * task has been put to sleep.
+ */
+bool
+nfs_async_iocounter_wait(struct rpc_task *task, struct nfs_lock_context *l_ctx)
+{
+	struct inode *inode = d_inode(l_ctx->open_context->dentry);
+	bool ret = false;
+
+	if (atomic_read(&l_ctx->io_count) > 0) {
+		rpc_sleep_on(&NFS_SERVER(inode)->uoc_rpcwaitq, task, NULL);
+		ret = true;
+	}
+
+	if (atomic_read(&l_ctx->io_count) == 0) {
+		rpc_wake_up_queued_task(&NFS_SERVER(inode)->uoc_rpcwaitq, task);
+		ret = false;
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(nfs_async_iocounter_wait);
 
 /*
  * nfs_page_group_lock - lock the head of the page group
@@ -370,14 +351,16 @@ nfs_create_request(struct nfs_open_context *ctx, struct page *page,
 		return ERR_CAST(l_ctx);
 	}
 	req->wb_lock_context = l_ctx;
-	nfs_iocounter_inc(&l_ctx->io_count);
+	atomic_inc(&l_ctx->io_count);
 
 	/* Initialize the request struct. Initially, we assume a
 	 * long write-back delay. This will be adjusted in
 	 * update_nfs_request below if the region is not locked. */
 	req->wb_page    = page;
-	req->wb_index	= page_file_index(page);
-	page_cache_get(page);
+	if (page) {
+		req->wb_index = page_file_index(page);
+		page_cache_get(page);
+	}
 	req->wb_offset  = offset;
 	req->wb_pgbase	= offset;
 	req->wb_bytes   = count;
@@ -431,7 +414,11 @@ static void nfs_clear_request(struct nfs_page *req)
 		req->wb_page = NULL;
 	}
 	if (l_ctx != NULL) {
-		nfs_iocounter_dec(&l_ctx->io_count);
+		if (atomic_dec_and_test(&l_ctx->io_count)) {
+			wake_up_atomic_t(&l_ctx->io_count);
+			if (test_bit(NFS_CONTEXT_UNLOCK, &ctx->flags))
+				rpc_wake_up(&NFS_SERVER(d_inode(ctx->dentry))->uoc_rpcwaitq);
+		}
 		nfs_put_lock_context(l_ctx);
 		req->wb_lock_context = NULL;
 	}
@@ -709,7 +696,8 @@ void nfs_pageio_init(struct nfs_pageio_descriptor *desc,
 		     const struct nfs_pgio_completion_ops *compl_ops,
 		     const struct nfs_rw_ops *rw_ops,
 		     size_t bsize,
-		     int io_flags)
+		     int io_flags,
+		     gfp_t gfp_flags)
 {
 	struct nfs_pgio_mirror *new;
 	int i;
@@ -733,7 +721,7 @@ void nfs_pageio_init(struct nfs_pageio_descriptor *desc,
 		/* until we have a request, we don't have an lseg and no
 		 * idea how many mirrors there will be */
 		new = kcalloc(NFS_PAGEIO_DESCRIPTOR_MIRROR_MAX,
-			      sizeof(struct nfs_pgio_mirror), GFP_KERNEL);
+			      sizeof(struct nfs_pgio_mirror), gfp_flags);
 		desc->pg_mirrors_dynamic = new;
 		desc->pg_mirrors = new;
 
@@ -786,13 +774,25 @@ int nfs_generic_pgio(struct nfs_pageio_descriptor *desc,
 				*last_page;
 	struct list_head *head = &mirror->pg_list;
 	struct nfs_commit_info cinfo;
+	struct nfs_page_array *pg_array = &hdr->page_array;
 	unsigned int pagecount, pageused;
+	gfp_t gfp_flags = GFP_KERNEL;
 
 	pagecount = nfs_page_array_len(mirror->pg_base, mirror->pg_count);
-	if (!nfs_pgarray_set(&hdr->page_array, pagecount)) {
-		nfs_pgio_error(hdr);
-		desc->pg_error = -ENOMEM;
-		return desc->pg_error;
+	pg_array->npages = pagecount;
+
+	if (pagecount <= ARRAY_SIZE(pg_array->page_array))
+		pg_array->pagevec = pg_array->page_array;
+	else {
+		if (hdr->rw_mode == FMODE_WRITE)
+			gfp_flags = GFP_NOIO;
+		pg_array->pagevec = kcalloc(pagecount, sizeof(struct page *), gfp_flags);
+		if (!pg_array->pagevec) {
+			pg_array->npages = 0;
+			nfs_pgio_error(hdr);
+			desc->pg_error = -ENOMEM;
+			return desc->pg_error;
+		}
 	}
 
 	nfs_init_cinfo(&cinfo, desc->pg_inode, desc->pg_dreq);
@@ -830,11 +830,8 @@ EXPORT_SYMBOL_GPL(nfs_generic_pgio);
 
 static int nfs_generic_pg_pgios(struct nfs_pageio_descriptor *desc)
 {
-	struct nfs_pgio_mirror *mirror;
 	struct nfs_pgio_header *hdr;
 	int ret;
-
-	mirror = nfs_pgio_current_mirror(desc);
 
 	hdr = nfs_pgio_header_alloc(desc->pg_rw_ops);
 	if (!hdr) {
@@ -897,12 +894,6 @@ static void nfs_pageio_cleanup_mirroring(struct nfs_pageio_descriptor *pgio)
 	pgio->pg_mirrors = pgio->pg_mirrors_static;
 	kfree(pgio->pg_mirrors_dynamic);
 	pgio->pg_mirrors_dynamic = NULL;
-}
-
-static bool nfs_match_open_context(const struct nfs_open_context *ctx1,
-		const struct nfs_open_context *ctx2)
-{
-	return ctx1->cred == ctx2->cred && ctx1->state == ctx2->state;
 }
 
 static bool nfs_match_lock_context(const struct nfs_lock_context *l1,
@@ -1294,8 +1285,10 @@ void nfs_pageio_cond_complete(struct nfs_pageio_descriptor *desc, pgoff_t index)
 		mirror = &desc->pg_mirrors[midx];
 		if (!list_empty(&mirror->pg_list)) {
 			prev = nfs_list_entry(mirror->pg_list.prev);
-			if (index != prev->wb_index + 1)
-				nfs_pageio_complete_mirror(desc, midx);
+			if (index != prev->wb_index + 1) {
+				nfs_pageio_complete(desc);
+				break;
+			}
 		}
 	}
 }

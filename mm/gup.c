@@ -167,11 +167,6 @@ split_fallthrough:
 			pte_unmap_unlock(ptep, ptl);
 			migration_entry_wait(mm, pmd, address);
 			goto split_fallthrough;
-		} else if (is_hmm_entry(entry)) {
-			pte_unmap_unlock(ptep, ptl);
-			if (hmm_migrate_fault(vma, address, entry, pmd))
-				goto no_page;
-			goto split_fallthrough;
 		}
 		goto no_page;
 	}
@@ -421,7 +416,8 @@ long __get_user_pages(struct task_struct *tsk, struct mm_struct *mm,
 
 		if (is_vm_hugetlb_page(vma)) {
 			i = follow_hugetlb_page(mm, vma, pages, vmas,
-					&start, &nr_pages, i, gup_flags);
+					&start, &nr_pages, i,
+					gup_flags, nonblocking);
 			continue;
 		}
 
@@ -599,6 +595,7 @@ int fixup_user_fault(struct task_struct *tsk, struct mm_struct *mm,
 	}
 	return 0;
 }
+EXPORT_SYMBOL_GPL(fixup_user_fault);
 
 static __always_inline long __get_user_pages_locked(struct task_struct *tsk,
 						struct mm_struct *mm,

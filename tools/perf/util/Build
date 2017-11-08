@@ -1,6 +1,6 @@
-libperf-y += abspath.o
 libperf-y += alias.o
 libperf-y += annotate.o
+libperf-y += block-range.o
 libperf-y += build-id.o
 libperf-y += config.o
 libperf-y += ctype.o
@@ -9,6 +9,7 @@ libperf-y += env.o
 libperf-y += event.o
 libperf-y += evlist.o
 libperf-y += evsel.o
+libperf-y += evsel_fprintf.o
 libperf-y += find_bit.o
 libperf-y += kallsyms.o
 libperf-y += levenshtein.o
@@ -27,9 +28,9 @@ libperf-y += strlist.o
 libperf-y += strfilter.o
 libperf-y += top.o
 libperf-y += usage.o
-libperf-y += wrapper.o
 libperf-y += dso.o
 libperf-y += symbol.o
+libperf-y += symbol_fprintf.o
 libperf-y += color.o
 libperf-y += header.o
 libperf-y += callchain.o
@@ -39,6 +40,7 @@ libperf-y += machine.o
 libperf-y += map.o
 libperf-y += pstack.o
 libperf-y += session.o
+libperf-$(CONFIG_AUDIT) += syscalltbl.o
 libperf-y += ordered-events.o
 libperf-y += comm.o
 libperf-y += thread.o
@@ -70,9 +72,9 @@ libperf-y += stat-shadow.o
 libperf-y += record.o
 libperf-y += srcline.o
 libperf-y += data.o
-libperf-$(CONFIG_X86) += tsc.o
-libperf-$(CONFIG_AUXTRACE) += tsc.o
+libperf-y += tsc.o
 libperf-y += cloexec.o
+libperf-y += call-path.o
 libperf-y += thread-stack.o
 libperf-$(CONFIG_AUXTRACE) += auxtrace.o
 libperf-$(CONFIG_AUXTRACE) += intel-pt-decoder/
@@ -83,6 +85,9 @@ libperf-y += parse-regs-options.o
 libperf-y += term.o
 libperf-y += help-unknown-cmd.o
 libperf-y += mem-events.o
+libperf-y += vsprintf.o
+libperf-y += drv_configs.o
+libperf-y += time-utils.o
 
 libperf-$(CONFIG_LIBELF) += symbol-elf.o
 libperf-$(CONFIG_LIBELF) += probe-file.o
@@ -94,9 +99,13 @@ endif
 
 libperf-$(CONFIG_DWARF) += probe-finder.o
 libperf-$(CONFIG_DWARF) += dwarf-aux.o
+libperf-$(CONFIG_DWARF) += dwarf-regs.o
 
 libperf-$(CONFIG_LIBDW_DWARF_UNWIND) += unwind-libdw.o
+libperf-$(CONFIG_LOCAL_LIBUNWIND)    += unwind-libunwind-local.o
 libperf-$(CONFIG_LIBUNWIND)          += unwind-libunwind.o
+libperf-$(CONFIG_LIBUNWIND_X86)      += libunwind/x86_32.o
+libperf-$(CONFIG_LIBUNWIND_AARCH64)  += libunwind/arm64.o
 
 libperf-$(CONFIG_LIBBABELTRACE) += data-convert-bt.o
 
@@ -105,12 +114,15 @@ libperf-y += scripting-engines/
 libperf-$(CONFIG_ZLIB) += zlib.o
 libperf-$(CONFIG_LZMA) += lzma.o
 libperf-y += demangle-java.o
+libperf-y += demangle-rust.o
 
 ifdef CONFIG_JITDUMP
 libperf-$(CONFIG_LIBELF) += jitdump.o
 libperf-$(CONFIG_LIBELF) += genelf.o
-libperf-$(CONFIG_LIBELF) += genelf_debug.o
+libperf-$(CONFIG_DWARF) += genelf_debug.o
 endif
+
+libperf-y += perf-hooks.o
 
 CFLAGS_config.o   += -DETC_PERFCONFIG="BUILD_STR($(ETC_PERFCONFIG_SQ))"
 # avoid compiler warnings in 32-bit mode
@@ -146,6 +158,7 @@ CFLAGS_rbtree.o        += -Wno-unused-parameter -DETC_PERFCONFIG="BUILD_STR($(ET
 CFLAGS_libstring.o     += -Wno-unused-parameter -DETC_PERFCONFIG="BUILD_STR($(ETC_PERFCONFIG_SQ))"
 CFLAGS_hweight.o       += -Wno-unused-parameter -DETC_PERFCONFIG="BUILD_STR($(ETC_PERFCONFIG_SQ))"
 CFLAGS_parse-events.o  += -Wno-redundant-decls
+CFLAGS_header.o        += -include $(OUTPUT)PERF-VERSION-FILE
 
 $(OUTPUT)util/kallsyms.o: ../lib/symbol/kallsyms.c FORCE
 	$(call rule_mkdir)
@@ -168,5 +181,9 @@ $(OUTPUT)util/libstring.o: ../lib/string.c FORCE
 	$(call if_changed_dep,cc_o_c)
 
 $(OUTPUT)util/hweight.o: ../lib/hweight.c FORCE
+	$(call rule_mkdir)
+	$(call if_changed_dep,cc_o_c)
+
+$(OUTPUT)util/vsprintf.o: ../lib/vsprintf.c FORCE
 	$(call rule_mkdir)
 	$(call if_changed_dep,cc_o_c)

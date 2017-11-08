@@ -268,7 +268,7 @@ TRACE_EVENT(kvm_inj_virq,
 #define kvm_trace_sym_exc						\
 	EXS(DE), EXS(DB), EXS(BP), EXS(OF), EXS(BR), EXS(UD), EXS(NM),	\
 	EXS(DF), EXS(TS), EXS(NP), EXS(SS), EXS(GP), EXS(PF),		\
-	EXS(MF), EXS(MC)
+	EXS(MF), EXS(AC), EXS(MC)
 
 /*
  * Tracepoint for kvm interrupt injection:
@@ -1027,6 +1027,63 @@ TRACE_EVENT(kvm_pi_irte_update,
 		  __entry->gsi,
 		  __entry->gvec,
 		  __entry->pi_desc_addr)
+);
+
+/*
+ * Tracepoint for AMD AVIC
+ */
+TRACE_EVENT(kvm_avic_incomplete_ipi,
+	    TP_PROTO(u32 vcpu, u32 icrh, u32 icrl, u32 id, u32 index),
+	    TP_ARGS(vcpu, icrh, icrl, id, index),
+
+	TP_STRUCT__entry(
+		__field(u32, vcpu)
+		__field(u32, icrh)
+		__field(u32, icrl)
+		__field(u32, id)
+		__field(u32, index)
+	),
+
+	TP_fast_assign(
+		__entry->vcpu = vcpu;
+		__entry->icrh = icrh;
+		__entry->icrl = icrl;
+		__entry->id = id;
+		__entry->index = index;
+	),
+
+	TP_printk("vcpu=%u, icrh:icrl=%#010x:%08x, id=%u, index=%u\n",
+		  __entry->vcpu, __entry->icrh, __entry->icrl,
+		  __entry->id, __entry->index)
+);
+
+TRACE_EVENT(kvm_avic_unaccelerated_access,
+	    TP_PROTO(u32 vcpu, u32 offset, bool ft, bool rw, u32 vec),
+	    TP_ARGS(vcpu, offset, ft, rw, vec),
+
+	TP_STRUCT__entry(
+		__field(u32, vcpu)
+		__field(u32, offset)
+		__field(bool, ft)
+		__field(bool, rw)
+		__field(u32, vec)
+	),
+
+	TP_fast_assign(
+		__entry->vcpu = vcpu;
+		__entry->offset = offset;
+		__entry->ft = ft;
+		__entry->rw = rw;
+		__entry->vec = vec;
+	),
+
+	TP_printk("vcpu=%u, offset=%#x(%s), %s, %s, vec=%#x\n",
+		  __entry->vcpu,
+		  __entry->offset,
+		  __print_symbolic(__entry->offset, kvm_trace_symbol_apic),
+		  __entry->ft ? "trap" : "fault",
+		  __entry->rw ? "write" : "read",
+		  __entry->vec)
 );
 
 #endif /* _TRACE_KVM_H */

@@ -69,12 +69,19 @@ static const struct efx_sw_stat_desc efx_sw_stat_desc[] = {
 	EFX_ETHTOOL_UINT_TXQ_STAT(tso_bursts),
 	EFX_ETHTOOL_UINT_TXQ_STAT(tso_long_headers),
 	EFX_ETHTOOL_UINT_TXQ_STAT(tso_packets),
+	EFX_ETHTOOL_UINT_TXQ_STAT(tso_fallbacks),
 	EFX_ETHTOOL_UINT_TXQ_STAT(pushes),
 	EFX_ETHTOOL_UINT_TXQ_STAT(pio_packets),
+	EFX_ETHTOOL_UINT_TXQ_STAT(cb_packets),
 	EFX_ETHTOOL_ATOMIC_NIC_ERROR_STAT(rx_reset),
 	EFX_ETHTOOL_UINT_CHANNEL_STAT(rx_tobe_disc),
 	EFX_ETHTOOL_UINT_CHANNEL_STAT(rx_ip_hdr_chksum_err),
 	EFX_ETHTOOL_UINT_CHANNEL_STAT(rx_tcp_udp_chksum_err),
+	EFX_ETHTOOL_UINT_CHANNEL_STAT(rx_inner_ip_hdr_chksum_err),
+	EFX_ETHTOOL_UINT_CHANNEL_STAT(rx_inner_tcp_udp_chksum_err),
+	EFX_ETHTOOL_UINT_CHANNEL_STAT(rx_outer_ip_hdr_chksum_err),
+	EFX_ETHTOOL_UINT_CHANNEL_STAT(rx_outer_tcp_udp_chksum_err),
+	EFX_ETHTOOL_UINT_CHANNEL_STAT(rx_eth_crc_err),
 	EFX_ETHTOOL_UINT_CHANNEL_STAT(rx_mcast_mismatch),
 	EFX_ETHTOOL_UINT_CHANNEL_STAT(rx_frm_trunc),
 	EFX_ETHTOOL_UINT_CHANNEL_STAT(rx_merge_events),
@@ -167,9 +174,8 @@ static void efx_ethtool_get_drvinfo(struct net_device *net_dev,
 
 	strlcpy(info->driver, KBUILD_MODNAME, sizeof(info->driver));
 	strlcpy(info->version, EFX_DRIVER_VERSION, sizeof(info->version));
-	if (efx_nic_rev(efx) >= EFX_REV_SIENA_A0)
-		efx_mcdi_print_fwver(efx, info->fw_version,
-				     sizeof(info->fw_version));
+	efx_mcdi_print_fwver(efx, info->fw_version,
+			     sizeof(info->fw_version));
 	strlcpy(info->bus_info, pci_name(efx->pci_dev), sizeof(info->bus_info));
 }
 
@@ -332,12 +338,12 @@ static int efx_ethtool_fill_self_tests(struct efx_nic *efx,
 		      "core", 0, "registers", NULL);
 
 	if (efx->phy_op->run_tests != NULL) {
-		EFX_BUG_ON_PARANOID(efx->phy_op->test_name == NULL);
+		EFX_WARN_ON_PARANOID(efx->phy_op->test_name == NULL);
 
 		for (i = 0; true; ++i) {
 			const char *name;
 
-			EFX_BUG_ON_PARANOID(i >= EFX_MAX_PHY_TESTS);
+			EFX_WARN_ON_PARANOID(i >= EFX_MAX_PHY_TESTS);
 			name = efx->phy_op->test_name(efx, i);
 			if (name == NULL)
 				break;
@@ -964,35 +970,35 @@ efx_ethtool_get_rxnfc(struct net_device *net_dev,
 		return 0;
 
 	case ETHTOOL_GRXFH: {
-		unsigned min_revision = 0;
-
 		info->data = 0;
+		if (!efx->rss_active) /* No RSS */
+			return 0;
 		switch (info->flow_type) {
-		case TCP_V4_FLOW:
-			info->data |= RXH_L4_B_0_1 | RXH_L4_B_2_3;
-			/* fall through */
 		case UDP_V4_FLOW:
+			if (efx->rx_hash_udp_4tuple)
+				/* fall through */
+		case TCP_V4_FLOW:
+				info->data |= RXH_L4_B_0_1 | RXH_L4_B_2_3;
+			/* fall through */
 		case SCTP_V4_FLOW:
 		case AH_ESP_V4_FLOW:
 		case IPV4_FLOW:
 			info->data |= RXH_IP_SRC | RXH_IP_DST;
-			min_revision = EFX_REV_FALCON_B0;
 			break;
-		case TCP_V6_FLOW:
-			info->data |= RXH_L4_B_0_1 | RXH_L4_B_2_3;
-			/* fall through */
 		case UDP_V6_FLOW:
+			if (efx->rx_hash_udp_4tuple)
+				/* fall through */
+		case TCP_V6_FLOW:
+				info->data |= RXH_L4_B_0_1 | RXH_L4_B_2_3;
+			/* fall through */
 		case SCTP_V6_FLOW:
 		case AH_ESP_V6_FLOW:
 		case IPV6_FLOW:
 			info->data |= RXH_IP_SRC | RXH_IP_DST;
-			min_revision = EFX_REV_SIENA_A0;
 			break;
 		default:
 			break;
 		}
-		if (efx_nic_rev(efx) < min_revision)
-			info->data = 0;
 		return 0;
 	}
 
@@ -1265,20 +1271,32 @@ static u32 efx_ethtool_get_rxfh_indir_size(struct net_device *net_dev)
 {
 	struct efx_nic *efx = netdev_priv(net_dev);
 
-	return ((efx_nic_rev(efx) < EFX_REV_FALCON_B0 ||
-		 efx->n_rx_channels == 1) ?
-		0 : ARRAY_SIZE(efx->rx_indir_table));
+	return (efx->n_rx_channels == 1) ? 0 : ARRAY_SIZE(efx->rx_indir_table);
+}
+
+static u32 efx_ethtool_get_rxfh_key_size(struct net_device *net_dev)
+{
+	struct efx_nic *efx = netdev_priv(net_dev);
+
+	return efx->type->rx_hash_key_size;
 }
 
 static int efx_ethtool_get_rxfh(struct net_device *net_dev, u32 *indir, u8 *key,
 				u8 *hfunc)
 {
 	struct efx_nic *efx = netdev_priv(net_dev);
+	int rc;
+
+	rc = efx->type->rx_pull_rss_config(efx);
+	if (rc)
+		return rc;
 
 	if (hfunc)
 		*hfunc = ETH_RSS_HASH_TOP;
 	if (indir)
 		memcpy(indir, efx->rx_indir_table, sizeof(efx->rx_indir_table));
+	if (key)
+		memcpy(key, efx->rx_hash_key, efx->type->rx_hash_key_size);
 	return 0;
 }
 
@@ -1287,14 +1305,18 @@ static int efx_ethtool_set_rxfh(struct net_device *net_dev, const u32 *indir,
 {
 	struct efx_nic *efx = netdev_priv(net_dev);
 
-	/* We do not allow change in unsupported parameters */
-	if (key ||
-	    (hfunc != ETH_RSS_HASH_NO_CHANGE && hfunc != ETH_RSS_HASH_TOP))
+	/* Hash function is Toeplitz, cannot be changed */
+	if (hfunc != ETH_RSS_HASH_NO_CHANGE && hfunc != ETH_RSS_HASH_TOP)
 		return -EOPNOTSUPP;
-	if (!indir)
+	if (!indir && !key)
 		return 0;
 
-	return efx->type->rx_push_rss_config(efx, true, indir);
+	if (!key)
+		key = efx->rx_hash_key;
+	if (!indir)
+		indir = efx->rx_indir_table;
+
+	return efx->type->rx_push_rss_config(efx, true, indir, key);
 }
 
 static int efx_ethtool_get_ts_info(struct net_device *net_dev,
@@ -1371,6 +1393,7 @@ const struct ethtool_ops efx_ethtool_ops = {
 	.get_rxnfc		= efx_ethtool_get_rxnfc,
 	.set_rxnfc		= efx_ethtool_set_rxnfc,
 	.get_rxfh_indir_size	= efx_ethtool_get_rxfh_indir_size,
+	.get_rxfh_key_size	= efx_ethtool_get_rxfh_key_size,
 	.get_rxfh		= efx_ethtool_get_rxfh,
 	.set_rxfh		= efx_ethtool_set_rxfh,
 	.get_ts_info		= efx_ethtool_get_ts_info,

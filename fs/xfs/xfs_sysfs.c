@@ -49,16 +49,6 @@ to_attr(struct attribute *attr)
 
 #define ATTR_LIST(name) &xfs_sysfs_attr_##name.attr
 
-/*
- * xfs_mount kobject. This currently has no attributes and thus no need for show
- * and store helpers. The mp kobject serves as the per-mount parent object that
- * is identified by the fsname under sysfs.
- */
-
-struct kobj_type xfs_mp_ktype = {
-	.release = xfs_sysfs_release,
-};
-
 STATIC ssize_t
 xfs_sysfs_object_show(
 	struct kobject		*kobject,
@@ -85,6 +75,71 @@ xfs_sysfs_object_store(
 static const struct sysfs_ops xfs_sysfs_ops = {
 	.show = xfs_sysfs_object_show,
 	.store = xfs_sysfs_object_store,
+};
+
+/*
+ * xfs_mount kobject. The mp kobject also serves as the per-mount parent object
+ * that is identified by the fsname under sysfs.
+ */
+
+static inline struct xfs_mount *
+to_mp(struct kobject *kobject)
+{
+	struct xfs_kobj *kobj = to_kobj(kobject);
+
+	return container_of(kobj, struct xfs_mount, m_kobj);
+}
+
+#ifdef DEBUG
+
+STATIC ssize_t
+fail_writes_store(
+	struct kobject		*kobject,
+	const char		*buf,
+	size_t			count)
+{
+	struct xfs_mount	*mp = to_mp(kobject);
+	int			ret;
+	int			val;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret)
+		return ret;
+
+	if (val == 1)
+		mp->m_fail_writes = true;
+	else if (val == 0)
+		mp->m_fail_writes = false;
+	else
+		return -EINVAL;
+
+	return count;
+}
+
+STATIC ssize_t
+fail_writes_show(
+	struct kobject		*kobject,
+	char			*buf)
+{
+	struct xfs_mount	*mp = to_mp(kobject);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", mp->m_fail_writes ? 1 : 0);
+}
+XFS_SYSFS_ATTR_RW(fail_writes);
+
+#endif /* DEBUG */
+
+static struct attribute *xfs_mp_attrs[] = {
+#ifdef DEBUG
+	ATTR_LIST(fail_writes),
+#endif
+	NULL,
+};
+
+struct kobj_type xfs_mp_ktype = {
+	.release = xfs_sysfs_release,
+	.sysfs_ops = &xfs_sysfs_ops,
+	.default_attrs = xfs_mp_attrs,
 };
 
 #ifdef DEBUG
@@ -338,9 +393,15 @@ max_retries_show(
 	struct kobject	*kobject,
 	char		*buf)
 {
+	int		retries;
 	struct xfs_error_cfg *cfg = to_error_cfg(kobject);
 
-	return snprintf(buf, PAGE_SIZE, "%d\n", cfg->max_retries);
+	if (cfg->max_retries == XFS_ERR_RETRY_FOREVER)
+		retries = -1;
+	else
+		retries = cfg->max_retries;
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", retries);
 }
 
 static ssize_t
@@ -360,7 +421,10 @@ max_retries_store(
 	if (val < -1)
 		return -EINVAL;
 
-	cfg->max_retries = val;
+	if (val == -1)
+		cfg->max_retries = XFS_ERR_RETRY_FOREVER;
+	else
+		cfg->max_retries = val;
 	return count;
 }
 XFS_SYSFS_ATTR_RW(max_retries);
@@ -370,10 +434,15 @@ retry_timeout_seconds_show(
 	struct kobject	*kobject,
 	char		*buf)
 {
+	int		timeout;
 	struct xfs_error_cfg *cfg = to_error_cfg(kobject);
 
-	return snprintf(buf, PAGE_SIZE, "%ld\n",
-			jiffies_to_msecs(cfg->retry_timeout) / MSEC_PER_SEC);
+	if (cfg->retry_timeout == XFS_ERR_RETRY_FOREVER)
+		timeout = -1;
+	else
+		timeout = jiffies_to_msecs(cfg->retry_timeout) / MSEC_PER_SEC;
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", timeout);
 }
 
 static ssize_t
@@ -390,11 +459,16 @@ retry_timeout_seconds_store(
 	if (ret)
 		return ret;
 
-	/* 1 day timeout maximum */
-	if (val < 0 || val > 86400)
+	/* 1 day timeout maximum, -1 means infinite */
+	if (val < -1 || val > 86400)
 		return -EINVAL;
 
-	cfg->retry_timeout = msecs_to_jiffies(val * MSEC_PER_SEC);
+	if (val == -1)
+		cfg->retry_timeout = XFS_ERR_RETRY_FOREVER;
+	else {
+		cfg->retry_timeout = msecs_to_jiffies(val * MSEC_PER_SEC);
+		ASSERT(msecs_to_jiffies(val * MSEC_PER_SEC) < LONG_MAX);
+	}
 	return count;
 }
 XFS_SYSFS_ATTR_RW(retry_timeout_seconds);
@@ -464,18 +538,19 @@ struct xfs_error_init {
 static const struct xfs_error_init xfs_error_meta_init[XFS_ERR_ERRNO_MAX] = {
 	{ .name = "default",
 	  .max_retries = XFS_ERR_RETRY_FOREVER,
-	  .retry_timeout = 0,
+	  .retry_timeout = XFS_ERR_RETRY_FOREVER,
 	},
 	{ .name = "EIO",
 	  .max_retries = XFS_ERR_RETRY_FOREVER,
-	  .retry_timeout = 0,
+	  .retry_timeout = XFS_ERR_RETRY_FOREVER,
 	},
 	{ .name = "ENOSPC",
 	  .max_retries = XFS_ERR_RETRY_FOREVER,
-	  .retry_timeout = 0,
+	  .retry_timeout = XFS_ERR_RETRY_FOREVER,
 	},
 	{ .name = "ENODEV",
-	  .max_retries = 0,
+	  .max_retries = 0,	/* We can't recover from devices disappearing */
+	  .retry_timeout = 0,
 	},
 };
 
@@ -506,7 +581,10 @@ xfs_error_sysfs_init_class(
 			goto out_error;
 
 		cfg->max_retries = init[i].max_retries;
-		cfg->retry_timeout = msecs_to_jiffies(
+		if (init[i].retry_timeout == XFS_ERR_RETRY_FOREVER)
+			cfg->retry_timeout = XFS_ERR_RETRY_FOREVER;
+		else
+			cfg->retry_timeout = msecs_to_jiffies(
 					init[i].retry_timeout * MSEC_PER_SEC);
 	}
 	return 0;

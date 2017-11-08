@@ -41,6 +41,13 @@
 
 #include "mlx5_core.h"
 
+struct mlx5_db_pgdir {
+	struct list_head	list;
+	unsigned long	       *bitmap;
+	__be32		       *db_page;
+	dma_addr_t		db_dma;
+};
+
 /* Handling for queue buffers -- we allocate a bunch of memory and
  * register it in a memory region at HCA virtual address 0.
  */
@@ -123,8 +130,8 @@ int mlx5_frag_buf_alloc_node(struct mlx5_core_dev *dev, int size,
 		if (frag->map & ((1 << buf->page_shift) - 1)) {
 			dma_free_coherent(&dev->pdev->dev, frag_sz,
 					  buf->frags[i].buf, buf->frags[i].map);
-			mlx5_core_warn(dev, "unexpected map alignment: 0x%p, page_shift=%d\n",
-				       (void *)frag->map, buf->page_shift);
+			mlx5_core_warn(dev, "unexpected map alignment: %pad, page_shift=%d\n",
+				       &frag->map, buf->page_shift);
 			goto err_free_buf;
 		}
 		size -= frag_sz;
@@ -159,17 +166,28 @@ void mlx5_frag_buf_free(struct mlx5_core_dev *dev, struct mlx5_frag_buf *buf)
 static struct mlx5_db_pgdir *mlx5_alloc_db_pgdir(struct mlx5_core_dev *dev,
 						 int node)
 {
+	u32 db_per_page = PAGE_SIZE / cache_line_size();
 	struct mlx5_db_pgdir *pgdir;
 
 	pgdir = kzalloc(sizeof(*pgdir), GFP_KERNEL);
 	if (!pgdir)
 		return NULL;
 
-	bitmap_fill(pgdir->bitmap, MLX5_DB_PER_PAGE);
+	pgdir->bitmap = kcalloc(BITS_TO_LONGS(db_per_page),
+				sizeof(unsigned long),
+				GFP_KERNEL);
+
+	if (!pgdir->bitmap) {
+		kfree(pgdir);
+		return NULL;
+	}
+
+	bitmap_fill(pgdir->bitmap, db_per_page);
 
 	pgdir->db_page = mlx5_dma_zalloc_coherent_node(dev, PAGE_SIZE,
 						       &pgdir->db_dma, node);
 	if (!pgdir->db_page) {
+		kfree(pgdir->bitmap);
 		kfree(pgdir);
 		return NULL;
 	}
@@ -180,18 +198,19 @@ static struct mlx5_db_pgdir *mlx5_alloc_db_pgdir(struct mlx5_core_dev *dev,
 static int mlx5_alloc_db_from_pgdir(struct mlx5_db_pgdir *pgdir,
 				    struct mlx5_db *db)
 {
+	u32 db_per_page = PAGE_SIZE / cache_line_size();
 	int offset;
 	int i;
 
-	i = find_first_bit(pgdir->bitmap, MLX5_DB_PER_PAGE);
-	if (i >= MLX5_DB_PER_PAGE)
+	i = find_first_bit(pgdir->bitmap, db_per_page);
+	if (i >= db_per_page)
 		return -ENOMEM;
 
 	__clear_bit(i, pgdir->bitmap);
 
 	db->u.pgdir = pgdir;
 	db->index   = i;
-	offset = db->index * L1_CACHE_BYTES;
+	offset = db->index * cache_line_size();
 	db->db      = pgdir->db_page + offset / sizeof(*pgdir->db_page);
 	db->dma     = pgdir->db_dma  + offset;
 
@@ -238,14 +257,16 @@ EXPORT_SYMBOL_GPL(mlx5_db_alloc);
 
 void mlx5_db_free(struct mlx5_core_dev *dev, struct mlx5_db *db)
 {
+	u32 db_per_page = PAGE_SIZE / cache_line_size();
 	mutex_lock(&dev->priv.pgdir_mutex);
 
 	__set_bit(db->index, db->u.pgdir->bitmap);
 
-	if (bitmap_full(db->u.pgdir->bitmap, MLX5_DB_PER_PAGE)) {
+	if (bitmap_full(db->u.pgdir->bitmap, db_per_page)) {
 		dma_free_coherent(&(dev->pdev->dev), PAGE_SIZE,
 				  db->u.pgdir->db_page, db->u.pgdir->db_dma);
 		list_del(&db->u.pgdir->list);
+		kfree(db->u.pgdir->bitmap);
 		kfree(db->u.pgdir);
 	}
 

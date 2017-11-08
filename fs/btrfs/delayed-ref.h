@@ -42,6 +42,12 @@ struct btrfs_delayed_ref_node {
 
 	/*data/tree ref use list, stored in ref_head->ref_list. */
 	struct list_head list;
+	/*
+	 * If action is BTRFS_ADD_DELAYED_REF, also link this node to
+	 * ref_head->ref_add_list, then we do not need to iterate the
+	 * whole ref_head->ref_list to find BTRFS_ADD_DELAYED_REF nodes.
+	 */
+	struct list_head add_list;
 
 	/* the starting bytenr of the extent */
 	u64 bytenr;
@@ -75,11 +81,11 @@ struct btrfs_delayed_ref_node {
 
 struct btrfs_delayed_extent_op {
 	struct btrfs_disk_key key;
+	u8 level;
+	bool update_key;
+	bool update_flags;
+	bool is_data;
 	u64 flags_to_set;
-	int level;
-	unsigned int update_key:1;
-	unsigned int update_flags:1;
-	unsigned int is_data:1;
 };
 
 /*
@@ -99,6 +105,8 @@ struct btrfs_delayed_ref_head {
 
 	spinlock_t lock;
 	struct list_head ref_list;
+	/* accumulate add BTRFS_ADD_DELAYED_REF nodes to this ref_add_list. */
+	struct list_head ref_add_list;
 
 	struct rb_node href_node;
 
@@ -250,9 +258,6 @@ int btrfs_add_delayed_data_ref(struct btrfs_fs_info *fs_info,
 			       u64 parent, u64 ref_root,
 			       u64 owner, u64 offset, u64 reserved, int action,
 			       struct btrfs_delayed_extent_op *extent_op);
-int btrfs_add_delayed_qgroup_reserve(struct btrfs_fs_info *fs_info,
-				     struct btrfs_trans_handle *trans,
-				     u64 ref_root, u64 bytenr, u64 num_bytes);
 int btrfs_add_delayed_extent_op(struct btrfs_fs_info *fs_info,
 				struct btrfs_trans_handle *trans,
 				u64 bytenr, u64 num_bytes,

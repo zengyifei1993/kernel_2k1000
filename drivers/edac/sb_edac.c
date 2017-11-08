@@ -21,6 +21,9 @@
 #include <linux/smp.h>
 #include <linux/bitmap.h>
 #include <linux/math64.h>
+#include <linux/mod_devicetable.h>
+#include <asm/cpu_device_id.h>
+#include <asm/intel-family.h>
 #include <asm/processor.h>
 #include <asm/mce.h>
 
@@ -28,8 +31,6 @@
 
 /* Static vars */
 static LIST_HEAD(sbridge_edac_list);
-static DEFINE_MUTEX(sbridge_edac_lock);
-static int probed;
 
 /*
  * Alter this version for the module when modifications are made
@@ -329,6 +330,7 @@ struct pci_id_descr {
 struct pci_id_table {
 	const struct pci_id_descr	*descr;
 	int				n_devs;
+	enum type			type;
 };
 
 struct sbridge_dev {
@@ -407,9 +409,14 @@ static const struct pci_id_descr pci_dev_descr_sbridge[] = {
 	{ PCI_DESCR(PCI_DEVICE_ID_INTEL_SBRIDGE_BR, 0)		},
 };
 
-#define PCI_ID_TABLE_ENTRY(A) { .descr=A, .n_devs = ARRAY_SIZE(A) }
+#define PCI_ID_TABLE_ENTRY(A, T) {	\
+	.descr = A,			\
+	.n_devs = ARRAY_SIZE(A),	\
+	.type = T			\
+}
+
 static const struct pci_id_table pci_dev_descr_sbridge_table[] = {
-	PCI_ID_TABLE_ENTRY(pci_dev_descr_sbridge),
+	PCI_ID_TABLE_ENTRY(pci_dev_descr_sbridge, SANDY_BRIDGE),
 	{0,}			/* 0 terminated list. */
 };
 
@@ -476,7 +483,7 @@ static const struct pci_id_descr pci_dev_descr_ibridge[] = {
 };
 
 static const struct pci_id_table pci_dev_descr_ibridge_table[] = {
-	PCI_ID_TABLE_ENTRY(pci_dev_descr_ibridge),
+	PCI_ID_TABLE_ENTRY(pci_dev_descr_ibridge, IVY_BRIDGE),
 	{0,}			/* 0 terminated list. */
 };
 
@@ -549,7 +556,7 @@ static const struct pci_id_descr pci_dev_descr_haswell[] = {
 };
 
 static const struct pci_id_table pci_dev_descr_haswell_table[] = {
-	PCI_ID_TABLE_ENTRY(pci_dev_descr_haswell),
+	PCI_ID_TABLE_ENTRY(pci_dev_descr_haswell, HASWELL),
 	{0,}			/* 0 terminated list. */
 };
 
@@ -593,7 +600,7 @@ static const struct pci_id_descr pci_dev_descr_knl[] = {
 };
 
 static const struct pci_id_table pci_dev_descr_knl_table[] = {
-	PCI_ID_TABLE_ENTRY(pci_dev_descr_knl),
+	PCI_ID_TABLE_ENTRY(pci_dev_descr_knl, KNIGHTS_LANDING),
 	{0,}
 };
 
@@ -661,19 +668,7 @@ static const struct pci_id_descr pci_dev_descr_broadwell[] = {
 };
 
 static const struct pci_id_table pci_dev_descr_broadwell_table[] = {
-	PCI_ID_TABLE_ENTRY(pci_dev_descr_broadwell),
-	{0,}			/* 0 terminated list. */
-};
-
-/*
- *	pci_device_id	table for which devices we are looking for
- */
-static const struct pci_device_id sbridge_pci_tbl[] = {
-	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_SBRIDGE_IMC_HA0)},
-	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_IBRIDGE_IMC_HA0_TA)},
-	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_HASWELL_IMC_HA0)},
-	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_BROADWELL_IMC_HA0)},
-	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_KNL_IMC_SAD0)},
+	PCI_ID_TABLE_ENTRY(pci_dev_descr_broadwell, BROADWELL),
 	{0,}			/* 0 terminated list. */
 };
 
@@ -2394,22 +2389,19 @@ static int sbridge_get_onedevice(struct pci_dev **prev,
  * @num_mc: pointer to the memory controllers count, to be incremented in case
  *	    of success.
  * @table: model specific table
- * @allow_dups: allow for multiple devices to exist with the same device id
- *              (as implemented, this isn't expected to work correctly in the
- *              multi-socket case).
- * @multi_bus: don't assume devices on different buses belong to different
- *             memory controllers.
  *
  * returns 0 in case of success or error code
  */
-static int sbridge_get_all_devices_full(u8 *num_mc,
-					const struct pci_id_table *table,
-					int allow_dups,
-					int multi_bus)
+static int sbridge_get_all_devices(u8 *num_mc,
+					const struct pci_id_table *table)
 {
 	int i, rc;
 	struct pci_dev *pdev = NULL;
+	int allow_dups = 0;
+	int multi_bus = 0;
 
+	if (table->type == KNIGHTS_LANDING)
+		allow_dups = multi_bus = 1;
 	while (table && table->descr) {
 		for (i = 0; i < table->n_devs; i++) {
 			if (!allow_dups || i == 0 ||
@@ -2435,11 +2427,6 @@ static int sbridge_get_all_devices_full(u8 *num_mc,
 
 	return 0;
 }
-
-#define sbridge_get_all_devices(num_mc, table) \
-		sbridge_get_all_devices_full(num_mc, table, 0, 0)
-#define sbridge_get_all_devices_knl(num_mc, table) \
-		sbridge_get_all_devices_full(num_mc, table, 1, 1)
 
 static int sbridge_mci_bind_devs(struct mem_ctl_info *mci,
 				 struct sbridge_dev *sbridge_dev)
@@ -3458,62 +3445,41 @@ fail0:
 	return rc;
 }
 
+#define ICPU(model, table) \
+	{ X86_VENDOR_INTEL, 6, model, 0, (unsigned long)&table }
+
+static const struct x86_cpu_id sbridge_cpuids[] = {
+	ICPU(INTEL_FAM6_SANDYBRIDGE_X,	  pci_dev_descr_sbridge_table),
+	ICPU(INTEL_FAM6_IVYBRIDGE_X,	  pci_dev_descr_ibridge_table),
+	ICPU(INTEL_FAM6_HASWELL_X,	  pci_dev_descr_haswell_table),
+	ICPU(INTEL_FAM6_BROADWELL_X,	  pci_dev_descr_broadwell_table),
+	ICPU(INTEL_FAM6_BROADWELL_XEON_D, pci_dev_descr_broadwell_table),
+	ICPU(INTEL_FAM6_XEON_PHI_KNL,	  pci_dev_descr_knl_table),
+	ICPU(INTEL_FAM6_XEON_PHI_KNM,	  pci_dev_descr_knl_table),
+	{ }
+};
+MODULE_DEVICE_TABLE(x86cpu, sbridge_cpuids);
+
 /*
- *	sbridge_probe	Probe for ONE instance of device to see if it is
+ *	sbridge_probe	Get all devices and register memory controllers
  *			present.
  *	return:
  *		0 for FOUND a device
  *		< 0 for error code
  */
 
-static int sbridge_probe(struct pci_dev *pdev, const struct pci_device_id *id)
+static int sbridge_probe(const struct x86_cpu_id *id)
 {
 	int rc = -ENODEV;
 	u8 mc, num_mc = 0;
 	struct sbridge_dev *sbridge_dev;
-	enum type type = SANDY_BRIDGE;
+	struct pci_id_table *ptable = (struct pci_id_table *)id->driver_data;
 
 	/* get the pci devices we want to reserve for our use */
-	mutex_lock(&sbridge_edac_lock);
+	rc = sbridge_get_all_devices(&num_mc, ptable);
 
-	/*
-	 * All memory controllers are allocated at the first pass.
-	 */
-	if (unlikely(probed >= 1)) {
-		mutex_unlock(&sbridge_edac_lock);
-		return -ENODEV;
-	}
-	probed++;
-
-	switch (pdev->device) {
-	case PCI_DEVICE_ID_INTEL_IBRIDGE_IMC_HA0_TA:
-		rc = sbridge_get_all_devices(&num_mc,
-					pci_dev_descr_ibridge_table);
-		type = IVY_BRIDGE;
-		break;
-	case PCI_DEVICE_ID_INTEL_SBRIDGE_IMC_HA0:
-		rc = sbridge_get_all_devices(&num_mc,
-					pci_dev_descr_sbridge_table);
-		type = SANDY_BRIDGE;
-		break;
-	case PCI_DEVICE_ID_INTEL_HASWELL_IMC_HA0:
-		rc = sbridge_get_all_devices(&num_mc,
-					pci_dev_descr_haswell_table);
-		type = HASWELL;
-		break;
-	case PCI_DEVICE_ID_INTEL_BROADWELL_IMC_HA0:
-		rc = sbridge_get_all_devices(&num_mc,
-					pci_dev_descr_broadwell_table);
-		type = BROADWELL;
-	    break;
-	case PCI_DEVICE_ID_INTEL_KNL_IMC_SAD0:
-		rc = sbridge_get_all_devices_knl(&num_mc,
-					pci_dev_descr_knl_table);
-		type = KNIGHTS_LANDING;
-		break;
-	}
 	if (unlikely(rc < 0)) {
-		edac_dbg(0, "couldn't get all devices for 0x%x\n", pdev->device);
+		edac_dbg(0, "couldn't get all devices\n");
 		goto fail0;
 	}
 
@@ -3524,14 +3490,13 @@ static int sbridge_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 			 mc, mc + 1, num_mc);
 
 		sbridge_dev->mc = mc++;
-		rc = sbridge_register_mci(sbridge_dev, type);
+		rc = sbridge_register_mci(sbridge_dev, ptable->type);
 		if (unlikely(rc < 0))
 			goto fail1;
 	}
 
 	sbridge_printk(KERN_INFO, "%s\n", SBRIDGE_REVISION);
 
-	mutex_unlock(&sbridge_edac_lock);
 	return 0;
 
 fail1:
@@ -3540,58 +3505,25 @@ fail1:
 
 	sbridge_put_all_devices();
 fail0:
-	mutex_unlock(&sbridge_edac_lock);
 	return rc;
 }
 
 /*
- *	sbridge_remove	destructor for one instance of device
+ *	sbridge_remove	cleanup
  *
  */
-static void sbridge_remove(struct pci_dev *pdev)
+static void sbridge_remove(void)
 {
 	struct sbridge_dev *sbridge_dev;
 
 	edac_dbg(0, "\n");
-
-	/*
-	 * we have a trouble here: pdev value for removal will be wrong, since
-	 * it will point to the X58 register used to detect that the machine
-	 * is a Nehalem or upper design. However, due to the way several PCI
-	 * devices are grouped together to provide MC functionality, we need
-	 * to use a different method for releasing the devices
-	 */
-
-	mutex_lock(&sbridge_edac_lock);
-
-	if (unlikely(!probed)) {
-		mutex_unlock(&sbridge_edac_lock);
-		return;
-	}
 
 	list_for_each_entry(sbridge_dev, &sbridge_edac_list, list)
 		sbridge_unregister_mci(sbridge_dev);
 
 	/* Release PCI resources */
 	sbridge_put_all_devices();
-
-	probed--;
-
-	mutex_unlock(&sbridge_edac_lock);
 }
-
-MODULE_DEVICE_TABLE(pci, sbridge_pci_tbl);
-
-/*
- *	sbridge_driver	pci_driver structure for this module
- *
- */
-static struct pci_driver sbridge_driver = {
-	.name     = "sbridge_edac",
-	.probe    = sbridge_probe,
-	.remove   = sbridge_remove,
-	.id_table = sbridge_pci_tbl,
-};
 
 /*
  *	sbridge_init		Module entry function
@@ -3599,15 +3531,21 @@ static struct pci_driver sbridge_driver = {
  */
 static int __init sbridge_init(void)
 {
-	int pci_rc;
+	const struct x86_cpu_id *id;
+	int rc;
 
 	edac_dbg(2, "\n");
+
+	id = x86_match_cpu(sbridge_cpuids);
+	if (!id)
+		return -ENODEV;
 
 	/* Ensure that the OPSTATE is set correctly for POLL or NMI */
 	opstate_init();
 
-	pci_rc = pci_register_driver(&sbridge_driver);
-	if (pci_rc >= 0) {
+	rc = sbridge_probe(id);
+
+	if (rc >= 0) {
 		mce_register_decode_chain(&sbridge_mce_dec);
 		if (get_edac_report_status() == EDAC_REPORTING_DISABLED)
 			sbridge_printk(KERN_WARNING, "Loading driver, error reporting disabled.\n");
@@ -3615,9 +3553,9 @@ static int __init sbridge_init(void)
 	}
 
 	sbridge_printk(KERN_ERR, "Failed to register device with error %d.\n",
-		      pci_rc);
+		      rc);
 
-	return pci_rc;
+	return rc;
 }
 
 /*
@@ -3627,7 +3565,7 @@ static int __init sbridge_init(void)
 static void __exit sbridge_exit(void)
 {
 	edac_dbg(2, "\n");
-	pci_unregister_driver(&sbridge_driver);
+	sbridge_remove();
 	mce_unregister_decode_chain(&sbridge_mce_dec);
 }
 

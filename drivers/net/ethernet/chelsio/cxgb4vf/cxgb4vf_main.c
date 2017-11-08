@@ -70,13 +70,6 @@
 			 NETIF_MSG_TIMER | NETIF_MSG_IFDOWN | NETIF_MSG_IFUP |\
 			 NETIF_MSG_RX_ERR | NETIF_MSG_TX_ERR)
 
-static int dflt_msg_enable = DFLT_MSG_ENABLE;
-
-module_param(dflt_msg_enable, int, 0644);
-MODULE_PARM_DESC(dflt_msg_enable,
-		 "default adapter ethtool message level bitmap, "
-		 "deprecated parameter");
-
 /*
  * The driver uses the best interrupt scheme available on a platform in the
  * order MSI-X then MSI.  This parameter determines which of these schemes the
@@ -165,20 +158,23 @@ void t4vf_os_link_changed(struct adapter *adapter, int pidx, int link_ok)
 		netif_carrier_on(dev);
 
 		switch (pi->link_cfg.speed) {
-		case 40000:
-			s = "40Gbps";
+		case 100:
+			s = "100Mbps";
 			break;
-
+		case 1000:
+			s = "1Gbps";
+			break;
 		case 10000:
 			s = "10Gbps";
 			break;
-
-		case 1000:
-			s = "1000Mbps";
+		case 25000:
+			s = "25Gbps";
 			break;
-
-		case 100:
-			s = "100Mbps";
+		case 40000:
+			s = "40Gbps";
+			break;
+		case 100000:
+			s = "100Gbps";
 			break;
 
 		default:
@@ -937,12 +933,8 @@ static int set_rxmode(struct net_device *dev, int mtu, bool sleep_ok)
 {
 	struct port_info *pi = netdev_priv(dev);
 
-	if (!(dev->flags & IFF_PROMISC)) {
-		__dev_uc_sync(dev, cxgb4vf_mac_sync, cxgb4vf_mac_unsync);
-		if (!(dev->flags & IFF_ALLMULTI))
-			__dev_mc_sync(dev, cxgb4vf_mac_sync,
-				      cxgb4vf_mac_unsync);
-	}
+	__dev_uc_sync(dev, cxgb4vf_mac_sync, cxgb4vf_mac_unsync);
+	__dev_mc_sync(dev, cxgb4vf_mac_sync, cxgb4vf_mac_unsync);
 	return t4vf_set_rxmode(pi->adapter, pi->viid, -1,
 			       (dev->flags & IFF_PROMISC) != 0,
 			       (dev->flags & IFF_ALLMULTI) != 0,
@@ -2382,7 +2374,7 @@ static void size_nports_qsets(struct adapter *adapter)
 	 */
 	pmask_nports = hweight32(adapter->params.vfres.pmask);
 	if (pmask_nports < adapter->params.nports) {
-		dev_warn(adapter->pdev_dev, "only using %d of %d provissioned"
+		dev_warn(adapter->pdev_dev, "only using %d of %d provisioned"
 			 " virtual interfaces; limited by Port Access Rights"
 			 " mask %#x\n", pmask_nports, adapter->params.nports,
 			 adapter->params.vfres.pmask);
@@ -2597,7 +2589,7 @@ static void cfg_queues(struct adapter *adapter)
 	 */
 	n10g = 0;
 	for_each_port(adapter, pidx)
-		n10g += is_10g_port(&adap2pinfo(adapter, pidx)->link_cfg);
+		n10g += is_x_10g_port(&adap2pinfo(adapter, pidx)->link_cfg);
 
 	/*
 	 * We default to 1 queue per non-10G port and up to # of cores queues
@@ -2781,6 +2773,7 @@ static int cxgb4vf_pci_probe(struct pci_dev *pdev,
 	struct adapter *adapter;
 	struct port_info *pi;
 	struct net_device *netdev;
+	unsigned int pf;
 
 	/*
 	 * Print our driver banner the first time we're called to initialize a
@@ -2860,6 +2853,8 @@ static int cxgb4vf_pci_probe(struct pci_dev *pdev,
 	 * Initialize SMP data synchronization resources.
 	 */
 	spin_lock_init(&adapter->stats_lock);
+	spin_lock_init(&adapter->mbox_lock);
+	INIT_LIST_HEAD(&adapter->mlist.list);
 
 	/*
 	 * Map our I/O registers in BAR0.
@@ -2896,7 +2891,7 @@ static int cxgb4vf_pci_probe(struct pci_dev *pdev,
 	 * Initialize adapter level features.
 	 */
 	adapter->name = pci_name(pdev);
-	adapter->msg_enable = dflt_msg_enable;
+	adapter->msg_enable = DFLT_MSG_ENABLE;
 	err = adap_init0(adapter);
 	if (err)
 		goto err_unmap_bar;
@@ -2905,8 +2900,11 @@ static int cxgb4vf_pci_probe(struct pci_dev *pdev,
 	 * Allocate our "adapter ports" and stitch everything together.
 	 */
 	pmask = adapter->params.vfres.pmask;
+	pf = t4vf_get_pf_from_vf(adapter);
 	for_each_port(adapter, pidx) {
 		int port_id, viid;
+		u8 mac[ETH_ALEN];
+		unsigned int naddr = 1;
 
 		/*
 		 * We simplistically allocate our virtual interfaces
@@ -2967,6 +2965,7 @@ static int cxgb4vf_pci_probe(struct pci_dev *pdev,
 
 		netdev->netdev_ops = &cxgb4vf_netdev_ops;
 		SET_ETHTOOL_OPS(netdev, &cxgb4vf_ethtool_ops);
+		netdev->dev_port = pi->port_id;
 
 		/*
 		 * Initialize the hardware/software state for the port.
@@ -2976,6 +2975,26 @@ static int cxgb4vf_pci_probe(struct pci_dev *pdev,
 			dev_err(&pdev->dev, "cannot initialize port %d\n",
 				pidx);
 			goto err_free_dev;
+		}
+
+		err = t4vf_get_vf_mac_acl(adapter, pf, &naddr, mac);
+		if (err) {
+			dev_err(&pdev->dev,
+				"unable to determine MAC ACL address, "
+				"continuing anyway.. (status %d)\n", err);
+		} else if (naddr && adapter->params.vfres.nvi == 1) {
+			struct sockaddr addr;
+
+			ether_addr_copy(addr.sa_data, mac);
+			err = cxgb4vf_set_mac_addr(netdev, &addr);
+			if (err) {
+				dev_err(&pdev->dev,
+					"unable to set MAC address %pM\n",
+					mac);
+				goto err_free_dev;
+			}
+			dev_info(&pdev->dev,
+				 "Using assigned MAC ACL: %pM\n", mac);
 		}
 	}
 

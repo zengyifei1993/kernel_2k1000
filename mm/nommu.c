@@ -1026,7 +1026,7 @@ static int validate_mmap_request(struct file *file,
 			    (file->f_mode & FMODE_WRITE))
 				return -EACCES;
 
-			if (locks_verify_locked(file_inode(file)))
+			if (locks_verify_locked(file))
 				return -EAGAIN;
 
 			if (!(capabilities & BDI_CAP_MAP_DIRECT))
@@ -1287,7 +1287,8 @@ unsigned long do_mmap_pgoff(struct file *file,
 			    unsigned long prot,
 			    unsigned long flags,
 			    unsigned long pgoff,
-			    unsigned long *populate)
+			    unsigned long *populate,
+			    struct list_head *uf_unused)
 {
 	struct vm_area_struct *vma;
 	struct vm_region *region;
@@ -1673,7 +1674,7 @@ static int shrink_vma(struct mm_struct *mm,
  * - under NOMMU conditions the chunk to be unmapped must be backed by a single
  *   VMA, though it need not cover the whole VMA
  */
-int do_munmap(struct mm_struct *mm, unsigned long start, size_t len)
+int do_munmap(struct mm_struct *mm, unsigned long start, size_t len, struct list_head *uf)
 {
 	struct vm_area_struct *vma;
 	unsigned long end;
@@ -1755,7 +1756,7 @@ int vm_munmap(unsigned long addr, size_t len)
 	int ret;
 
 	down_write(&mm->mmap_sem);
-	ret = do_munmap(mm, addr, len);
+	ret = do_munmap(mm, addr, len, NULL);
 	up_write(&mm->mmap_sem);
 	return ret;
 }

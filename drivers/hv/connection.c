@@ -39,6 +39,7 @@ struct vmbus_connection vmbus_connection = {
 	.conn_state		= DISCONNECTED,
 	.next_gpadl_handle	= ATOMIC_INIT(0xE1E10),
 };
+EXPORT_SYMBOL_GPL(vmbus_connection);
 
 /*
  * Negotiated protocol version with the host.
@@ -110,7 +111,8 @@ static int vmbus_negotiate_version(struct vmbus_channel_msginfo *msginfo,
 	spin_unlock_irqrestore(&vmbus_connection.channelmsg_lock, flags);
 
 	ret = vmbus_post_msg(msg,
-			       sizeof(struct vmbus_channel_initiate_contact));
+			     sizeof(struct vmbus_channel_initiate_contact),
+			     true);
 	if (ret != 0) {
 		spin_lock_irqsave(&vmbus_connection.channelmsg_lock, flags);
 		list_del(&msginfo->msglistentry);
@@ -296,7 +298,8 @@ struct vmbus_channel *relid2channel(u32 relid)
 	struct list_head *cur, *tmp;
 	struct vmbus_channel *cur_sc;
 
-	mutex_lock(&vmbus_connection.channel_mutex);
+	BUG_ON(!mutex_is_locked(&vmbus_connection.channel_mutex));
+
 	list_for_each_entry(channel, &vmbus_connection.chn_list, listentry) {
 		if (channel->offermsg.child_relid == relid) {
 			found_channel = channel;
@@ -315,7 +318,6 @@ struct vmbus_channel *relid2channel(u32 relid)
 			}
 		}
 	}
-	mutex_unlock(&vmbus_connection.channel_mutex);
 
 	return found_channel;
 }
@@ -434,12 +436,12 @@ void vmbus_on_event(unsigned long data)
 /*
  * vmbus_post_msg - Send a msg on the vmbus's message connection
  */
-int vmbus_post_msg(void *buffer, size_t buflen)
+int vmbus_post_msg(void *buffer, size_t buflen, bool can_sleep)
 {
 	union hv_connection_id conn_id;
 	int ret = 0;
 	int retries = 0;
-	u32 msec = 1;
+	u32 usec = 1;
 
 	conn_id.asu32 = 0;
 	conn_id.u.id = VMBUS_MESSAGE_CONNECTION_ID;
@@ -449,7 +451,7 @@ int vmbus_post_msg(void *buffer, size_t buflen)
 	 * insufficient resources. Retry the operation a couple of
 	 * times before giving up.
 	 */
-	while (retries < 20) {
+	while (retries < 100) {
 		ret = hv_post_message(conn_id, 1, buffer, buflen);
 
 		switch (ret) {
@@ -472,9 +474,15 @@ int vmbus_post_msg(void *buffer, size_t buflen)
 		}
 
 		retries++;
-		msleep(msec);
-		if (msec < 2048)
-			msec *= 2;
+		if (can_sleep && usec > 1000)
+			msleep(usec / 1000);
+		else if (usec < MAX_UDELAY_MS * 1000)
+			udelay(usec);
+		else
+			mdelay(usec / 1000);
+
+		if (usec < 256000)
+			usec *= 2;
 	}
 	return ret;
 }
@@ -495,3 +503,4 @@ void vmbus_set_event(struct vmbus_channel *channel)
 
 	hv_do_hypercall(HVCALL_SIGNAL_EVENT, channel->sig_event, NULL);
 }
+EXPORT_SYMBOL_GPL(vmbus_set_event);

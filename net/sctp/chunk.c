@@ -59,7 +59,6 @@ static void sctp_datamsg_init(struct sctp_datamsg *msg)
 	atomic_set(&msg->refcnt, 1);
 	msg->send_failed = 0;
 	msg->send_error = 0;
-	msg->can_abandon = 0;
 	msg->can_delay = 1;
 	msg->expires_at = 0;
 	INIT_LIST_HEAD(&msg->chunks);
@@ -188,15 +187,11 @@ struct sctp_datamsg *sctp_datamsg_from_user(struct sctp_association *asoc,
 	/* Note: Calculate this outside of the loop, so that all fragments
 	 * have the same expiration.
 	 */
-	if (sinfo->sinfo_timetolive) {
-		/* sinfo_timetolive is in milliseconds */
+	if (asoc->peer.prsctp_capable && sinfo->sinfo_timetolive &&
+	    (SCTP_PR_TTL_ENABLED(sinfo->sinfo_flags) ||
+	     !SCTP_PR_POLICY(sinfo->sinfo_flags)))
 		msg->expires_at = jiffies +
 				    msecs_to_jiffies(sinfo->sinfo_timetolive);
-		msg->can_abandon = 1;
-
-		pr_debug("%s: msg:%p expires_at:%ld jiffies:%ld\n", __func__,
-			 msg, msg->expires_at, jiffies);
-	}
 
 	/* This is the biggest possible DATA chunk that can fit into
 	 * the packet
@@ -356,29 +351,23 @@ errout:
 /* Check whether this message has expired. */
 int sctp_chunk_abandoned(struct sctp_chunk *chunk)
 {
-	if (!chunk->asoc->prsctp_enable ||
-	    !SCTP_PR_POLICY(chunk->sinfo.sinfo_flags)) {
-		struct sctp_datamsg *msg = chunk->msg;
-
-		if (!msg->can_abandon)
-			return 0;
-
-		if (time_after(jiffies, msg->expires_at))
-			return 1;
-
+	if (!chunk->asoc->peer.prsctp_capable)
 		return 0;
-	}
 
 	if (SCTP_PR_TTL_ENABLED(chunk->sinfo.sinfo_flags) &&
-	    time_after(jiffies, chunk->prsctp_param)) {
+	    time_after(jiffies, chunk->msg->expires_at)) {
 		if (chunk->sent_count)
 			chunk->asoc->abandoned_sent[SCTP_PR_INDEX(TTL)]++;
 		else
 			chunk->asoc->abandoned_unsent[SCTP_PR_INDEX(TTL)]++;
 		return 1;
 	} else if (SCTP_PR_RTX_ENABLED(chunk->sinfo.sinfo_flags) &&
-		   chunk->sent_count > chunk->prsctp_param) {
+		   chunk->sent_count > chunk->sinfo.sinfo_timetolive) {
 		chunk->asoc->abandoned_sent[SCTP_PR_INDEX(RTX)]++;
+		return 1;
+	} else if (!SCTP_PR_POLICY(chunk->sinfo.sinfo_flags) &&
+		   chunk->msg->expires_at &&
+		   time_after(jiffies, chunk->msg->expires_at)) {
 		return 1;
 	}
 	/* PRIO policy is processed by sendmsg, not here */

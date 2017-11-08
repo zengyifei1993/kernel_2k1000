@@ -1,9 +1,12 @@
 #ifndef TARGET_CORE_BACKEND_H
 #define TARGET_CORE_BACKEND_H
 
-#define TRANSPORT_PLUGIN_PHBA_PDEV		1
-#define TRANSPORT_PLUGIN_VHBA_PDEV		2
-#define TRANSPORT_PLUGIN_VHBA_VDEV		3
+#define TRANSPORT_FLAG_PASSTHROUGH		0x1
+/*
+ * ALUA commands, state checks and setup operations are handled by the
+ * backend module.
+ */
+#define TRANSPORT_FLAG_PASSTHROUGH_ALUA		0x2
 
 struct target_backend_cits {
 	struct config_item_type tb_dev_cit;
@@ -22,7 +25,7 @@ struct se_subsystem_api {
 	char inquiry_rev[4];
 	struct module *owner;
 
-	u8 transport_type;
+	u8 transport_flags;
 
 	int (*attach_hba)(struct se_hba *, u32);
 	void (*detach_hba)(struct se_hba *);
@@ -30,6 +33,7 @@ struct se_subsystem_api {
 
 	struct se_device *(*alloc_device)(struct se_hba *, const char *);
 	int (*configure_device)(struct se_device *);
+	void (*destroy_device)(struct se_device *);
 	void (*free_device)(struct se_device *device);
 
 	ssize_t (*set_configfs_dev_params)(struct se_device *,
@@ -101,7 +105,6 @@ int	transport_set_vpd_ident(struct t10_vpd *, unsigned char *);
 void	*transport_kmap_data_sg(struct se_cmd *);
 void	transport_kunmap_data_sg(struct se_cmd *);
 /* core helpers also used by xcopy during internal command setup */
-int	target_alloc_sgl(struct scatterlist **, unsigned int *, u32, bool);
 sense_reason_t	transport_generic_map_mem_to_cmd(struct se_cmd *,
 		struct scatterlist *, u32, struct scatterlist *, u32);
 

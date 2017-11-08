@@ -224,7 +224,7 @@ module_param_call(trace_state, param_set_trace_state, param_get_trace_state,
 /* /sys/modules/acpi/parameters/aml_debug_output */
 
 module_param_named(aml_debug_output, acpi_gbl_enable_aml_debug_object,
-		   bool, 0644);
+		   byte, 0644);
 MODULE_PARM_DESC(aml_debug_output,
 		 "To enable/disable the ACPI Debug Object output.");
 
@@ -321,7 +321,7 @@ acpi_sysfs_table_handler(u32 event, void *table, void *context)
 	struct acpi_table_attr *table_attr;
 
 	switch (event) {
-	case ACPI_TABLE_EVENT_LOAD:
+	case ACPI_TABLE_EVENT_INSTALL:
 		table_attr =
 		    kzalloc(sizeof(struct acpi_table_attr), GFP_KERNEL);
 		if (!table_attr)
@@ -335,7 +335,9 @@ acpi_sysfs_table_handler(u32 event, void *table, void *context)
 		} else
 			list_add_tail(&table_attr->node, &acpi_table_attr_list);
 		break;
+	case ACPI_TABLE_EVENT_LOAD:
 	case ACPI_TABLE_EVENT_UNLOAD:
+	case ACPI_TABLE_EVENT_UNINSTALL:
 		/*
 		 * we do not need to do anything right now
 		 * because the table is not deleted from the

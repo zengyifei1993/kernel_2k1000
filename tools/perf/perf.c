@@ -10,12 +10,13 @@
 
 #include "util/env.h"
 #include <subcmd/exec-cmd.h>
-#include "util/cache.h"
+#include "util/config.h"
 #include "util/quote.h"
 #include <subcmd/run-command.h>
 #include "util/parse-events.h"
 #include <subcmd/parse-options.h>
 #include "util/debug.h"
+#include <api/fs/fs.h>
 #include <api/fs/tracing_path.h>
 #include <pthread.h>
 #include <stdlib.h>
@@ -27,7 +28,6 @@ const char perf_usage_string[] =
 const char perf_more_info_string[] =
 	"See 'perf help COMMAND' for more information on a specific command.";
 
-int use_browser = -1;
 static int use_pager = -1;
 const char *input_name;
 
@@ -41,9 +41,11 @@ static struct cmd_struct commands[] = {
 	{ "buildid-cache", cmd_buildid_cache, 0 },
 	{ "buildid-list", cmd_buildid_list, 0 },
 	{ "config",	cmd_config,	0 },
+	{ "c2c",	cmd_c2c,	0 },
 	{ "diff",	cmd_diff,	0 },
 	{ "evlist",	cmd_evlist,	0 },
 	{ "help",	cmd_help,	0 },
+	{ "kallsyms",	cmd_kallsyms,	0 },
 	{ "list",	cmd_list,	0 },
 	{ "record",	cmd_record,	0 },
 	{ "report",	cmd_report,	0 },
@@ -68,6 +70,7 @@ static struct cmd_struct commands[] = {
 	{ "inject",	cmd_inject,	0 },
 	{ "mem",	cmd_mem,	0 },
 	{ "data",	cmd_data,	0 },
+	{ "ftrace",	cmd_ftrace,	0 },
 };
 
 struct pager_config {
@@ -86,11 +89,12 @@ static int pager_command_config(const char *var, const char *value, void *data)
 /* returns 0 for "no pager", 1 for "use pager", and -1 for "not specified" */
 int check_pager_config(const char *cmd)
 {
+	int err;
 	struct pager_config c;
 	c.cmd = cmd;
 	c.val = -1;
-	perf_config(pager_command_config, &c);
-	return c.val;
+	err = perf_config(pager_command_config, &c);
+	return err ?: c.val;
 }
 
 static int browser_command_config(const char *var, const char *value, void *data)
@@ -109,11 +113,12 @@ static int browser_command_config(const char *var, const char *value, void *data
  */
 static int check_browser_config(const char *cmd)
 {
+	int err;
 	struct pager_config c;
 	c.cmd = cmd;
 	c.val = -1;
-	perf_config(browser_command_config, &c);
-	return c.val;
+	err = perf_config(browser_command_config, &c);
+	return err ?: c.val;
 }
 
 static void commit_pager_choice(void)
@@ -137,8 +142,6 @@ struct option options[] = {
 	OPT_ARGUMENT("html-path", "html-path"),
 	OPT_ARGUMENT("paginate", "paginate"),
 	OPT_ARGUMENT("no-pager", "no-pager"),
-	OPT_ARGUMENT("perf-dir", "perf-dir"),
-	OPT_ARGUMENT("work-tree", "work-tree"),
 	OPT_ARGUMENT("debugfs-dir", "debugfs-dir"),
 	OPT_ARGUMENT("buildid-dir", "buildid-dir"),
 	OPT_ARGUMENT("list-cmds", "list-cmds"),
@@ -196,35 +199,6 @@ static int handle_options(const char ***argv, int *argc, int *envchanged)
 			use_pager = 1;
 		} else if (!strcmp(cmd, "--no-pager")) {
 			use_pager = 0;
-			if (envchanged)
-				*envchanged = 1;
-		} else if (!strcmp(cmd, "--perf-dir")) {
-			if (*argc < 2) {
-				fprintf(stderr, "No directory given for --perf-dir.\n");
-				usage(perf_usage_string);
-			}
-			setenv(PERF_DIR_ENVIRONMENT, (*argv)[1], 1);
-			if (envchanged)
-				*envchanged = 1;
-			(*argv)++;
-			(*argc)--;
-			handled++;
-		} else if (!prefixcmp(cmd, CMD_PERF_DIR)) {
-			setenv(PERF_DIR_ENVIRONMENT, cmd + strlen(CMD_PERF_DIR), 1);
-			if (envchanged)
-				*envchanged = 1;
-		} else if (!strcmp(cmd, "--work-tree")) {
-			if (*argc < 2) {
-				fprintf(stderr, "No directory given for --work-tree.\n");
-				usage(perf_usage_string);
-			}
-			setenv(PERF_WORK_TREE_ENVIRONMENT, (*argv)[1], 1);
-			if (envchanged)
-				*envchanged = 1;
-			(*argv)++;
-			(*argc)--;
-		} else if (!prefixcmp(cmd, CMD_WORK_TREE)) {
-			setenv(PERF_WORK_TREE_ENVIRONMENT, cmd + strlen(CMD_WORK_TREE), 1);
 			if (envchanged)
 				*envchanged = 1;
 		} else if (!strcmp(cmd, "--debugfs-dir")) {
@@ -307,9 +281,11 @@ static int handle_alias(int *argcp, const char ***argv)
 			if (*argcp > 1) {
 				struct strbuf buf;
 
-				strbuf_init(&buf, PATH_MAX);
-				strbuf_addstr(&buf, alias_string);
-				sq_quote_argv(&buf, (*argv) + 1, PATH_MAX);
+				if (strbuf_init(&buf, PATH_MAX) < 0 ||
+				    strbuf_addstr(&buf, alias_string) < 0 ||
+				    sq_quote_argv(&buf, (*argv) + 1,
+						  PATH_MAX) < 0)
+					die("Failed to allocate memory.");
 				free(alias_string);
 				alias_string = buf.buf;
 			}
@@ -355,15 +331,8 @@ static int handle_alias(int *argcp, const char ***argv)
 	return ret;
 }
 
-const char perf_version_string[] = PERF_VERSION;
-
 #define RUN_SETUP	(1<<0)
 #define USE_PAGER	(1<<1)
-/*
- * require working tree to be present -- anything uses this needs
- * RUN_SETUP for reading from the configuration file.
- */
-#define NEED_WORK_TREE	(1<<2)
 
 static int run_builtin(struct cmd_struct *p, int argc, const char **argv)
 {
@@ -387,6 +356,7 @@ static int run_builtin(struct cmd_struct *p, int argc, const char **argv)
 
 	perf_env__set_cmdline(&perf_env, argc, argv);
 	status = p->fn(argc, argv, prefix);
+	perf_config__exit();
 	exit_browser(status);
 	perf_env__exit(&perf_env);
 
@@ -404,7 +374,7 @@ static int run_builtin(struct cmd_struct *p, int argc, const char **argv)
 	/* Check for ENOSPC and EIO errors.. */
 	if (fflush(stdout)) {
 		fprintf(stderr, "write failure on standard output: %s",
-			strerror_r(errno, sbuf, sizeof(sbuf)));
+			str_error_r(errno, sbuf, sizeof(sbuf)));
 		goto out;
 	}
 	if (ferror(stdout)) {
@@ -413,7 +383,7 @@ static int run_builtin(struct cmd_struct *p, int argc, const char **argv)
 	}
 	if (fclose(stdout)) {
 		fprintf(stderr, "close failed on standard output: %s",
-			strerror_r(errno, sbuf, sizeof(sbuf)));
+			str_error_r(errno, sbuf, sizeof(sbuf)));
 		goto out;
 	}
 	status = 0;
@@ -527,10 +497,22 @@ void pthread__unblock_sigwinch(void)
 	pthread_sigmask(SIG_UNBLOCK, &set, NULL);
 }
 
+#ifdef _SC_LEVEL1_DCACHE_LINESIZE
+#define cache_line_size(cacheline_sizep) *cacheline_sizep = sysconf(_SC_LEVEL1_DCACHE_LINESIZE)
+#else
+static void cache_line_size(int *cacheline_sizep)
+{
+	if (sysfs__read_int("devices/system/cpu/cpu0/cache/index0/coherency_line_size", cacheline_sizep))
+		pr_debug("cannot determine cache line size");
+}
+#endif
+
 int main(int argc, const char **argv)
 {
+	int err;
 	const char *cmd;
 	char sbuf[STRERR_BUFSIZE];
+	int value;
 
 	/* libsubcmd init */
 	exec_cmd_init("perf", PREFIX, PERF_EXEC_PATH, EXEC_PATH_ENVIRONMENT);
@@ -538,7 +520,10 @@ int main(int argc, const char **argv)
 
 	/* The page_size is placed in util object. */
 	page_size = sysconf(_SC_PAGE_SIZE);
-	cacheline_size = sysconf(_SC_LEVEL1_DCACHE_LINESIZE);
+	cache_line_size(&cacheline_size);
+
+	if (sysctl__read_int("kernel/perf_event_max_stack", &value) == 0)
+		sysctl_perf_event_max_stack = value;
 
 	cmd = extract_argv0_path(argv[0]);
 	if (!cmd)
@@ -546,7 +531,11 @@ int main(int argc, const char **argv)
 
 	srandom(time(NULL));
 
-	perf_config(perf_default_config, NULL);
+	perf_config__init();
+	err = perf_config(perf_default_config, NULL);
+	if (err)
+		return err;
+	set_buildid_dir(NULL);
 
 	/* get debugfs/tracefs mount point from /proc/mounts */
 	tracing_path_mount();
@@ -570,7 +559,6 @@ int main(int argc, const char **argv)
 	}
 	if (!prefixcmp(cmd, "trace")) {
 #ifdef HAVE_LIBAUDIT_SUPPORT
-		set_buildid_dir(NULL);
 		setup_path();
 		argv[0] = "trace";
 		return cmd_trace(argc, argv, NULL);
@@ -585,7 +573,6 @@ int main(int argc, const char **argv)
 	argc--;
 	handle_options(&argv, &argc, NULL);
 	commit_pager_choice();
-	set_buildid_dir(NULL);
 
 	if (argc > 0) {
 		if (!prefixcmp(argv[0], "--"))
@@ -638,7 +625,7 @@ int main(int argc, const char **argv)
 	}
 
 	fprintf(stderr, "Failed to run command '%s': %s\n",
-		cmd, strerror_r(errno, sbuf, sizeof(sbuf)));
+		cmd, str_error_r(errno, sbuf, sizeof(sbuf)));
 out:
 	return 1;
 }

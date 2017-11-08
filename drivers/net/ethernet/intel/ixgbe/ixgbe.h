@@ -45,10 +45,10 @@
 #include "ixgbe_type.h"
 #include "ixgbe_common.h"
 #include "ixgbe_dcb.h"
-#if defined(CONFIG_FCOE) || defined(CONFIG_FCOE_MODULE)
+#if IS_ENABLED(CONFIG_FCOE)
 #define IXGBE_FCOE
 #include "ixgbe_fcoe.h"
-#endif /* CONFIG_FCOE or CONFIG_FCOE_MODULE */
+#endif /* IS_ENABLED(CONFIG_FCOE) */
 #ifdef CONFIG_IXGBE_DCA
 #include <linux/dca.h>
 #endif
@@ -159,6 +159,7 @@ enum ixgbevf_xcast_modes {
 	IXGBEVF_XCAST_MODE_NONE = 0,
 	IXGBEVF_XCAST_MODE_MULTI,
 	IXGBEVF_XCAST_MODE_ALLMULTI,
+	IXGBEVF_XCAST_MODE_PROMISC,
 };
 
 struct vf_macvlans {
@@ -677,6 +678,7 @@ struct ixgbe_adapter {
 #define IXGBE_FLAG_RX_HWTSTAMP_ENABLED		BIT(25)
 #define IXGBE_FLAG_RX_HWTSTAMP_IN_REGISTER	BIT(26)
 #define IXGBE_FLAG_DCB_CAPABLE			BIT(27)
+#define IXGBE_FLAG_GENEVE_OFFLOAD_CAPABLE	BIT(28)
 
 	u32 flags2;
 #define IXGBE_FLAG2_RSC_CAPABLE			BIT(0)
@@ -685,14 +687,15 @@ struct ixgbe_adapter {
 #define IXGBE_FLAG2_TEMP_SENSOR_EVENT		BIT(3)
 #define IXGBE_FLAG2_SEARCH_FOR_SFP		BIT(4)
 #define IXGBE_FLAG2_SFP_NEEDS_RESET		BIT(5)
-#define IXGBE_FLAG2_RESET_REQUESTED		BIT(6)
 #define IXGBE_FLAG2_FDIR_REQUIRES_REINIT	BIT(7)
 #define IXGBE_FLAG2_RSS_FIELD_IPV4_UDP		BIT(8)
 #define IXGBE_FLAG2_RSS_FIELD_IPV6_UDP		BIT(9)
 #define IXGBE_FLAG2_PTP_PPS_ENABLED		BIT(10)
 #define IXGBE_FLAG2_PHY_INTERRUPT		BIT(11)
-#define IXGBE_FLAG2_VXLAN_REREG_NEEDED		BIT(12)
+#define IXGBE_FLAG2_UDP_TUN_REREG_NEEDED	BIT(12)
 #define IXGBE_FLAG2_VLAN_PROMISC		BIT(13)
+#define IXGBE_FLAG2_EEE_CAPABLE			BIT(14)
+#define IXGBE_FLAG2_EEE_ENABLED			BIT(15)
 
 	/* Tx fast path data */
 	int num_tx_queues;
@@ -705,6 +708,7 @@ struct ixgbe_adapter {
 
 	/* Port number used to identify VXLAN traffic */
 	__be16 vxlan_port;
+	__be16 geneve_port;
 
 	/* TX */
 	struct ixgbe_ring *tx_ring[MAX_TX_QUEUES] ____cacheline_aligned_in_smp;
@@ -832,8 +836,6 @@ struct ixgbe_adapter {
 
 #define IXGBE_RSS_KEY_SIZE     40  /* size of RSS Hash Key in bytes */
 	u32 rss_key[IXGBE_RSS_KEY_SIZE / sizeof(u32)];
-
-	bool need_crosstalk_fix;
 };
 
 static inline u8 ixgbe_max_rss_indices(struct ixgbe_adapter *adapter)
@@ -870,6 +872,7 @@ enum ixgbe_state_t {
 	__IXGBE_IN_SFP_INIT,
 	__IXGBE_PTP_RUNNING,
 	__IXGBE_PTP_TX_IN_PROGRESS,
+	__IXGBE_RESET_REQUESTED,
 };
 
 struct ixgbe_cb {
@@ -890,6 +893,7 @@ enum ixgbe_boards {
 	board_X550,
 	board_X550EM_x,
 	board_x550em_a,
+	board_x550em_a_fw,
 };
 
 extern const struct ixgbe_info ixgbe_82598_info;
@@ -898,6 +902,7 @@ extern const struct ixgbe_info ixgbe_X540_info;
 extern const struct ixgbe_info ixgbe_X550_info;
 extern const struct ixgbe_info ixgbe_X550EM_x_info;
 extern const struct ixgbe_info ixgbe_x550em_a_info;
+extern const struct ixgbe_info ixgbe_x550em_a_fw_info;
 #ifdef CONFIG_IXGBE_DCB
 extern const struct dcbnl_rtnl_ops dcbnl_ops;
 #endif
@@ -1049,4 +1054,6 @@ void ixgbe_sriov_reinit(struct ixgbe_adapter *adapter);
 
 u32 ixgbe_rss_indir_tbl_entries(struct ixgbe_adapter *adapter);
 void ixgbe_store_reta(struct ixgbe_adapter *adapter);
+s32 ixgbe_negotiate_fc(struct ixgbe_hw *hw, u32 adv_reg, u32 lp_reg,
+		       u32 adv_sym, u32 adv_asm, u32 lp_sym, u32 lp_asm);
 #endif /* _IXGBE_H_ */

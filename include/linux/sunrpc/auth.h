@@ -102,6 +102,9 @@ struct rpc_auth {
 	/* per-flavor data */
 };
 
+/* rpc_auth au_flags */
+#define RPCAUTH_AUTH_DATATOUCH	0x00000002
+
 struct rpc_auth_create_args {
 	rpc_authflavor_t pseudoflavor;
 	const char *target_name;
@@ -121,6 +124,7 @@ struct rpc_authops {
 	struct rpc_auth *	(*create)(struct rpc_auth_create_args *, struct rpc_clnt *);
 	void			(*destroy)(struct rpc_auth *);
 
+	int			(*hash_cred)(struct auth_cred *, unsigned int);
 	struct rpc_cred *	(*lookup_cred)(struct rpc_auth *, struct auth_cred *, int);
 	struct rpc_cred *	(*crcreate)(struct rpc_auth*, struct auth_cred *, int, gfp_t);
 	int			(*list_pseudoflavors)(rpc_authflavor_t *, int);

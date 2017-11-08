@@ -530,13 +530,13 @@ static int ipip6_err(struct sk_buff *skb, u32 info)
 
 	if (type == ICMP_DEST_UNREACH && code == ICMP_FRAG_NEEDED) {
 		ipv4_update_pmtu(skb, dev_net(skb->dev), info,
-				 t->dev->ifindex, 0, IPPROTO_IPV6, 0);
+				 t->parms.link, 0, iph->protocol, 0);
 		err = 0;
 		goto out;
 	}
 	if (type == ICMP_REDIRECT) {
-		ipv4_redirect(skb, dev_net(skb->dev), t->dev->ifindex, 0,
-			      IPPROTO_IPV6, 0);
+		ipv4_redirect(skb, dev_net(skb->dev), t->parms.link, 0,
+			      iph->protocol, 0);
 		err = 0;
 		goto out;
 	}
@@ -824,10 +824,9 @@ static netdev_tx_t ipip6_tunnel_xmit(struct sk_buff *skb,
 		goto tx_error;
 	}
 
-	skb = iptunnel_handle_offloads(skb, false, SKB_GSO_SIT);
-	if (IS_ERR(skb)) {
+	if (iptunnel_handle_offloads(skb, SKB_GSO_SIT)) {
 		ip_rt_put(rt);
-		goto out;
+		goto tx_error;
 	}
 
 	if (df) {
@@ -874,7 +873,7 @@ static netdev_tx_t ipip6_tunnel_xmit(struct sk_buff *skb,
 		if (!new_skb) {
 			ip_rt_put(rt);
 			dev->stats.tx_dropped++;
-			dev_kfree_skb(skb);
+			kfree_skb(skb);
 			return NETDEV_TX_OK;
 		}
 		if (skb->sk)
@@ -902,8 +901,7 @@ static netdev_tx_t ipip6_tunnel_xmit(struct sk_buff *skb,
 tx_error_icmp:
 	dst_link_failure(skb);
 tx_error:
-	dev_kfree_skb(skb);
-out:
+	kfree_skb(skb);
 	dev->stats.tx_errors++;
 	return NETDEV_TX_OK;
 }
@@ -913,15 +911,15 @@ static netdev_tx_t ipip_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 	struct ip_tunnel *tunnel = netdev_priv(dev);
 	const struct iphdr  *tiph = &tunnel->parms.iph;
 
-	skb = iptunnel_handle_offloads(skb, false, SKB_GSO_IPIP);
-	if (IS_ERR(skb))
-		goto out;
+	if (iptunnel_handle_offloads(skb, SKB_GSO_IPIP))
+		goto tx_error;
 
 	skb_set_inner_ipproto(skb, IPPROTO_IPIP);
 
 	ip_tunnel_xmit(skb, dev, tiph, IPPROTO_IPIP);
 	return NETDEV_TX_OK;
-out:
+tx_error:
+	kfree_skb(skb);
 	dev->stats.tx_errors++;
 	return NETDEV_TX_OK;
 }
@@ -944,7 +942,7 @@ static netdev_tx_t sit_tunnel_xmit(struct sk_buff *skb,
 
 tx_err:
 	dev->stats.tx_errors++;
-	dev_kfree_skb(skb);
+	kfree_skb(skb);
 	return NETDEV_TX_OK;
 
 }
@@ -1307,6 +1305,7 @@ static int ipip6_tunnel_init(struct net_device *dev)
 	err = dst_cache_init(&tunnel->dst_cache, GFP_KERNEL);
 	if (err) {
 		free_percpu(dev->tstats);
+		dev->tstats = NULL;
 		return err;
 	}
 
@@ -1410,12 +1409,12 @@ static bool ipip6_netlink_encap_parms(struct nlattr *data[],
 
 	if (data[IFLA_IPTUN_ENCAP_SPORT]) {
 		ret = true;
-		ipencap->sport = nla_get_u16(data[IFLA_IPTUN_ENCAP_SPORT]);
+		ipencap->sport = nla_get_be16(data[IFLA_IPTUN_ENCAP_SPORT]);
 	}
 
 	if (data[IFLA_IPTUN_ENCAP_DPORT]) {
 		ret = true;
-		ipencap->dport = nla_get_u16(data[IFLA_IPTUN_ENCAP_DPORT]);
+		ipencap->dport = nla_get_be16(data[IFLA_IPTUN_ENCAP_DPORT]);
 	}
 
 	return ret;
@@ -1610,12 +1609,12 @@ static int ipip6_fill_info(struct sk_buff *skb, const struct net_device *dev)
 
 	if (nla_put_u16(skb, IFLA_IPTUN_ENCAP_TYPE,
 			tunnel->encap.type) ||
-	    nla_put_u16(skb, IFLA_IPTUN_ENCAP_SPORT,
+	    nla_put_be16(skb, IFLA_IPTUN_ENCAP_SPORT,
 			tunnel->encap.sport) ||
-	    nla_put_u16(skb, IFLA_IPTUN_ENCAP_DPORT,
+	    nla_put_be16(skb, IFLA_IPTUN_ENCAP_DPORT,
 			tunnel->encap.dport) ||
 	    nla_put_u16(skb, IFLA_IPTUN_ENCAP_FLAGS,
-			tunnel->encap.dport))
+			tunnel->encap.flags))
 		goto nla_put_failure;
 
 	return 0;

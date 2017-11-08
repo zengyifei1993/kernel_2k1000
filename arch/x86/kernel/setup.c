@@ -113,6 +113,7 @@
 #include <asm/alternative.h>
 #include <asm/prom.h>
 #include <asm/microcode.h>
+#include <asm/kaslr.h>
 
 /*
  * max_low_pfn_mapped: highest direct mapped pfn under 4GB
@@ -515,7 +516,7 @@ static void __init memblock_x86_reserve_range_setup_data(void)
  * --------- Crashkernel reservation ------------------------------
  */
 
-#ifdef CONFIG_KEXEC
+#ifdef CONFIG_KEXEC_CORE
 
 /* 16M alignment for crash kernel regions */
 #define CRASH_ALIGN            (16 << 20)
@@ -886,12 +887,25 @@ static void rh_check_supported(void)
 		mark_hardware_unsupported("Processor");
 	}
 
+	if ((boot_cpu_data.x86_vendor == X86_VENDOR_AMD) &&
+	    (boot_cpu_data.x86 >= 0x17)) {
+		/* RHEL7 supports model AMD EPYC 7xxx (Naples SP3) */
+		if (boot_cpu_data.x86 != 0x17 ||
+		    !strstr(boot_cpu_data.x86_model_id, "AMD EPYC 7")) {
+			pr_crit("Detected CPU family %xh model %d\n",
+				boot_cpu_data.x86,
+				boot_cpu_data.x86_model);
+			mark_hardware_unsupported("AMD Processor");
+		}
+	}
+
 	/* Intel CPU family 6, model greater than 60 */
 	if ((boot_cpu_data.x86_vendor == X86_VENDOR_INTEL) &&
 	    ((boot_cpu_data.x86 == 6))) {
 		switch (boot_cpu_data.x86_model) {
 		case 158: /* Kabylake-H/S */
 		case 142: /* Kabylake-U/Y */
+		case 133: /* Knights Mill */
 		case 95: /* Denverton */
 		case 94: /* Skylake-S */
 		case 87: /* Knights Landing */
@@ -906,11 +920,10 @@ static void rh_check_supported(void)
 			break;
 		default:
 			if (boot_cpu_data.x86_model > 63) {
-				printk(KERN_CRIT
-				       "Detected CPU family %d model %d\n",
-				       boot_cpu_data.x86,
-				       boot_cpu_data.x86_model);
-				mark_hardware_unsupported("Intel CPU model");
+				pr_crit("Detected CPU family %d model %d\n",
+					boot_cpu_data.x86,
+					boot_cpu_data.x86_model);
+				mark_hardware_unsupported("Intel Processor");
 			}
 			break;
 		}
@@ -924,6 +937,25 @@ static void rh_check_supported(void)
 	 */
 	if (acpi_disabled && !x86_hyper && !cpu_has_hypervisor)
 		pr_crit("ACPI has been disabled or is not available on this hardware.  This may result in a single cpu boot, incorrect PCI IRQ routing, or boot failure.\n");
+}
+
+/*
+ * Dump out kernel offset information on panic.
+ */
+static int
+dump_kernel_offset(struct notifier_block *self, unsigned long v, void *p)
+{
+	if (kaslr_enabled()) {
+		pr_emerg("Kernel Offset: 0x%lx from 0x%lx (relocation range: 0x%lx-0x%lx)\n",
+			 kaslr_offset(),
+			 __START_KERNEL,
+			 __START_KERNEL_map,
+			 MODULES_VADDR-1);
+	} else {
+		pr_emerg("Kernel Offset: disabled\n");
+	}
+
+	return 0;
 }
 
 /*
@@ -1140,6 +1172,12 @@ void __init setup_arch(char **cmdline_p)
 		max_pfn = e820_end_of_ram_pfn();
 
 	max_possible_pfn = max_pfn;
+
+	/*
+	 * Define random base addresses for memory sections after max_pfn is
+	 * defined and before each memory section base is used.
+	 */
+	kernel_randomize_memory();
 
 #ifdef CONFIG_X86_32
 	/* max_low_pfn get updated here */
@@ -1369,3 +1407,15 @@ void __init i386_reserve_resources(void)
 }
 
 #endif /* CONFIG_X86_32 */
+
+static struct notifier_block kernel_offset_notifier = {
+	.notifier_call = dump_kernel_offset
+};
+
+static int __init register_kernel_offset_dumper(void)
+{
+	atomic_notifier_chain_register(&panic_notifier_list,
+					&kernel_offset_notifier);
+	return 0;
+}
+__initcall(register_kernel_offset_dumper);

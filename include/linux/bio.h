@@ -44,6 +44,9 @@
 #define BIO_MAX_SIZE		(BIO_MAX_PAGES << PAGE_CACHE_SHIFT)
 #define BIO_MAX_SECTORS		(BIO_MAX_SIZE >> 9)
 
+#define bio_op(bio)				(op_from_rq_bits((bio)->bi_rw))
+#define bio_set_op_attrs(bio, op, flags)	((bio)->bi_rw |= (op | flags))
+
 /*
  * upper 16 bits of bi_rw define the io priority of this bio
  */
@@ -261,6 +264,7 @@ extern int submit_bio_wait(int rw, struct bio *bio);
 extern void bio_advance(struct bio *, unsigned);
 
 extern void bio_init(struct bio *);
+extern void bio_init_aux(struct bio *bio, struct bio_aux *bio_aux);
 extern void bio_reset(struct bio *);
 void bio_chain(struct bio *, struct bio *);
 
@@ -283,6 +287,11 @@ extern struct bio *bio_copy_kern(struct request_queue *, void *, unsigned int,
 				 gfp_t, int);
 extern void bio_set_pages_dirty(struct bio *bio);
 extern void bio_check_pages_dirty(struct bio *bio);
+
+void generic_start_io_acct(int rw, unsigned long sectors,
+			   struct hd_struct *part);
+void generic_end_io_acct(int rw, struct hd_struct *part,
+			 unsigned long start_time);
 
 #ifndef ARCH_IMPLEMENTS_FLUSH_DCACHE_PAGE
 # error	"You should define ARCH_IMPLEMENTS_FLUSH_DCACHE_PAGE for your platform"

@@ -34,6 +34,7 @@
 /* The feature bitmap for virtio net */
 #define VIRTIO_NET_F_CSUM	0	/* Host handles pkts w/ partial csum */
 #define VIRTIO_NET_F_GUEST_CSUM	1	/* Guest handles pkts w/ partial csum */
+#define VIRTIO_NET_F_MTU	3	/* Initial MTU advice */
 #define VIRTIO_NET_F_MAC	5	/* Host has given MAC address. */
 #define VIRTIO_NET_F_GUEST_TSO4	7	/* Guest can handle TSOv4 in. */
 #define VIRTIO_NET_F_GUEST_TSO6	8	/* Guest can handle TSOv6 in. */
@@ -72,6 +73,8 @@ struct virtio_net_config {
 	 * Legal values are between 1 and 0x8000
 	 */
 	__u16 max_virtqueue_pairs;
+	/* Default maximum transmit unit advice */
+	__u16 mtu;
 } __attribute__((packed));
 
 /*

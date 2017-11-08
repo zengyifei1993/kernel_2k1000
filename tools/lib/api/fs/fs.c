@@ -34,6 +34,14 @@
 #define TRACEFS_MAGIC          0x74726163
 #endif
 
+#ifndef HUGETLBFS_MAGIC
+#define HUGETLBFS_MAGIC        0x958458f6
+#endif
+
+#ifndef BPF_FS_MAGIC
+#define BPF_FS_MAGIC           0xcafe4a11
+#endif
+
 static const char * const sysfs__fs_known_mountpoints[] = {
 	"/sys",
 	0,
@@ -67,6 +75,15 @@ static const char * const tracefs__known_mountpoints[] = {
 	0,
 };
 
+static const char * const hugetlbfs__known_mountpoints[] = {
+	0,
+};
+
+static const char * const bpf_fs__known_mountpoints[] = {
+	"/sys/fs/bpf",
+	0,
+};
+
 struct fs {
 	const char		*name;
 	const char * const	*mounts;
@@ -80,6 +97,8 @@ enum {
 	FS__PROCFS  = 1,
 	FS__DEBUGFS = 2,
 	FS__TRACEFS = 3,
+	FS__HUGETLBFS = 4,
+	FS__BPF_FS = 5,
 };
 
 #ifndef TRACEFS_MAGIC
@@ -106,6 +125,16 @@ static struct fs fs__entries[] = {
 		.name	= "tracefs",
 		.mounts	= tracefs__known_mountpoints,
 		.magic	= TRACEFS_MAGIC,
+	},
+	[FS__HUGETLBFS] = {
+		.name	= "hugetlbfs",
+		.mounts = hugetlbfs__known_mountpoints,
+		.magic	= HUGETLBFS_MAGIC,
+	},
+	[FS__BPF_FS] = {
+		.name	= "bpf",
+		.mounts = bpf_fs__known_mountpoints,
+		.magic	= BPF_FS_MAGIC,
 	},
 };
 
@@ -265,6 +294,8 @@ FS(sysfs,   FS__SYSFS);
 FS(procfs,  FS__PROCFS);
 FS(debugfs, FS__DEBUGFS);
 FS(tracefs, FS__TRACEFS);
+FS(hugetlbfs, FS__HUGETLBFS);
+FS(bpf_fs, FS__BPF_FS);
 
 int filename__read_int(const char *filename, int *value)
 {
@@ -283,6 +314,11 @@ int filename__read_int(const char *filename, int *value)
 	return err;
 }
 
+/*
+ * Parses @value out of @filename with strtoull.
+ * By using 0 for base, the strtoull detects the
+ * base automatically (see man strtoull).
+ */
 int filename__read_ull(const char *filename, unsigned long long *value)
 {
 	char line[64];
@@ -292,7 +328,7 @@ int filename__read_ull(const char *filename, unsigned long long *value)
 		return -1;
 
 	if (read(fd, line, sizeof(line)) > 0) {
-		*value = strtoull(line, NULL, 10);
+		*value = strtoull(line, NULL, 0);
 		if (*value != ULLONG_MAX)
 			err = 0;
 	}
@@ -349,6 +385,19 @@ int filename__read_str(const char *filename, char **buf, size_t *sizep)
 
 	close(fd);
 	return err;
+}
+
+int procfs__read_str(const char *entry, char **buf, size_t *sizep)
+{
+	char path[PATH_MAX];
+	const char *procfs = procfs__mountpoint();
+
+	if (!procfs)
+		return -1;
+
+	snprintf(path, sizeof(path), "%s/%s", procfs, entry);
+
+	return filename__read_str(path, buf, sizep);
 }
 
 int sysfs__read_ull(const char *entry, unsigned long long *value)

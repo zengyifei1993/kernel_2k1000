@@ -21,6 +21,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/kernel.h>
+#include <linux/interrupt.h>
 #include <linux/sched.h>
 #include <linux/wait.h>
 #include <linux/mm.h>
@@ -133,16 +134,38 @@ static const struct vmbus_device vmbus_devs[] = {
 	},
 
 	/* Unknown GUID */
-	{ .dev_type = HV_UNKOWN,
+	{ .dev_type = HV_UNKNOWN,
 	  .perf_device = false,
 	},
 };
 
-static u16 hv_get_dev_type(const uuid_le *guid)
+static const struct {
+	uuid_le guid;
+} vmbus_unsupported_devs[] = {
+	{ HV_AVMA1_GUID },
+	{ HV_AVMA2_GUID },
+	{ HV_RDV_GUID	},
+};
+
+static bool is_unsupported_vmbus_devs(const uuid_le *guid)
 {
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(vmbus_unsupported_devs); i++)
+		if (!uuid_le_cmp(*guid, vmbus_unsupported_devs[i].guid))
+			return true;
+	return false;
+}
+
+static u16 hv_get_dev_type(const struct vmbus_channel *channel)
+{
+	const uuid_le *guid = &channel->offermsg.offer.if_type;
 	u16 i;
 
-	for (i = HV_IDE; i < HV_UNKOWN; i++) {
+	if (is_hvsock_channel(channel) || is_unsupported_vmbus_devs(guid))
+		return HV_UNKNOWN;
+
+	for (i = HV_IDE; i < HV_UNKNOWN; i++) {
 		if (!uuid_le_cmp(*guid, vmbus_devs[i].guid))
 			return i;
 	}
@@ -251,14 +274,13 @@ EXPORT_SYMBOL_GPL(vmbus_prep_negotiate_resp);
  */
 static struct vmbus_channel *alloc_channel(void)
 {
-	static atomic_t chan_num = ATOMIC_INIT(0);
 	struct vmbus_channel *channel;
 
 	channel = kzalloc(sizeof(*channel), GFP_ATOMIC);
 	if (!channel)
 		return NULL;
 
-	channel->id = atomic_inc_return(&chan_num);
+	channel->acquire_ring_lock = true;
 	spin_lock_init(&channel->inbound_lock);
 	spin_lock_init(&channel->lock);
 
@@ -299,7 +321,25 @@ static void vmbus_release_relid(u32 relid)
 	memset(&msg, 0, sizeof(struct vmbus_channel_relid_released));
 	msg.child_relid = relid;
 	msg.header.msgtype = CHANNELMSG_RELID_RELEASED;
-	vmbus_post_msg(&msg, sizeof(struct vmbus_channel_relid_released));
+	vmbus_post_msg(&msg, sizeof(struct vmbus_channel_relid_released),
+		       true);
+}
+
+void hv_event_tasklet_disable(struct vmbus_channel *channel)
+{
+	struct tasklet_struct *tasklet;
+	tasklet = hv_context.event_dpc[channel->target_cpu];
+	tasklet_disable(tasklet);
+}
+
+void hv_event_tasklet_enable(struct vmbus_channel *channel)
+{
+	struct tasklet_struct *tasklet;
+	tasklet = hv_context.event_dpc[channel->target_cpu];
+	tasklet_enable(tasklet);
+
+	/* In case there is any pending event */
+	tasklet_schedule(tasklet);
 }
 
 void hv_process_channel_removal(struct vmbus_channel *channel, u32 relid)
@@ -307,10 +347,10 @@ void hv_process_channel_removal(struct vmbus_channel *channel, u32 relid)
 	unsigned long flags;
 	struct vmbus_channel *primary_channel;
 
-	vmbus_release_relid(relid);
-
 	BUG_ON(!channel->rescind);
+	BUG_ON(!mutex_is_locked(&vmbus_connection.channel_mutex));
 
+	hv_event_tasklet_disable(channel);
 	if (channel->target_cpu != get_cpu()) {
 		put_cpu();
 		smp_call_function_single(channel->target_cpu,
@@ -319,11 +359,10 @@ void hv_process_channel_removal(struct vmbus_channel *channel, u32 relid)
 		percpu_channel_deq(channel);
 		put_cpu();
 	}
+	hv_event_tasklet_enable(channel);
 
 	if (channel->primary_channel == NULL) {
-		mutex_lock(&vmbus_connection.channel_mutex);
 		list_del(&channel->listentry);
-		mutex_unlock(&vmbus_connection.channel_mutex);
 
 		primary_channel = channel;
 	} else {
@@ -338,8 +377,11 @@ void hv_process_channel_removal(struct vmbus_channel *channel, u32 relid)
 	 * We need to free the bit for init_vp_index() to work in the case
 	 * of sub-channel, when we reload drivers like hv_netvsc.
 	 */
-	cpumask_clear_cpu(channel->target_cpu,
-			  &primary_channel->alloced_cpus_in_node);
+	if (channel->affinity_policy == HV_LOCALIZED)
+		cpumask_clear_cpu(channel->target_cpu,
+				  &primary_channel->alloced_cpus_in_node);
+
+	vmbus_release_relid(relid);
 
 	free_channel(channel);
 }
@@ -348,6 +390,7 @@ void vmbus_free_channels(void)
 {
 	struct vmbus_channel *channel, *tmp;
 
+	mutex_lock(&vmbus_connection.channel_mutex);
 	list_for_each_entry_safe(channel, tmp, &vmbus_connection.chn_list,
 		listentry) {
 		/* hv_process_channel_removal() needs this */
@@ -355,6 +398,7 @@ void vmbus_free_channels(void)
 
 		vmbus_device_unregister(channel->device_obj);
 	}
+	mutex_unlock(&vmbus_connection.channel_mutex);
 }
 
 /*
@@ -367,6 +411,7 @@ static void vmbus_process_offer(struct vmbus_channel *newchannel)
 	bool fnew = true;
 	unsigned long flags;
 	u16 dev_type;
+	int ret;
 
 	/* Make sure this is a new offer */
 	mutex_lock(&vmbus_connection.channel_mutex);
@@ -404,10 +449,11 @@ static void vmbus_process_offer(struct vmbus_channel *newchannel)
 			goto err_free_chan;
 	}
 
-	dev_type = hv_get_dev_type(&newchannel->offermsg.offer.if_type);
+	dev_type = hv_get_dev_type(newchannel);
 
 	init_vp_index(newchannel, dev_type);
 
+	hv_event_tasklet_disable(newchannel);
 	if (newchannel->target_cpu != get_cpu()) {
 		put_cpu();
 		smp_call_function_single(newchannel->target_cpu,
@@ -417,6 +463,7 @@ static void vmbus_process_offer(struct vmbus_channel *newchannel)
 		percpu_channel_enq(newchannel);
 		put_cpu();
 	}
+	hv_event_tasklet_enable(newchannel);
 
 	/*
 	 * This state is used to indicate a successful open
@@ -449,7 +496,11 @@ static void vmbus_process_offer(struct vmbus_channel *newchannel)
 	 * binding which eventually invokes the device driver's AddDevice()
 	 * method.
 	 */
-	if (vmbus_device_register(newchannel->device_obj) != 0) {
+	mutex_lock(&vmbus_connection.channel_mutex);
+	ret = vmbus_device_register(newchannel->device_obj);
+	mutex_unlock(&vmbus_connection.channel_mutex);
+
+	if (ret != 0) {
 		pr_err("unable to add child device object (relid %d)\n",
 			newchannel->offermsg.child_relid);
 		kfree(newchannel->device_obj);
@@ -458,12 +509,11 @@ static void vmbus_process_offer(struct vmbus_channel *newchannel)
 	return;
 
 err_deq_chan:
-	vmbus_release_relid(newchannel->offermsg.child_relid);
-
 	mutex_lock(&vmbus_connection.channel_mutex);
 	list_del(&newchannel->listentry);
 	mutex_unlock(&vmbus_connection.channel_mutex);
 
+	hv_event_tasklet_disable(newchannel);
 	if (newchannel->target_cpu != get_cpu()) {
 		put_cpu();
 		smp_call_function_single(newchannel->target_cpu,
@@ -472,6 +522,9 @@ err_deq_chan:
 		percpu_channel_deq(newchannel);
 		put_cpu();
 	}
+	hv_event_tasklet_enable(newchannel);
+
+	vmbus_release_relid(newchannel->offermsg.child_relid);
 
 err_free_chan:
 	free_channel(newchannel);
@@ -517,17 +570,17 @@ static void init_vp_index(struct vmbus_channel *channel, u16 dev_type)
 	}
 
 	/*
-	 * We distribute primary channels evenly across all the available
-	 * NUMA nodes and within the assigned NUMA node we will assign the
-	 * first available CPU to the primary channel.
-	 * The sub-channels will be assigned to the CPUs available in the
-	 * NUMA node evenly.
+	 * Based on the channel affinity policy, we will assign the NUMA
+	 * nodes.
 	 */
-	if (!primary) {
+
+	if ((channel->affinity_policy == HV_BALANCED) || (!primary)) {
 		while (true) {
 			next_node = next_numa_node_id++;
-			if (next_node == nr_node_ids)
+			if (next_node == nr_node_ids) {
 				next_node = next_numa_node_id = 0;
+				continue;
+			}
 			if (cpumask_empty(cpumask_of_node(next_node)))
 				continue;
 			break;
@@ -551,15 +604,17 @@ static void init_vp_index(struct vmbus_channel *channel, u16 dev_type)
 
 	cur_cpu = -1;
 
-	/*
-	 * Normally Hyper-V host doesn't create more subchannels than there
-	 * are VCPUs on the node but it is possible when not all present VCPUs
-	 * on the node are initialized by guest. Clear the alloced_cpus_in_node
-	 * to start over.
-	 */
-	if (cpumask_equal(&primary->alloced_cpus_in_node,
-			  cpumask_of_node(primary->numa_node)))
-		cpumask_clear(&primary->alloced_cpus_in_node);
+	if (primary->affinity_policy == HV_LOCALIZED) {
+		/*
+		 * Normally Hyper-V host doesn't create more subchannels
+		 * than there are VCPUs on the node but it is possible when not
+		 * all present VCPUs on the node are initialized by guest.
+		 * Clear the alloced_cpus_in_node to start over.
+		 */
+		if (cpumask_equal(&primary->alloced_cpus_in_node,
+				  cpumask_of_node(primary->numa_node)))
+			cpumask_clear(&primary->alloced_cpus_in_node);
+	}
 
 	while (true) {
 		cur_cpu = cpumask_next(cur_cpu, &available_mask);
@@ -570,17 +625,24 @@ static void init_vp_index(struct vmbus_channel *channel, u16 dev_type)
 			continue;
 		}
 
-		/*
-		 * NOTE: in the case of sub-channel, we clear the sub-channel
-		 * related bit(s) in primary->alloced_cpus_in_node in
-		 * hv_process_channel_removal(), so when we reload drivers
-		 * like hv_netvsc in SMP guest, here we're able to re-allocate
-		 * bit from primary->alloced_cpus_in_node.
-		 */
-		if (!cpumask_test_cpu(cur_cpu,
-				&primary->alloced_cpus_in_node)) {
-			cpumask_set_cpu(cur_cpu,
-					&primary->alloced_cpus_in_node);
+		if (primary->affinity_policy == HV_LOCALIZED) {
+			/*
+			 * NOTE: in the case of sub-channel, we clear the
+			 * sub-channel related bit(s) in
+			 * primary->alloced_cpus_in_node in
+			 * hv_process_channel_removal(), so when we
+			 * reload drivers like hv_netvsc in SMP guest, here
+			 * we're able to re-allocate
+			 * bit from primary->alloced_cpus_in_node.
+			 */
+			if (!cpumask_test_cpu(cur_cpu,
+					      &primary->alloced_cpus_in_node)) {
+				cpumask_set_cpu(cur_cpu,
+						&primary->alloced_cpus_in_node);
+				cpumask_set_cpu(cur_cpu, alloced_mask);
+				break;
+			}
+		} else {
 			cpumask_set_cpu(cur_cpu, alloced_mask);
 			break;
 		}
@@ -667,7 +729,8 @@ void vmbus_initiate_unload(bool crash)
 	init_completion(&vmbus_connection.unload_event);
 	memset(&hdr, 0, sizeof(struct vmbus_channel_message_header));
 	hdr.msgtype = CHANNELMSG_UNLOAD;
-	vmbus_post_msg(&hdr, sizeof(struct vmbus_channel_message_header));
+	vmbus_post_msg(&hdr, sizeof(struct vmbus_channel_message_header),
+		       !crash);
 
 	/*
 	 * vmbus_initiate_unload() is also called on crash and the crash can be
@@ -745,6 +808,8 @@ static void vmbus_onoffer_rescind(struct vmbus_channel_message_header *hdr)
 	struct device *dev;
 
 	rescind = (struct vmbus_channel_rescind_offer *)hdr;
+
+	mutex_lock(&vmbus_connection.channel_mutex);
 	channel = relid2channel(rescind->child_relid);
 
 	if (channel == NULL) {
@@ -753,7 +818,7 @@ static void vmbus_onoffer_rescind(struct vmbus_channel_message_header *hdr)
 		 * vmbus_process_offer(), we have already invoked
 		 * vmbus_release_relid() on error.
 		 */
-		return;
+		goto out;
 	}
 
 	spin_lock_irqsave(&channel->lock, flags);
@@ -761,6 +826,10 @@ static void vmbus_onoffer_rescind(struct vmbus_channel_message_header *hdr)
 	spin_unlock_irqrestore(&channel->lock, flags);
 
 	if (channel->device_obj) {
+		if (channel->chn_rescind_callback) {
+			channel->chn_rescind_callback(channel);
+			goto out;
+		}
 		/*
 		 * We will have to unregister this device from the
 		 * driver core.
@@ -774,7 +843,24 @@ static void vmbus_onoffer_rescind(struct vmbus_channel_message_header *hdr)
 		hv_process_channel_removal(channel,
 			channel->offermsg.child_relid);
 	}
+
+out:
+	mutex_unlock(&vmbus_connection.channel_mutex);
 }
+
+void vmbus_hvsock_device_unregister(struct vmbus_channel *channel)
+{
+	mutex_lock(&vmbus_connection.channel_mutex);
+
+	BUG_ON(!is_hvsock_channel(channel));
+
+	channel->rescind = true;
+	vmbus_device_unregister(channel->device_obj);
+
+	mutex_unlock(&vmbus_connection.channel_mutex);
+}
+EXPORT_SYMBOL_GPL(vmbus_hvsock_device_unregister);
+
 
 /*
  * vmbus_onoffers_delivered -
@@ -978,6 +1064,10 @@ struct vmbus_channel_message_table_entry
 	{CHANNELMSG_VERSION_RESPONSE,		1, vmbus_onversion_response},
 	{CHANNELMSG_UNLOAD,			0, NULL},
 	{CHANNELMSG_UNLOAD_RESPONSE,		1, vmbus_unload_response},
+	{CHANNELMSG_18,				0, NULL},
+	{CHANNELMSG_19,				0, NULL},
+	{CHANNELMSG_20,				0, NULL},
+	{CHANNELMSG_TL_CONNECT_REQUEST,		0, NULL},
 };
 
 /*
@@ -1028,8 +1118,8 @@ int vmbus_request_offers(void)
 	msg->msgtype = CHANNELMSG_REQUESTOFFERS;
 
 
-	ret = vmbus_post_msg(msg,
-			       sizeof(struct vmbus_channel_message_header));
+	ret = vmbus_post_msg(msg, sizeof(struct vmbus_channel_message_header),
+			     true);
 	if (ret != 0) {
 		pr_err("Unable to request offers - %d\n", ret);
 
@@ -1126,3 +1216,10 @@ bool vmbus_are_subchannels_present(struct vmbus_channel *primary)
 	return ret;
 }
 EXPORT_SYMBOL_GPL(vmbus_are_subchannels_present);
+
+void vmbus_set_chn_rescind_callback(struct vmbus_channel *channel,
+		void (*chn_rescind_cb)(struct vmbus_channel *))
+{
+	channel->chn_rescind_callback = chn_rescind_cb;
+}
+EXPORT_SYMBOL_GPL(vmbus_set_chn_rescind_callback);

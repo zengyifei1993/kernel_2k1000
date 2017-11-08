@@ -52,6 +52,7 @@
 #include <linux/nfs.h>
 #include <linux/nfs4.h>
 #include <linux/nfs_fs.h>
+#include <linux/fs_struct.h>
 
 #include "nfs4_fs.h"
 #include "internal.h"
@@ -1001,7 +1002,7 @@ static void encode_nfs4_verifier(struct xdr_stream *xdr, const nfs4_verifier *ve
 static void encode_attrs(struct xdr_stream *xdr, const struct iattr *iap,
 				const struct nfs4_label *label,
 				const struct nfs_server *server,
-				bool excl_check)
+				bool excl_check, const umode_t *umask)
 {
 	char owner_name[IDMAP_NAMESZ];
 	char owner_group[IDMAP_NAMESZ];
@@ -1015,18 +1016,21 @@ static void encode_attrs(struct xdr_stream *xdr, const struct iattr *iap,
 
 	/*
 	 * We reserve enough space to write the entire attribute buffer at once.
-	 * In the worst-case, this would be
-	 * 16(bitmap) + 4(attrlen) + 8(size) + 4(mode) + 4(atime) + 4(mtime)
-	 * = 40 bytes, plus any contribution from variable-length fields
-	 *            such as owner/group.
 	 */
 	if (iap->ia_valid & ATTR_SIZE) {
 		bmval[0] |= FATTR4_WORD0_SIZE;
 		len += 8;
 	}
+	if (!(server->attr_bitmask[2] & FATTR4_WORD2_MODE_UMASK))
+		umask = NULL;
 	if (iap->ia_valid & ATTR_MODE) {
-		bmval[1] |= FATTR4_WORD1_MODE;
-		len += 4;
+		if (umask) {
+			bmval[2] |= FATTR4_WORD2_MODE_UMASK;
+			len += 8;
+		} else {
+			bmval[1] |= FATTR4_WORD1_MODE;
+			len += 4;
+		}
 	}
 	if (iap->ia_valid & ATTR_UID) {
 		owner_namelen = nfs_map_uid_to_name(server, iap->ia_uid, owner_name, IDMAP_NAMESZ);
@@ -1127,6 +1131,10 @@ static void encode_attrs(struct xdr_stream *xdr, const struct iattr *iap,
 		*p++ = cpu_to_be32(label->len);
 		p = xdr_encode_opaque_fixed(p, label->label, label->len);
 	}
+	if (bmval[2] & FATTR4_WORD2_MODE_UMASK) {
+		*p++ = cpu_to_be32(iap->ia_mode & S_IALLUGO);
+		*p++ = cpu_to_be32(*umask);
+	}
 
 /* out: */
 }
@@ -1181,7 +1189,8 @@ static void encode_create(struct xdr_stream *xdr, const struct nfs4_create_arg *
 	}
 
 	encode_string(xdr, create->name->len, create->name->name);
-	encode_attrs(xdr, create->attrs, create->label, create->server, false);
+	encode_attrs(xdr, create->attrs, create->label, create->server, false,
+		     &create->umask);
 }
 
 static void encode_getattr_one(struct xdr_stream *xdr, uint32_t bitmap, struct compound_hdr *hdr)
@@ -1401,11 +1410,13 @@ static inline void encode_createmode(struct xdr_stream *xdr, const struct nfs_op
 	switch(arg->createmode) {
 	case NFS4_CREATE_UNCHECKED:
 		*p = cpu_to_be32(NFS4_CREATE_UNCHECKED);
-		encode_attrs(xdr, arg->u.attrs, arg->label, arg->server, false);
+		encode_attrs(xdr, arg->u.attrs, arg->label, arg->server, false,
+			     &arg->umask);
 		break;
 	case NFS4_CREATE_GUARDED:
 		*p = cpu_to_be32(NFS4_CREATE_GUARDED);
-		encode_attrs(xdr, arg->u.attrs, arg->label, arg->server, false);
+		encode_attrs(xdr, arg->u.attrs, arg->label, arg->server, false,
+			     &arg->umask);
 		break;
 	case NFS4_CREATE_EXCLUSIVE:
 		*p = cpu_to_be32(NFS4_CREATE_EXCLUSIVE);
@@ -1414,7 +1425,8 @@ static inline void encode_createmode(struct xdr_stream *xdr, const struct nfs_op
 	case NFS4_CREATE_EXCLUSIVE4_1:
 		*p = cpu_to_be32(NFS4_CREATE_EXCLUSIVE4_1);
 		encode_nfs4_verifier(xdr, &arg->u.verifier);
-		encode_attrs(xdr, arg->u.attrs, arg->label, arg->server, true);
+		encode_attrs(xdr, arg->u.attrs, arg->label, arg->server, true,
+			     &arg->umask);
 	}
 }
 
@@ -1670,7 +1682,7 @@ static void encode_setattr(struct xdr_stream *xdr, const struct nfs_setattrargs 
 {
 	encode_op_hdr(xdr, OP_SETATTR, decode_setattr_maxsz, hdr);
 	encode_nfs4_stateid(xdr, &arg->stateid);
-	encode_attrs(xdr, arg->iap, arg->label, server, false);
+	encode_attrs(xdr, arg->iap, arg->label, server, false, NULL);
 }
 
 static void encode_setclientid(struct xdr_stream *xdr, const struct nfs4_setclientid *setclientid, struct compound_hdr *hdr)
@@ -1983,9 +1995,14 @@ encode_layoutcommit(struct xdr_stream *xdr,
 	p = xdr_encode_hyper(p, args->lastbytewritten + 1);	/* length */
 	*p = cpu_to_be32(0); /* reclaim */
 	encode_nfs4_stateid(xdr, &args->stateid);
-	p = reserve_space(xdr, 20);
-	*p++ = cpu_to_be32(1); /* newoffset = TRUE */
-	p = xdr_encode_hyper(p, args->lastbytewritten);
+	if (args->lastbytewritten != U64_MAX) {
+		p = reserve_space(xdr, 20);
+		*p++ = cpu_to_be32(1); /* newoffset = TRUE */
+		p = xdr_encode_hyper(p, args->lastbytewritten);
+	} else {
+		p = reserve_space(xdr, 12);
+		*p++ = cpu_to_be32(0); /* newoffset = FALSE */
+	}
 	*p++ = cpu_to_be32(0); /* Never send time_modify_changed */
 	*p++ = cpu_to_be32(NFS_SERVER(args->inode)->pnfs_curr_ld->id);/* type */
 
@@ -2485,7 +2502,7 @@ static void nfs4_xdr_enc_getacl(struct rpc_rqst *req, struct xdr_stream *xdr,
 	encode_compound_hdr(xdr, req, &hdr);
 	encode_sequence(xdr, &args->seq_args, &hdr);
 	encode_putfh(xdr, args->fh, &hdr);
-	replen = hdr.replen + op_decode_hdr_maxsz + 1;
+	replen = hdr.replen + op_decode_hdr_maxsz;
 	encode_getattr_two(xdr, FATTR4_WORD0_ACL, 0, &hdr);
 
 	xdr_inline_pages(&req->rq_rcv_buf, replen << 2,
@@ -4718,34 +4735,37 @@ static int decode_getfattr(struct xdr_stream *xdr, struct nfs_fattr *fattr,
 }
 
 /*
- * Decode potentially multiple layout types. Currently we only support
- * one layout driver per file system.
+ * Decode potentially multiple layout types.
  */
-static int decode_first_pnfs_layout_type(struct xdr_stream *xdr,
-					 uint32_t *layouttype)
+static int decode_pnfs_layout_types(struct xdr_stream *xdr,
+				    struct nfs_fsinfo *fsinfo)
 {
 	__be32 *p;
-	int num;
+	uint32_t i;
 
 	p = xdr_inline_decode(xdr, 4);
 	if (unlikely(!p))
 		goto out_overflow;
-	num = be32_to_cpup(p);
+	fsinfo->nlayouttypes = be32_to_cpup(p);
 
 	/* pNFS is not supported by the underlying file system */
-	if (num == 0) {
-		*layouttype = 0;
+	if (fsinfo->nlayouttypes == 0)
 		return 0;
-	}
-	if (num > 1)
-		printk(KERN_INFO "NFS: %s: Warning: Multiple pNFS layout "
-			"drivers per filesystem not supported\n", __func__);
 
 	/* Decode and set first layout type, move xdr->p past unused types */
-	p = xdr_inline_decode(xdr, num * 4);
+	p = xdr_inline_decode(xdr, fsinfo->nlayouttypes * 4);
 	if (unlikely(!p))
 		goto out_overflow;
-	*layouttype = be32_to_cpup(p);
+
+	/* If we get too many, then just cap it at the max */
+	if (fsinfo->nlayouttypes > NFS_MAX_LAYOUT_TYPES) {
+		printk(KERN_INFO "NFS: %s: Warning: Too many (%u) pNFS layout types\n",
+			__func__, fsinfo->nlayouttypes);
+		fsinfo->nlayouttypes = NFS_MAX_LAYOUT_TYPES;
+	}
+
+	for(i = 0; i < fsinfo->nlayouttypes; ++i)
+		fsinfo->layouttype[i] = be32_to_cpup(p++);
 	return 0;
 out_overflow:
 	print_overflow_msg(__func__, xdr);
@@ -4757,7 +4777,7 @@ out_overflow:
  * Note we must ensure that layouttype is set in any non-error case.
  */
 static int decode_attr_pnfstype(struct xdr_stream *xdr, uint32_t *bitmap,
-				uint32_t *layouttype)
+				struct nfs_fsinfo *fsinfo)
 {
 	int status = 0;
 
@@ -4765,10 +4785,9 @@ static int decode_attr_pnfstype(struct xdr_stream *xdr, uint32_t *bitmap,
 	if (unlikely(bitmap[1] & (FATTR4_WORD1_FS_LAYOUT_TYPES - 1U)))
 		return -EIO;
 	if (bitmap[1] & FATTR4_WORD1_FS_LAYOUT_TYPES) {
-		status = decode_first_pnfs_layout_type(xdr, layouttype);
+		status = decode_pnfs_layout_types(xdr, fsinfo);
 		bitmap[1] &= ~FATTR4_WORD1_FS_LAYOUT_TYPES;
-	} else
-		*layouttype = 0;
+	}
 	return status;
 }
 
@@ -4849,7 +4868,7 @@ static int decode_fsinfo(struct xdr_stream *xdr, struct nfs_fsinfo *fsinfo)
 	status = decode_attr_time_delta(xdr, bitmap, &fsinfo->time_delta);
 	if (status != 0)
 		goto xdr_error;
-	status = decode_attr_pnfstype(xdr, bitmap, &fsinfo->layouttype);
+	status = decode_attr_pnfstype(xdr, bitmap, fsinfo);
 	if (status != 0)
 		goto xdr_error;
 
@@ -7537,6 +7556,7 @@ struct rpc_procinfo	nfs4_procedures[] = {
 	PROC(DEALLOCATE,	enc_deallocate,		dec_deallocate),
 	PROC(LAYOUTSTATS,	enc_layoutstats,	dec_layoutstats),
 	PROC(CLONE,		enc_clone,		dec_clone),
+	PROC(COPY,		enc_copy,		dec_copy),
 #endif /* CONFIG_NFS_V4_2 */
 };
 

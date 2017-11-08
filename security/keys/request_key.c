@@ -17,7 +17,6 @@
 #include <linux/err.h>
 #include <linux/keyctl.h>
 #include <linux/slab.h>
-#include <keys/user-type.h>
 #include "internal.h"
 
 #define key_negative_timeout	60	/* default timeout on a negative key's existence */

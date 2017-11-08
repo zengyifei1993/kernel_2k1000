@@ -18,10 +18,10 @@
 #define INTEL_FAM6_CORE2_DUNNINGTON	0x1D
 
 #define INTEL_FAM6_NEHALEM		0x1E
+#define INTEL_FAM6_NEHALEM_G		0x1F /* Auburndale / Havendale */
 #define INTEL_FAM6_NEHALEM_EP		0x1A
 #define INTEL_FAM6_NEHALEM_EX		0x2E
 #define INTEL_FAM6_WESTMERE		0x25
-#define INTEL_FAM6_WESTMERE2		0x1F
 #define INTEL_FAM6_WESTMERE_EP		0x2C
 #define INTEL_FAM6_WESTMERE_EX		0x2F
 
@@ -64,5 +64,6 @@
 /* Xeon Phi */
 
 #define INTEL_FAM6_XEON_PHI_KNL		0x57 /* Knights Landing */
+#define INTEL_FAM6_XEON_PHI_KNM		0x85 /* Knights Mill */
 
 #endif /* _ASM_X86_INTEL_FAMILY_H */

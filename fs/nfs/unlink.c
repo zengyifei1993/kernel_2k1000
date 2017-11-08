@@ -229,6 +229,7 @@ void nfs_unblock_sillyrename(struct dentry *dentry)
 	struct nfs_unlinkdata *data;
 
 	atomic_inc(&nfsi->silly_count);
+	wake_up(&nfsi->waitqueue);
 	spin_lock(&dir->i_lock);
 	while (!hlist_empty(&nfsi->silly_list)) {
 		if (!atomic_inc_not_zero(&nfsi->silly_count))
@@ -369,6 +370,19 @@ static void nfs_async_rename_release(void *calldata)
 
 	if (data->old_dentry->d_inode)
 		nfs_mark_for_revalidate(data->old_dentry->d_inode);
+
+	/* The result of the rename is unknown. Play it safe by
+	 * forcing a new lookup */
+	if (data->cancelled) {
+		spin_lock(&data->old_dir->i_lock);
+		nfs_force_lookup_revalidate(data->old_dir);
+		spin_unlock(&data->old_dir->i_lock);
+		if (data->new_dir != data->old_dir) {
+			spin_lock(&data->new_dir->i_lock);
+			nfs_force_lookup_revalidate(data->new_dir);
+			spin_unlock(&data->new_dir->i_lock);
+		}
+	}
 
 	dput(data->old_dentry);
 	dput(data->new_dentry);

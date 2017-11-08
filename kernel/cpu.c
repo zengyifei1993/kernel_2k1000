@@ -282,7 +282,7 @@ static inline void check_for_tasks(int cpu)
 	struct task_struct *p;
 	cputime_t utime, stime;
 
-	write_lock_irq(&tasklist_lock);
+	qwrite_lock_irq(&tasklist_lock);
 	for_each_process(p) {
 		task_cputime(p, &utime, &stime);
 		if (task_cpu(p) == cpu && p->state == TASK_RUNNING &&
@@ -292,7 +292,7 @@ static inline void check_for_tasks(int cpu)
 				p->comm, task_pid_nr(p), cpu,
 				p->state, p->flags);
 	}
-	write_unlock_irq(&tasklist_lock);
+	qwrite_unlock_irq(&tasklist_lock);
 }
 
 struct take_cpu_down_param {
@@ -479,11 +479,6 @@ int cpu_up(unsigned int cpu)
 {
 	int err = 0;
 
-#ifdef	CONFIG_MEMORY_HOTPLUG
-	int nid;
-	pg_data_t	*pgdat;
-#endif
-
 	if (!cpu_possible(cpu)) {
 		printk(KERN_ERR "can't online cpu %d because it is not "
 			"configured as may-hotadd at boot time\n", cpu);
@@ -494,27 +489,9 @@ int cpu_up(unsigned int cpu)
 		return -EINVAL;
 	}
 
-#ifdef	CONFIG_MEMORY_HOTPLUG
-	nid = cpu_to_node(cpu);
-	if (!node_online(nid)) {
-		err = mem_online_node(nid);
-		if (err)
-			return err;
-	}
-
-	pgdat = NODE_DATA(nid);
-	if (!pgdat) {
-		printk(KERN_ERR
-			"Can't online cpu %d due to NULL pgdat\n", cpu);
-		return -ENOMEM;
-	}
-
-	if (pgdat->node_zonelists->_zonerefs->zone == NULL) {
-		mutex_lock(&zonelists_mutex);
-		build_all_zonelists(NULL, NULL);
-		mutex_unlock(&zonelists_mutex);
-	}
-#endif
+	err = try_online_node(cpu_to_node(cpu));
+	if (err)
+		return err;
 
 	cpu_maps_update_begin();
 
@@ -766,6 +743,11 @@ void set_cpu_active(unsigned int cpu, bool active)
 		cpumask_set_cpu(cpu, to_cpumask(cpu_active_bits));
 	else
 		cpumask_clear_cpu(cpu, to_cpumask(cpu_active_bits));
+}
+
+void reset_cpu_possible_mask(void)
+{
+	bitmap_zero(cpu_possible_bits, NR_CPUS);
 }
 
 void init_cpu_present(const struct cpumask *src)

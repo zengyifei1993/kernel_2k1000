@@ -254,11 +254,8 @@ static int add_client_context(struct ib_device *device, struct ib_client *client
 	unsigned long flags;
 
 	context = kmalloc(sizeof *context, GFP_KERNEL);
-	if (!context) {
-		pr_warn("Couldn't allocate client context for %s/%s\n",
-			device->name, client->name);
+	if (!context)
 		return -ENOMEM;
-	}
 
 	context->client = client;
 	context->data   = NULL;
@@ -310,6 +307,15 @@ static int read_port_immutable(struct ib_device *device)
 	}
 	return 0;
 }
+
+void ib_get_device_fw_str(struct ib_device *dev, char *str, size_t str_len)
+{
+	if (dev->get_dev_fw_str)
+		dev->get_dev_fw_str(dev, str, str_len);
+	else
+		str[0] = '\0';
+}
+EXPORT_SYMBOL(ib_get_device_fw_str);
 
 /**
  * ib_register_device - Register an IB device with IB core
@@ -990,8 +996,7 @@ static int __init ib_core_init(void)
 		return -ENOMEM;
 
 	ib_comp_wq = alloc_workqueue("ib-comp-wq",
-			WQ_UNBOUND | WQ_HIGHPRI | WQ_MEM_RECLAIM,
-			WQ_UNBOUND_MAX_ACTIVE);
+			WQ_HIGHPRI | WQ_MEM_RECLAIM | WQ_SYSFS, 0);
 	if (!ib_comp_wq) {
 		ret = -ENOMEM;
 		goto err;
@@ -1027,7 +1032,8 @@ static int __init ib_core_init(void)
 		goto err_mad;
 	}
 
-	if (ib_add_ibnl_clients()) {
+	ret = ib_add_ibnl_clients();
+	if (ret) {
 		pr_warn("Couldn't register ibnl clients\n");
 		goto err_sa;
 	}

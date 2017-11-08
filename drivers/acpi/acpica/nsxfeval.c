@@ -42,7 +42,8 @@
  * POSSIBILITY OF SUCH DAMAGES.
  */
 
-#include <linux/export.h>
+#define EXPORT_ACPI_INTERFACES
+
 #include <acpi/acpi.h>
 #include "accommon.h"
 #include "acnamesp.h"
@@ -684,7 +685,7 @@ acpi_ns_get_device_callback(acpi_handle obj_handle,
 			return (AE_CTRL_DEPTH);
 		}
 
-		no_match = ACPI_STRCMP(hid->string, info->hid);
+		no_match = strcmp(hid->string, info->hid);
 		ACPI_FREE(hid);
 
 		if (no_match) {
@@ -703,8 +704,7 @@ acpi_ns_get_device_callback(acpi_handle obj_handle,
 
 			found = FALSE;
 			for (i = 0; i < cid->count; i++) {
-				if (ACPI_STRCMP(cid->ids[i].string, info->hid)
-				    == 0) {
+				if (strcmp(cid->ids[i].string, info->hid) == 0) {
 
 					/* Found a matching CID */
 

@@ -2068,6 +2068,9 @@ sctp_disposition_t sctp_sf_do_5_2_4_dupcook(struct net *net,
 		}
 	}
 
+	/* Set temp so that it won't be added into hashtable */
+	new_asoc->temp = 1;
+
 	/* Compare the tie_tag in cookie with the verification tag of
 	 * current association.
 	 */
@@ -3851,6 +3854,9 @@ sctp_disposition_t sctp_sf_eat_fwd_tsn(struct net *net,
 		return sctp_sf_pdiscard(net, ep, asoc, type, arg, commands);
 	}
 
+	if (!asoc->peer.prsctp_capable)
+		return sctp_sf_unk_chunk(net, ep, asoc, type, arg, commands);
+
 	/* Make sure that the FORWARD_TSN chunk has valid length.  */
 	if (!sctp_chunk_length_valid(chunk, sizeof(struct sctp_fwdtsn_chunk)))
 		return sctp_sf_violation_chunklen(net, ep, asoc, type, arg,
@@ -3918,6 +3924,9 @@ sctp_disposition_t sctp_sf_eat_fwd_tsn_fast(
 				SCTP_NULL());
 		return sctp_sf_pdiscard(net, ep, asoc, type, arg, commands);
 	}
+
+	if (!asoc->peer.prsctp_capable)
+		return sctp_sf_unk_chunk(net, ep, asoc, type, arg, commands);
 
 	/* Make sure that the FORWARD_TSN chunk has a valid length.  */
 	if (!sctp_chunk_length_valid(chunk, sizeof(struct sctp_fwdtsn_chunk)))
@@ -6047,8 +6056,9 @@ static struct sctp_packet *sctp_ootb_pkt_new(struct net *net,
 	sctp_transport_route(transport, (union sctp_addr *)&chunk->dest,
 			     sctp_sk(net->sctp.ctl_sock));
 
-	packet = sctp_packet_init(&transport->packet, transport, sport, dport);
-	packet = sctp_packet_config(packet, vtag, 0);
+	packet = &transport->packet;
+	sctp_packet_init(packet, transport, sport, dport);
+	sctp_packet_config(packet, vtag, 0);
 
 	return packet;
 

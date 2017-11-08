@@ -177,6 +177,8 @@ enum {
 	PERF_IP_FLAG_TRACE_BEGIN	|\
 	PERF_IP_FLAG_TRACE_END)
 
+#define MAX_INSN 16
+
 struct perf_sample {
 	u64 ip;
 	u32 pid, tid;
@@ -193,6 +195,7 @@ struct perf_sample {
 	u32 flags;
 	u16 insn_len;
 	u8  cpumode;
+	char insn[MAX_INSN];
 	void *raw_data;
 	struct ip_callchain *callchain;
 	struct branch_stack *branch_stack;
@@ -233,6 +236,7 @@ enum perf_user_event_type { /* above any possible kernel type */
 	PERF_RECORD_STAT			= 76,
 	PERF_RECORD_STAT_ROUND			= 77,
 	PERF_RECORD_EVENT_UPDATE		= 78,
+	PERF_RECORD_TIME_CONV			= 79,
 	PERF_RECORD_HEADER_MAX
 };
 
@@ -469,6 +473,13 @@ struct stat_round_event {
 	u64				time;
 };
 
+struct time_conv_event {
+	struct perf_event_header header;
+	u64 time_shift;
+	u64 time_mult;
+	u64 time_zero;
+};
+
 union perf_event {
 	struct perf_event_header	header;
 	struct mmap_event		mmap;
@@ -497,6 +508,7 @@ union perf_event {
 	struct stat_config_event	stat_config;
 	struct stat_event		stat;
 	struct stat_round_event		stat_round;
+	struct time_conv_event		time_conv;
 };
 
 void perf_event__print_totals(void);
@@ -643,8 +655,8 @@ size_t perf_event__fprintf_thread_map(union perf_event *event, FILE *fp);
 size_t perf_event__fprintf_cpu_map(union perf_event *event, FILE *fp);
 size_t perf_event__fprintf(union perf_event *event, FILE *fp);
 
-u64 kallsyms__get_function_start(const char *kallsyms_filename,
-				 const char *symbol_name);
+int kallsyms__get_function_start(const char *kallsyms_filename,
+				 const char *symbol_name, u64 *addr);
 
 void *cpu_map_data__alloc(struct cpu_map *map, size_t *size, u16 *type, int *max);
 void  cpu_map_data__synthesize(struct cpu_map_data *data, struct cpu_map *map,

@@ -109,19 +109,7 @@ static int pcie_poll_cmd(struct controller *ctrl, int timeout)
 	struct pci_dev *pdev = ctrl_dev(ctrl);
 	u16 slot_status;
 
-	pcie_capability_read_word(pdev, PCI_EXP_SLTSTA, &slot_status);
-	if (slot_status == (u16) ~0) {
-		ctrl_info(ctrl, "%s: no response from device\n", __func__);
-		return 0;
-	}
-	if (slot_status & PCI_EXP_SLTSTA_CC) {
-		pcie_capability_write_word(pdev, PCI_EXP_SLTSTA,
-					   PCI_EXP_SLTSTA_CC);
-		return 1;
-	}
-	while (timeout > 0) {
-		msleep(10);
-		timeout -= 10;
+	while (true) {
 		pcie_capability_read_word(pdev, PCI_EXP_SLTSTA, &slot_status);
 		if (slot_status == (u16) ~0) {
 			ctrl_info(ctrl, "%s: no response from device\n",
@@ -134,6 +122,10 @@ static int pcie_poll_cmd(struct controller *ctrl, int timeout)
 						   PCI_EXP_SLTSTA_CC);
 			return 1;
 		}
+		if (timeout < 0)
+			break;
+		msleep(10);
+		timeout -= 10;
 	}
 	return 0;	/* timeout */
 }
@@ -574,8 +566,12 @@ static irqreturn_t pciehp_isr(int irq, void *dev_id)
 	struct pci_dev *dev;
 	struct slot *slot = ctrl->slot;
 	u16 status, events;
-	u8 open, present;
+	u8 present;
 	bool link;
+
+	/* Interrupts cannot originate from a controller that's asleep */
+	if (pdev->current_state == PCI_D3cold)
+		return IRQ_NONE;
 
 	pcie_capability_read_word(pdev, PCI_EXP_SLTSTA, &status);
 	if (status == (u16) ~0) {
@@ -588,8 +584,8 @@ static irqreturn_t pciehp_isr(int irq, void *dev_id)
 	 * notification bits; right now we only want the event bits.
 	 */
 	events = status & (PCI_EXP_SLTSTA_ABP | PCI_EXP_SLTSTA_PFD |
-			   PCI_EXP_SLTSTA_MRLSC | PCI_EXP_SLTSTA_PDC |
-			   PCI_EXP_SLTSTA_CC | PCI_EXP_SLTSTA_DLLSC);
+			   PCI_EXP_SLTSTA_PDC | PCI_EXP_SLTSTA_CC |
+			   PCI_EXP_SLTSTA_DLLSC);
 	if (!events)
 		return IRQ_NONE;
 
@@ -617,21 +613,9 @@ static irqreturn_t pciehp_isr(int irq, void *dev_id)
 		}
 	}
 
-	if (!(events & ~PCI_EXP_SLTSTA_CC))
-		return IRQ_HANDLED;
-
-	/* Check MRL Sensor Changed */
-	if (events & PCI_EXP_SLTSTA_MRLSC) {
-		pciehp_get_latch_status(slot, &open);
-		ctrl_info(ctrl, "Latch %s on Slot(%s)\n",
-			  open ? "open" : "close", slot_name(slot));
-		pciehp_queue_interrupt_event(slot, open ? INT_SWITCH_OPEN :
-					     INT_SWITCH_CLOSE);
-	}
-
 	/* Check Attention Button Pressed */
 	if (events & PCI_EXP_SLTSTA_ABP) {
-		ctrl_info(ctrl, "Button pressed on Slot(%s)\n",
+		ctrl_info(ctrl, "Slot(%s): Attention button pressed\n",
 			  slot_name(slot));
 		pciehp_queue_interrupt_event(slot, INT_BUTTON_PRESS);
 	}
@@ -643,14 +627,14 @@ static irqreturn_t pciehp_isr(int irq, void *dev_id)
 	 * and cause the wrong event to queue.
 	 */
 	if (events & PCI_EXP_SLTSTA_DLLSC) {
-		ctrl_info(ctrl, "slot(%s): Link %s event\n",
-			  slot_name(slot), link ? "Up" : "Down");
+		ctrl_info(ctrl, "Slot(%s): Link %s\n", slot_name(slot),
+			  link ? "Up" : "Down");
 		pciehp_queue_interrupt_event(slot, link ? INT_LINK_UP :
 					     INT_LINK_DOWN);
 	} else if (events & PCI_EXP_SLTSTA_PDC) {
 		present = !!(status & PCI_EXP_SLTSTA_PDS);
-		ctrl_info(ctrl, "Card %spresent on Slot(%s)\n",
-			  present ? "" : "not ", slot_name(slot));
+		ctrl_info(ctrl, "Slot(%s): Card %spresent\n", slot_name(slot),
+			  present ? "" : "not ");
 		pciehp_queue_interrupt_event(slot, present ? INT_PRESENCE_ON :
 					     INT_PRESENCE_OFF);
 	}
@@ -658,7 +642,7 @@ static irqreturn_t pciehp_isr(int irq, void *dev_id)
 	/* Check Power Fault Detected */
 	if ((events & PCI_EXP_SLTSTA_PFD) && !ctrl->power_fault_detected) {
 		ctrl->power_fault_detected = 1;
-		ctrl_err(ctrl, "Power fault on slot %s\n", slot_name(slot));
+		ctrl_err(ctrl, "Slot(%s): Power fault\n", slot_name(slot));
 		pciehp_queue_interrupt_event(slot, INT_POWER_FAULT);
 	}
 
@@ -709,13 +693,11 @@ void pcie_enable_notification(struct controller *ctrl)
 		cmd |= PCI_EXP_SLTCTL_ABPE;
 	else
 		cmd |= PCI_EXP_SLTCTL_PDCE;
-	if (MRL_SENS(ctrl))
-		cmd |= PCI_EXP_SLTCTL_MRLSCE;
 	if (!pciehp_poll_mode)
 		cmd |= PCI_EXP_SLTCTL_HPIE | PCI_EXP_SLTCTL_CCIE;
 
 	mask = (PCI_EXP_SLTCTL_PDCE | PCI_EXP_SLTCTL_ABPE |
-		PCI_EXP_SLTCTL_MRLSCE | PCI_EXP_SLTCTL_PFDE |
+		PCI_EXP_SLTCTL_PFDE |
 		PCI_EXP_SLTCTL_HPIE | PCI_EXP_SLTCTL_CCIE |
 		PCI_EXP_SLTCTL_DLLSCE);
 

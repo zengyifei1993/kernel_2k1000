@@ -24,6 +24,7 @@
 #include <linux/slab.h>
 #include <net/sock.h>
 #include <linux/if_vlan.h>
+#include <net/switchdev.h>
 
 #include "br_private.h"
 
@@ -35,10 +36,10 @@
  */
 static int port_cost(struct net_device *dev)
 {
-	struct ethtool_cmd ecmd;
+	struct ethtool_link_ksettings ecmd;
 
-	if (!__ethtool_get_settings(dev, &ecmd)) {
-		switch (ethtool_cmd_speed(&ecmd)) {
+	if (!__ethtool_get_link_ksettings(dev, &ecmd)) {
+		switch (ecmd.base.speed) {
 		case SPEED_10000:
 			return 2;
 		case SPEED_1000:
@@ -61,7 +62,7 @@ static int port_cost(struct net_device *dev)
 }
 
 
-/* Check for port carrier transistions. */
+/* Check for port carrier transitions. */
 void br_port_carrier_check(struct net_bridge_port *p)
 {
 	struct net_device *dev = p->dev;
@@ -277,14 +278,16 @@ static void del_nbp(struct net_bridge_port *p)
 	netdev_reset_rx_headroom(dev);
 
 	nbp_vlan_flush(p);
-	br_fdb_delete_by_port(br, p, 1);
+	br_fdb_delete_by_port(br, p, 0, 1);
+	switchdev_deferred_process();
+
 	nbp_update_port_count(br);
+
+	netdev_upper_dev_unlink(dev, br->dev);
 
 	dev->priv_flags &= ~IFF_BRIDGE_PORT;
 
 	netdev_rx_handler_unregister(dev);
-
-	netdev_upper_dev_unlink(dev, br->dev);
 
 	br_multicast_del_port(p);
 
@@ -306,9 +309,8 @@ void br_dev_delete(struct net_device *dev, struct list_head *head)
 		del_nbp(p);
 	}
 
-	br_fdb_delete_by_port(br, NULL, 1);
+	br_fdb_delete_by_port(br, NULL, 0, 1);
 
-	br_vlan_flush(br);
 	del_timer_sync(&br->gc_timer);
 
 	br_sysfs_delbr(br->dev);
@@ -341,8 +343,8 @@ static int find_portno(struct net_bridge *br)
 static struct net_bridge_port *new_nbp(struct net_bridge *br,
 				       struct net_device *dev)
 {
-	int index;
 	struct net_bridge_port *p;
+	int index, err;
 
 	index = find_portno(br);
 	if (index < 0)
@@ -358,11 +360,16 @@ static struct net_bridge_port *new_nbp(struct net_bridge *br,
 	p->path_cost = port_cost(dev);
 	p->priority = 0x8000 >> BR_PORT_BITS;
 	p->port_no = index;
-	p->flags = BR_LEARNING | BR_FLOOD;
+	p->flags = BR_LEARNING | BR_FLOOD | BR_MCAST_FLOOD;
 	br_init_port(p);
-	p->state = BR_STATE_DISABLED;
+	br_set_state(p, BR_STATE_DISABLED);
 	br_stp_port_timer_init(p);
-	br_multicast_add_port(p);
+	err = br_multicast_add_port(p);
+	if (err) {
+		dev_put(dev);
+		kfree(p);
+		p = ERR_PTR(err);
+	}
 
 	return p;
 }
@@ -433,6 +440,20 @@ int br_min_mtu(const struct net_bridge *br)
 	return mtu;
 }
 
+static void br_set_gso_limits(struct net_bridge *br)
+{
+	unsigned int gso_max_size = GSO_MAX_SIZE;
+	u16 gso_max_segs = GSO_MAX_SEGS;
+	const struct net_bridge_port *p;
+
+	list_for_each_entry(p, &br->port_list, list) {
+		gso_max_size = min(gso_max_size, p->dev->gso_max_size);
+		gso_max_segs = min(gso_max_segs, p->dev->gso_max_segs);
+	}
+	br->dev->gso_max_size = gso_max_size;
+	br->dev->gso_max_segs = gso_max_segs;
+}
+
 /*
  * Recomputes features using slave's features
  */
@@ -452,6 +473,7 @@ netdev_features_t br_features_recompute(struct net_bridge *br,
 		features = netdev_increment_features(features,
 						     p->dev->features, mask);
 	}
+	features = netdev_add_tso_features(features, mask);
 
 	return features;
 }
@@ -464,10 +486,16 @@ int br_add_if(struct net_bridge *br, struct net_device *dev)
 	unsigned br_hr, dev_hr;
 	bool changed_addr;
 
-	/* Don't allow bridging non-ethernet like devices */
+	/* Don't allow bridging non-ethernet like devices, or DSA-enabled
+	 * master network devices since the bridge layer rx_handler prevents
+	 * the DSA fake ethertype handler to be invoked, so we do not strip off
+	 * the DSA switch tag protocol header and the bridge layer just return
+	 * RX_HANDLER_CONSUMED, stopping RX processing for these frames.
+	 */
 	if ((dev->flags & IFF_LOOPBACK) ||
 	    dev->type != ARPHRD_ETHER || dev->addr_len != ETH_ALEN ||
-	    !is_valid_ether_addr(dev->dev_addr))
+	    !is_valid_ether_addr(dev->dev_addr) ||
+	    netdev_uses_dsa(dev))
 		return -EINVAL;
 
 	/* No bridging of bridges */
@@ -501,18 +529,23 @@ int br_add_if(struct net_bridge *br, struct net_device *dev)
 	if (err)
 		goto err2;
 
-	if (br_netpoll_info(br) && ((err = br_netpoll_enable(p, GFP_KERNEL))))
-		goto err3;
-
-	err = netdev_master_upper_dev_link(dev, br->dev);
+	err = br_netpoll_enable(p);
 	if (err)
-		goto err4;
+		goto err3;
 
 	err = netdev_rx_handler_register(dev, br_handle_frame, p);
 	if (err)
-		goto err5;
+		goto err4;
 
 	dev->priv_flags |= IFF_BRIDGE_PORT;
+
+	err = netdev_master_upper_dev_link(dev, br->dev, NULL, NULL);
+	if (err)
+		goto err5;
+
+	err = nbp_switchdev_mark_set(p);
+	if (err)
+		goto err6;
 
 	dev_disable_lro(dev);
 
@@ -532,6 +565,12 @@ int br_add_if(struct net_bridge *br, struct net_device *dev)
 	if (br_fdb_insert(br, p, dev->dev_addr, 0))
 		netdev_err(dev, "failed insert local address bridge forwarding table\n");
 
+	err = nbp_vlan_init(p);
+	if (err) {
+		netdev_err(dev, "failed to initialize vlan filtering on this port\n");
+		goto err7;
+	}
+
 	spin_lock_bh(&br->lock);
 	changed_addr = br_stp_recalculate_bridge_id(br);
 
@@ -546,16 +585,21 @@ int br_add_if(struct net_bridge *br, struct net_device *dev)
 		call_netdevice_notifiers(NETDEV_CHANGEADDR, br->dev);
 
 	dev_set_mtu(br->dev, br_min_mtu(br));
-
-	if (nbp_vlan_init(p))
-		netdev_err(dev, "failed to initialize vlan filtering on this port\n");
+	br_set_gso_limits(br);
 
 	kobject_uevent(&p->kobj, KOBJ_ADD);
 
 	return 0;
 
-err5:
+err7:
+	list_del_rcu(&p->list);
+	br_fdb_delete_by_port(br, p, 0, 1);
+	nbp_update_port_count(br);
+err6:
 	netdev_upper_dev_unlink(dev, br->dev);
+err5:
+	dev->priv_flags &= ~IFF_BRIDGE_PORT;
+	netdev_rx_handler_unregister(dev);
 err4:
 	br_netpoll_disable(p);
 err3:
@@ -587,6 +631,9 @@ int br_del_if(struct net_bridge *br, struct net_device *dev)
 	 */
 	del_nbp(p);
 
+	dev_set_mtu(br->dev, br_min_mtu(br));
+	br_set_gso_limits(br);
+
 	spin_lock_bh(&br->lock);
 	changed_addr = br_stp_recalculate_bridge_id(br);
 	spin_unlock_bh(&br->lock);
@@ -605,19 +652,4 @@ void br_port_flags_change(struct net_bridge_port *p, unsigned long mask)
 
 	if (mask & BR_AUTO_MASK)
 		nbp_update_port_count(br);
-}
-
-void __net_exit br_net_exit(struct net *net)
-{
-	struct net_device *dev;
-	LIST_HEAD(list);
-
-	rtnl_lock();
-	for_each_netdev(net, dev)
-		if (dev->priv_flags & IFF_EBRIDGE)
-			br_dev_delete(dev, &list);
-
-	unregister_netdevice_many(&list);
-	rtnl_unlock();
-
 }

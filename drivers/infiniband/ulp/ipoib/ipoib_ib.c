@@ -51,8 +51,6 @@ MODULE_PARM_DESC(data_debug_level,
 		 "Enable data path debug tracing if > 0");
 #endif
 
-static DEFINE_MUTEX(pkey_mutex);
-
 struct ipoib_ah *ipoib_create_ah(struct net_device *dev,
 				 struct ib_pd *pd, struct ib_ah_attr *attr)
 {
@@ -418,11 +416,8 @@ static void ipoib_ib_handle_tx_wc(struct net_device *dev, struct ib_wc *wc)
 			   "(status=%d, wrid=%d vend_err %x)\n",
 			   wc->status, wr_id, wc->vendor_err);
 		qp_work = kzalloc(sizeof(*qp_work), GFP_ATOMIC);
-		if (!qp_work) {
-			ipoib_warn(priv, "%s Failed alloc ipoib_qp_state_validate for qp: 0x%x\n",
-				   __func__, priv->qp->qp_num);
+		if (!qp_work)
 			return;
-		}
 
 		INIT_WORK(&qp_work->work, ipoib_qp_state_validate_work);
 		qp_work->priv = priv;
@@ -549,6 +544,7 @@ void ipoib_send(struct net_device *dev, struct sk_buff *skb,
 	struct ipoib_tx_buf *tx_req;
 	int hlen, rc;
 	void *phead;
+	unsigned usable_sge = priv->max_send_sge - !!skb_headlen(skb);
 
 	if (skb_is_gso(skb)) {
 		hlen = skb_transport_offset(skb) + tcp_hdrlen(skb);
@@ -571,6 +567,23 @@ void ipoib_send(struct net_device *dev, struct sk_buff *skb,
 		}
 		phead = NULL;
 		hlen  = 0;
+	}
+	if (skb_shinfo(skb)->nr_frags > usable_sge) {
+		if (skb_linearize(skb) < 0) {
+			ipoib_warn(priv, "skb could not be linearized\n");
+			++dev->stats.tx_dropped;
+			++dev->stats.tx_errors;
+			dev_kfree_skb_any(skb);
+			return;
+		}
+		/* Does skb_linearize return ok without reducing nr_frags? */
+		if (skb_shinfo(skb)->nr_frags > usable_sge) {
+			ipoib_warn(priv, "too many frags after skb linearize\n");
+			++dev->stats.tx_dropped;
+			++dev->stats.tx_errors;
+			dev_kfree_skb_any(skb);
+			return;
+		}
 	}
 
 	ipoib_dbg_data(priv, "sending packet, length=%d address=%p qpn=0x%06x\n",
@@ -617,7 +630,7 @@ void ipoib_send(struct net_device *dev, struct sk_buff *skb,
 		if (netif_queue_stopped(dev))
 			netif_wake_queue(dev);
 	} else {
-		dev->trans_start = jiffies;
+		netif_trans_update(dev);
 
 		address->last_send = priv->tx_head;
 		++priv->tx_head;
@@ -979,6 +992,106 @@ static inline int update_child_pkey(struct ipoib_dev_priv *priv)
 	return 0;
 }
 
+/*
+ * returns true if the device address of the ipoib interface has changed and the
+ * new address is a valid one (i.e in the gid table), return false otherwise.
+ */
+static bool ipoib_dev_addr_changed_valid(struct ipoib_dev_priv *priv)
+{
+	union ib_gid search_gid;
+	union ib_gid gid0;
+	union ib_gid *netdev_gid;
+	int err;
+	u16 index;
+	u8 port;
+	bool ret = false;
+
+	netdev_gid = (union ib_gid *)(priv->dev->dev_addr + 4);
+	if (ib_query_gid(priv->ca, priv->port, 0, &gid0, NULL))
+		return false;
+
+	netif_addr_lock_bh(priv->dev);
+
+	/* The subnet prefix may have changed, update it now so we won't have
+	 * to do it later
+	 */
+	priv->local_gid.global.subnet_prefix = gid0.global.subnet_prefix;
+	netdev_gid->global.subnet_prefix = gid0.global.subnet_prefix;
+	search_gid.global.subnet_prefix = gid0.global.subnet_prefix;
+
+	search_gid.global.interface_id = priv->local_gid.global.interface_id;
+
+	netif_addr_unlock_bh(priv->dev);
+
+	err = ib_find_gid(priv->ca, &search_gid, IB_GID_TYPE_IB,
+			  priv->dev, &port, &index);
+
+	netif_addr_lock_bh(priv->dev);
+
+	if (search_gid.global.interface_id !=
+	    priv->local_gid.global.interface_id)
+		/* There was a change while we were looking up the gid, bail
+		 * here and let the next work sort this out
+		 */
+		goto out;
+
+	/* The next section of code needs some background:
+	 * Per IB spec the port GUID can't change if the HCA is powered on.
+	 * port GUID is the basis for GID at index 0 which is the basis for
+	 * the default device address of a ipoib interface.
+	 *
+	 * so it seems the flow should be:
+	 * if user_changed_dev_addr && gid in gid tbl
+	 *	set bit dev_addr_set
+	 *	return true
+	 * else
+	 *	return false
+	 *
+	 * The issue is that there are devices that don't follow the spec,
+	 * they change the port GUID when the HCA is powered, so in order
+	 * not to break userspace applications, We need to check if the
+	 * user wanted to control the device address and we assume that
+	 * if he sets the device address back to be based on GID index 0,
+	 * he no longer wishs to control it.
+	 *
+	 * If the user doesn't control the the device address,
+	 * IPOIB_FLAG_DEV_ADDR_SET is set and ib_find_gid failed it means
+	 * the port GUID has changed and GID at index 0 has changed
+	 * so we need to change priv->local_gid and priv->dev->dev_addr
+	 * to reflect the new GID.
+	 */
+	if (!test_bit(IPOIB_FLAG_DEV_ADDR_SET, &priv->flags)) {
+		if (!err && port == priv->port) {
+			set_bit(IPOIB_FLAG_DEV_ADDR_SET, &priv->flags);
+			if (index == 0)
+				clear_bit(IPOIB_FLAG_DEV_ADDR_CTRL,
+					  &priv->flags);
+			else
+				set_bit(IPOIB_FLAG_DEV_ADDR_CTRL, &priv->flags);
+			ret = true;
+		} else {
+			ret = false;
+		}
+	} else {
+		if (!err && port == priv->port) {
+			ret = true;
+		} else {
+			if (!test_bit(IPOIB_FLAG_DEV_ADDR_CTRL, &priv->flags)) {
+				memcpy(&priv->local_gid, &gid0,
+				       sizeof(priv->local_gid));
+				memcpy(priv->dev->dev_addr + 4, &gid0,
+				       sizeof(priv->local_gid));
+				ret = true;
+			}
+		}
+	}
+
+out:
+	netif_addr_unlock_bh(priv->dev);
+
+	return ret;
+}
+
 static void __ipoib_ib_dev_flush(struct ipoib_dev_priv *priv,
 				enum ipoib_flush_level level,
 				int nesting)
@@ -1000,6 +1113,9 @@ static void __ipoib_ib_dev_flush(struct ipoib_dev_priv *priv,
 
 	if (!test_bit(IPOIB_FLAG_INITIALIZED, &priv->flags) &&
 	    level != IPOIB_FLUSH_HEAVY) {
+		/* Make sure the dev_addr is set even if not flushing */
+		if (level == IPOIB_FLUSH_LIGHT)
+			ipoib_dev_addr_changed_valid(priv);
 		ipoib_dbg(priv, "Not flushing - IPOIB_FLAG_INITIALIZED not set.\n");
 		return;
 	}
@@ -1011,7 +1127,8 @@ static void __ipoib_ib_dev_flush(struct ipoib_dev_priv *priv,
 				update_parent_pkey(priv);
 			else
 				update_child_pkey(priv);
-		}
+		} else if (level == IPOIB_FLUSH_LIGHT)
+			ipoib_dev_addr_changed_valid(priv);
 		ipoib_dbg(priv, "Not flushing - IPOIB_FLAG_ADMIN_UP not set.\n");
 		return;
 	}
@@ -1039,8 +1156,17 @@ static void __ipoib_ib_dev_flush(struct ipoib_dev_priv *priv,
 	}
 
 	if (level == IPOIB_FLUSH_LIGHT) {
+		int oper_up;
 		ipoib_mark_paths_invalid(dev);
+		/* Set IPoIB operation as down to prevent races between:
+		 * the flush flow which leaves MCG and on the fly joins
+		 * which can happen during that time. mcast restart task
+		 * should deal with join requests we missed.
+		 */
+		oper_up = test_and_clear_bit(IPOIB_FLAG_OPER_UP, &priv->flags);
 		ipoib_mcast_dev_flush(dev);
+		if (oper_up)
+			set_bit(IPOIB_FLAG_OPER_UP, &priv->flags);
 		ipoib_flush_ah(dev);
 	}
 
@@ -1063,7 +1189,8 @@ static void __ipoib_ib_dev_flush(struct ipoib_dev_priv *priv,
 	if (test_bit(IPOIB_FLAG_ADMIN_UP, &priv->flags)) {
 		if (level >= IPOIB_FLUSH_NORMAL)
 			ipoib_ib_dev_up(dev);
-		ipoib_mcast_restart_task(&priv->restart_task);
+		if (ipoib_dev_addr_changed_valid(priv))
+			ipoib_mcast_restart_task(&priv->restart_task);
 	}
 }
 

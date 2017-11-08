@@ -586,6 +586,7 @@ conf_lock:
 	conflock->fl.fl_type = lock->fl.fl_type;
 	conflock->fl.fl_start = lock->fl.fl_start;
 	conflock->fl.fl_end = lock->fl.fl_end;
+	locks_release_private(&lock->fl);
 	ret = nlm_lck_denied;
 out:
 	if (block)
@@ -677,7 +678,7 @@ nlmsvc_update_deferred_block(struct nlm_block *block, struct file_lock *conf,
 		block->b_flags |= B_TIMED_OUT;
 	if (conf) {
 		if (block->b_fl)
-			__locks_copy_lock(block->b_fl, conf);
+			locks_copy_conflock(block->b_fl, conf);
 	}
 }
 

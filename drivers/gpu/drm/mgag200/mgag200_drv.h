@@ -179,6 +179,7 @@ enum mga_type {
 	G200_WB,
 	G200_EV,
 	G200_EH,
+	G200_EH3,
 	G200_ER,
 	G200_EW3,
 };
@@ -281,7 +282,7 @@ static inline int mgag200_bo_reserve(struct mgag200_bo *bo, bool no_wait)
 {
 	int ret;
 
-	ret = ttm_bo_reserve(&bo->bo, true, no_wait, false, NULL);
+	ret = ttm_bo_reserve(&bo->bo, true, no_wait, NULL);
 	if (ret) {
 		if (ret != -ERESTARTSYS && ret != -EBUSY)
 			DRM_ERROR("reserve failed %p\n", bo);

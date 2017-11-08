@@ -52,6 +52,16 @@ static inline bool lockdep_rtnl_is_held(void)
 	rcu_dereference_check(p, lockdep_rtnl_is_held())
 
 /**
+ * rcu_dereference_bh_rtnl - rcu_dereference_bh with debug checking
+ * @p: The pointer to read, prior to dereference
+ *
+ * Do an rcu_dereference_bh(p), but check caller either holds rcu_read_lock_bh()
+ * or RTNL. Note : Please prefer rtnl_dereference() or rcu_dereference_bh()
+ */
+#define rcu_dereference_bh_rtnl(p)				\
+	rcu_dereference_bh_check(p, lockdep_rtnl_is_held())
+
+/**
  * rtnl_dereference - fetch RCU pointer when updates are prevented by RTNL
  * @p: The pointer to read, prior to dereferencing
  *
@@ -67,7 +77,12 @@ static inline struct netdev_queue *dev_ingress_queue(struct net_device *dev)
 	return rtnl_dereference(dev->ingress_queue);
 }
 
-extern struct netdev_queue *dev_ingress_queue_create(struct net_device *dev);
+struct netdev_queue *dev_ingress_queue_create(struct net_device *dev);
+
+#ifdef CONFIG_NET_CLS_ACT
+void net_inc_ingress_queue(void);
+void net_dec_ingress_queue(void);
+#endif
 
 extern void rtnetlink_init(void);
 extern void __rtnl_unlock(void);
@@ -84,7 +99,7 @@ extern int ndo_dflt_fdb_dump(struct sk_buff *skb,
 			     struct netlink_callback *cb,
 			     struct net_device *dev,
 			     struct net_device *filter_dev,
-			     int idx);
+			     int *idx);
 extern int ndo_dflt_fdb_add(struct ndmsg *ndm,
 			    struct nlattr *tb[],
 			    struct net_device *dev,
@@ -99,5 +114,9 @@ extern int ndo_dflt_fdb_del(struct ndmsg *ndm,
 
 extern int ndo_dflt_bridge_getlink(struct sk_buff *skb, u32 pid, u32 seq,
 				   struct net_device *dev, u16 mode,
-				   u32 flags, u32 mask, int nlflags);
+				   u32 flags, u32 mask, int nlflags,
+				   u32 filter_mask,
+				   int (*vlan_fill)(struct sk_buff *skb,
+						    struct net_device *dev,
+						    u32 filter_mask));
 #endif	/* __LINUX_RTNETLINK_H */

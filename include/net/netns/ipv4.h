@@ -42,6 +42,8 @@ struct netns_ipv4 {
 #ifdef CONFIG_IP_ROUTE_CLASSID
 	int			fib_num_tclassid_users;
 #endif
+	RH_KABI_FILL_HOLE(bool	fib_offload_disabled)
+	/* Hole - 3 bytes remain */
 	struct hlist_head	*fib_table_hash;
 	struct sock		*fibnl;
 
@@ -74,6 +76,7 @@ struct netns_ipv4 {
 	long sysctl_tcp_mem[3];
 
 	atomic_t dev_addr_genid;
+	RH_KABI_FILL_HOLE(unsigned int	fib_seq)	/* protected by rtnl_mutex */
 
 #ifdef CONFIG_IP_MROUTE
 #ifndef CONFIG_IP_MROUTE_MULTIPLE_TABLES

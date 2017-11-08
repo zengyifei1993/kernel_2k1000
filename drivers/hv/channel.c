@@ -39,11 +39,16 @@
  * vmbus_setevent- Trigger an event notification on the specified
  * channel.
  */
-static void vmbus_setevent(struct vmbus_channel *channel)
+void vmbus_setevent(struct vmbus_channel *channel)
 {
 	struct hv_monitor_page *monitorpage;
 
-	if (channel->offermsg.monitor_allocated) {
+	/*
+	 * For channels marked as in "low latency" mode
+	 * bypass the monitor page mechanism.
+	 */
+	if ((channel->offermsg.monitor_allocated) &&
+	    (!channel->low_latency)) {
 		/* Each u32 represents 32 channels */
 		sync_set_bit(channel->offermsg.child_relid & 31,
 			(unsigned long *) vmbus_connection.send_int_page +
@@ -60,6 +65,7 @@ static void vmbus_setevent(struct vmbus_channel *channel)
 		vmbus_set_event(channel);
 	}
 }
+EXPORT_SYMBOL_GPL(vmbus_setevent);
 
 /*
  * vmbus_open - Open the specified channel.
@@ -70,11 +76,13 @@ int vmbus_open(struct vmbus_channel *newchannel, u32 send_ringbuffer_size,
 {
 	struct vmbus_channel_open_channel *open_msg;
 	struct vmbus_channel_msginfo *open_info = NULL;
-	void *in, *out;
 	unsigned long flags;
 	int ret, err = 0;
-	unsigned long t;
 	struct page *page;
+
+	if (send_ringbuffer_size % PAGE_SIZE ||
+	    recv_ringbuffer_size % PAGE_SIZE)
+		return -EINVAL;
 
 	spin_lock_irqsave(&newchannel->lock, flags);
 	if (newchannel->state == CHANNEL_OPEN_STATE) {
@@ -95,36 +103,33 @@ int vmbus_open(struct vmbus_channel *newchannel, u32 send_ringbuffer_size,
 				recv_ringbuffer_size));
 
 	if (!page)
-		out = (void *)__get_free_pages(GFP_KERNEL|__GFP_ZERO,
-					       get_order(send_ringbuffer_size +
-					       recv_ringbuffer_size));
-	else
-		out = (void *)page_address(page);
+		page = alloc_pages(GFP_KERNEL|__GFP_ZERO,
+				   get_order(send_ringbuffer_size +
+					     recv_ringbuffer_size));
 
-	if (!out) {
+	if (!page) {
 		err = -ENOMEM;
-		goto error0;
+		goto error_set_chnstate;
 	}
 
-	in = (void *)((unsigned long)out + send_ringbuffer_size);
-
-	newchannel->ringbuffer_pages = out;
+	newchannel->ringbuffer_pages = page_address(page);
 	newchannel->ringbuffer_pagecount = (send_ringbuffer_size +
 					   recv_ringbuffer_size) >> PAGE_SHIFT;
 
-	ret = hv_ringbuffer_init(
-		&newchannel->outbound, out, send_ringbuffer_size);
+	ret = hv_ringbuffer_init(&newchannel->outbound, page,
+				 send_ringbuffer_size >> PAGE_SHIFT);
 
 	if (ret != 0) {
 		err = ret;
-		goto error0;
+		goto error_free_pages;
 	}
 
-	ret = hv_ringbuffer_init(
-		&newchannel->inbound, in, recv_ringbuffer_size);
+	ret = hv_ringbuffer_init(&newchannel->inbound,
+				 &page[send_ringbuffer_size >> PAGE_SHIFT],
+				 recv_ringbuffer_size >> PAGE_SHIFT);
 	if (ret != 0) {
 		err = ret;
-		goto error0;
+		goto error_free_pages;
 	}
 
 
@@ -132,14 +137,14 @@ int vmbus_open(struct vmbus_channel *newchannel, u32 send_ringbuffer_size,
 	newchannel->ringbuffer_gpadlhandle = 0;
 
 	ret = vmbus_establish_gpadl(newchannel,
-					 newchannel->outbound.ring_buffer,
-					 send_ringbuffer_size +
-					 recv_ringbuffer_size,
-					 &newchannel->ringbuffer_gpadlhandle);
+				    page_address(page),
+				    send_ringbuffer_size +
+				    recv_ringbuffer_size,
+				    &newchannel->ringbuffer_gpadlhandle);
 
 	if (ret != 0) {
 		err = ret;
-		goto error0;
+		goto error_free_pages;
 	}
 
 	/* Create and init the channel open message */
@@ -148,7 +153,7 @@ int vmbus_open(struct vmbus_channel *newchannel, u32 send_ringbuffer_size,
 			   GFP_KERNEL);
 	if (!open_info) {
 		err = -ENOMEM;
-		goto error_gpadl;
+		goto error_free_gpadl;
 	}
 
 	init_completion(&open_info->waitevent);
@@ -164,7 +169,7 @@ int vmbus_open(struct vmbus_channel *newchannel, u32 send_ringbuffer_size,
 
 	if (userdatalen > MAX_USER_DEFINED_BYTES) {
 		err = -EINVAL;
-		goto error_gpadl;
+		goto error_free_gpadl;
 	}
 
 	if (userdatalen)
@@ -176,18 +181,14 @@ int vmbus_open(struct vmbus_channel *newchannel, u32 send_ringbuffer_size,
 	spin_unlock_irqrestore(&vmbus_connection.channelmsg_lock, flags);
 
 	ret = vmbus_post_msg(open_msg,
-			       sizeof(struct vmbus_channel_open_channel));
+			     sizeof(struct vmbus_channel_open_channel), true);
 
 	if (ret != 0) {
 		err = ret;
-		goto error1;
+		goto error_clean_msglist;
 	}
 
-	t = wait_for_completion_timeout(&open_info->waitevent, 5*HZ);
-	if (t == 0) {
-		err = -ETIMEDOUT;
-		goto error1;
-	}
+	wait_for_completion(&open_info->waitevent);
 
 	spin_lock_irqsave(&vmbus_connection.channelmsg_lock, flags);
 	list_del(&open_info->msglistentry);
@@ -195,29 +196,46 @@ int vmbus_open(struct vmbus_channel *newchannel, u32 send_ringbuffer_size,
 
 	if (open_info->response.open_result.status) {
 		err = -EAGAIN;
-		goto error_gpadl;
+		goto error_free_gpadl;
 	}
 
 	newchannel->state = CHANNEL_OPENED_STATE;
 	kfree(open_info);
 	return 0;
 
-error1:
+error_clean_msglist:
 	spin_lock_irqsave(&vmbus_connection.channelmsg_lock, flags);
 	list_del(&open_info->msglistentry);
 	spin_unlock_irqrestore(&vmbus_connection.channelmsg_lock, flags);
 
-error_gpadl:
+error_free_gpadl:
 	vmbus_teardown_gpadl(newchannel, newchannel->ringbuffer_gpadlhandle);
-
-error0:
-	free_pages((unsigned long)out,
-		get_order(send_ringbuffer_size + recv_ringbuffer_size));
 	kfree(open_info);
+error_free_pages:
+	hv_ringbuffer_cleanup(&newchannel->outbound);
+	hv_ringbuffer_cleanup(&newchannel->inbound);
+	__free_pages(page,
+		     get_order(send_ringbuffer_size + recv_ringbuffer_size));
+error_set_chnstate:
 	newchannel->state = CHANNEL_OPEN_STATE;
 	return err;
 }
 EXPORT_SYMBOL_GPL(vmbus_open);
+
+/* Used for Hyper-V Socket: a guest client's connect() to the host */
+int vmbus_send_tl_connect_request(const uuid_le *shv_guest_servie_id,
+				  const uuid_le *shv_host_servie_id)
+{
+	struct vmbus_channel_tl_connect_request conn_msg;
+
+	memset(&conn_msg, 0, sizeof(conn_msg));
+	conn_msg.header.msgtype = CHANNELMSG_TL_CONNECT_REQUEST;
+	conn_msg.guest_endpoint_id = *shv_guest_servie_id;
+	conn_msg.host_service_id = *shv_host_servie_id;
+
+	return vmbus_post_msg(&conn_msg, sizeof(conn_msg), true);
+}
+EXPORT_SYMBOL_GPL(vmbus_send_tl_connect_request);
 
 /*
  * create_gpadl_header - Creates a gpadl for the specified buffer
@@ -401,7 +419,7 @@ int vmbus_establish_gpadl(struct vmbus_channel *channel, void *kbuffer,
 	spin_unlock_irqrestore(&vmbus_connection.channelmsg_lock, flags);
 
 	ret = vmbus_post_msg(gpadlmsg, msginfo->msgsize -
-			       sizeof(*msginfo));
+			     sizeof(*msginfo), true);
 	if (ret != 0)
 		goto cleanup;
 
@@ -415,8 +433,8 @@ int vmbus_establish_gpadl(struct vmbus_channel *channel, void *kbuffer,
 		gpadl_body->gpadl = next_gpadl_handle;
 
 		ret = vmbus_post_msg(gpadl_body,
-				     submsginfo->msgsize -
-				     sizeof(*submsginfo));
+				     submsginfo->msgsize - sizeof(*submsginfo),
+				     true);
 		if (ret != 0)
 			goto cleanup;
 
@@ -467,8 +485,8 @@ int vmbus_teardown_gpadl(struct vmbus_channel *channel, u32 gpadl_handle)
 	list_add_tail(&info->msglistentry,
 		      &vmbus_connection.chn_msg_list);
 	spin_unlock_irqrestore(&vmbus_connection.channelmsg_lock, flags);
-	ret = vmbus_post_msg(msg,
-			       sizeof(struct vmbus_channel_gpadl_teardown));
+	ret = vmbus_post_msg(msg, sizeof(struct vmbus_channel_gpadl_teardown),
+			     true);
 
 	if (ret)
 		goto post_msg_err;
@@ -495,7 +513,6 @@ static void reset_channel_cb(void *arg)
 static int vmbus_close_internal(struct vmbus_channel *channel)
 {
 	struct vmbus_channel_close_channel *msg;
-	struct tasklet_struct *tasklet;
 	int ret;
 
 	/*
@@ -507,8 +524,7 @@ static int vmbus_close_internal(struct vmbus_channel *channel)
 	 * To resolve the race, we can serialize them by disabling the
 	 * tasklet when the latter is running here.
 	 */
-	tasklet = hv_context.event_dpc[channel->target_cpu];
-	tasklet_disable(tasklet);
+	hv_event_tasklet_disable(channel);
 
 	/*
 	 * In case a device driver's probe() fails (e.g.,
@@ -541,7 +557,8 @@ static int vmbus_close_internal(struct vmbus_channel *channel)
 	msg->header.msgtype = CHANNELMSG_CLOSECHANNEL;
 	msg->child_relid = channel->offermsg.child_relid;
 
-	ret = vmbus_post_msg(msg, sizeof(struct vmbus_channel_close_channel));
+	ret = vmbus_post_msg(msg, sizeof(struct vmbus_channel_close_channel),
+			     true);
 
 	if (ret) {
 		pr_err("Close failed: close post msg return is %d\n", ret);
@@ -574,7 +591,7 @@ static int vmbus_close_internal(struct vmbus_channel *channel)
 		get_order(channel->ringbuffer_pagecount * PAGE_SIZE));
 
 out:
-	tasklet_enable(tasklet);
+	hv_event_tasklet_enable(channel);
 
 	return ret;
 }
@@ -620,8 +637,7 @@ int vmbus_sendpacket_ctl(struct vmbus_channel *channel, void *buffer,
 	u32 packetlen_aligned = ALIGN(packetlen, sizeof(u64));
 	struct kvec bufferlist[3];
 	u64 aligned_data = 0;
-	int ret;
-	bool signal = false;
+	bool lock = channel->acquire_ring_lock;
 	int num_vecs = ((bufferlen != 0) ? 3 : 1);
 
 
@@ -640,34 +656,9 @@ int vmbus_sendpacket_ctl(struct vmbus_channel *channel, void *buffer,
 	bufferlist[2].iov_base = &aligned_data;
 	bufferlist[2].iov_len = (packetlen_aligned - packetlen);
 
-	ret = hv_ringbuffer_write(&channel->outbound, bufferlist, num_vecs,
-				  &signal);
+	return hv_ringbuffer_write(channel, bufferlist, num_vecs,
+				   lock, kick_q);
 
-	/*
-	 * Signalling the host is conditional on many factors:
-	 * 1. The ring state changed from being empty to non-empty.
-	 *    This is tracked by the variable "signal".
-	 * 2. The variable kick_q tracks if more data will be placed
-	 *    on the ring. We will not signal if more data is
-	 *    to be placed.
-	 *
-	 * Based on the channel signal state, we will decide
-	 * which signaling policy will be applied.
-	 *
-	 * If we cannot write to the ring-buffer; signal the host
-	 * even if we may not have written anything. This is a rare
-	 * enough condition that it should not matter.
-	 */
-
-	if (channel->signal_policy)
-		signal = true;
-	else
-		kick_q = true;
-
-	if (((ret == 0) && kick_q && signal) || (ret))
-		vmbus_setevent(channel);
-
-	return ret;
 }
 EXPORT_SYMBOL(vmbus_sendpacket_ctl);
 
@@ -708,7 +699,6 @@ int vmbus_sendpacket_pagebuffer_ctl(struct vmbus_channel *channel,
 				     u32 flags,
 				     bool kick_q)
 {
-	int ret;
 	int i;
 	struct vmbus_channel_packet_page_buffer desc;
 	u32 descsize;
@@ -716,7 +706,7 @@ int vmbus_sendpacket_pagebuffer_ctl(struct vmbus_channel *channel,
 	u32 packetlen_aligned;
 	struct kvec bufferlist[3];
 	u64 aligned_data = 0;
-	bool signal = false;
+	bool lock = channel->acquire_ring_lock;
 
 	if (pagecount > MAX_PAGE_BUFFER_COUNT)
 		return -EINVAL;
@@ -753,33 +743,8 @@ int vmbus_sendpacket_pagebuffer_ctl(struct vmbus_channel *channel,
 	bufferlist[2].iov_base = &aligned_data;
 	bufferlist[2].iov_len = (packetlen_aligned - packetlen);
 
-	ret = hv_ringbuffer_write(&channel->outbound, bufferlist, 3, &signal);
-
-	/*
-	 * Signalling the host is conditional on many factors:
-	 * 1. The ring state changed from being empty to non-empty.
-	 *    This is tracked by the variable "signal".
-	 * 2. The variable kick_q tracks if more data will be placed
-	 *    on the ring. We will not signal if more data is
-	 *    to be placed.
-	 *
-	 * Based on the channel signal state, we will decide
-	 * which signaling policy will be applied.
-	 *
-	 * If we cannot write to the ring-buffer; signal the host
-	 * even if we may not have written anything. This is a rare
-	 * enough condition that it should not matter.
-	 */
-
-	if (channel->signal_policy)
-		signal = true;
-	else
-		kick_q = true;
-
-	if (((ret == 0) && kick_q && signal) || (ret))
-		vmbus_setevent(channel);
-
-	return ret;
+	return hv_ringbuffer_write(channel, bufferlist, 3,
+				   lock, kick_q);
 }
 EXPORT_SYMBOL_GPL(vmbus_sendpacket_pagebuffer_ctl);
 
@@ -810,12 +775,11 @@ int vmbus_sendpacket_mpb_desc(struct vmbus_channel *channel,
 			      u32 desc_size,
 			      void *buffer, u32 bufferlen, u64 requestid)
 {
-	int ret;
 	u32 packetlen;
 	u32 packetlen_aligned;
 	struct kvec bufferlist[3];
 	u64 aligned_data = 0;
-	bool signal = false;
+	bool lock = channel->acquire_ring_lock;
 
 	packetlen = desc_size + bufferlen;
 	packetlen_aligned = ALIGN(packetlen, sizeof(u64));
@@ -835,12 +799,8 @@ int vmbus_sendpacket_mpb_desc(struct vmbus_channel *channel,
 	bufferlist[2].iov_base = &aligned_data;
 	bufferlist[2].iov_len = (packetlen_aligned - packetlen);
 
-	ret = hv_ringbuffer_write(&channel->outbound, bufferlist, 3, &signal);
-
-	if (ret == 0 && signal)
-		vmbus_setevent(channel);
-
-	return ret;
+	return hv_ringbuffer_write(channel, bufferlist, 3,
+				   lock, true);
 }
 EXPORT_SYMBOL_GPL(vmbus_sendpacket_mpb_desc);
 
@@ -852,14 +812,13 @@ int vmbus_sendpacket_multipagebuffer(struct vmbus_channel *channel,
 				struct hv_multipage_buffer *multi_pagebuffer,
 				void *buffer, u32 bufferlen, u64 requestid)
 {
-	int ret;
 	struct vmbus_channel_packet_multipage_buffer desc;
 	u32 descsize;
 	u32 packetlen;
 	u32 packetlen_aligned;
 	struct kvec bufferlist[3];
 	u64 aligned_data = 0;
-	bool signal = false;
+	bool lock = channel->acquire_ring_lock;
 	u32 pfncount = NUM_PAGES_SPANNED(multi_pagebuffer->offset,
 					 multi_pagebuffer->len);
 
@@ -898,12 +857,8 @@ int vmbus_sendpacket_multipagebuffer(struct vmbus_channel *channel,
 	bufferlist[2].iov_base = &aligned_data;
 	bufferlist[2].iov_len = (packetlen_aligned - packetlen);
 
-	ret = hv_ringbuffer_write(&channel->outbound, bufferlist, 3, &signal);
-
-	if (ret == 0 && signal)
-		vmbus_setevent(channel);
-
-	return ret;
+	return hv_ringbuffer_write(channel, bufferlist, 3,
+				   lock, true);
 }
 EXPORT_SYMBOL_GPL(vmbus_sendpacket_multipagebuffer);
 
@@ -925,16 +880,9 @@ __vmbus_recvpacket(struct vmbus_channel *channel, void *buffer,
 		   u32 bufferlen, u32 *buffer_actual_len, u64 *requestid,
 		   bool raw)
 {
-	int ret;
-	bool signal = false;
+	return hv_ringbuffer_read(channel, buffer, bufferlen,
+				  buffer_actual_len, requestid, raw);
 
-	ret = hv_ringbuffer_read(&channel->inbound, buffer, bufferlen,
-				 buffer_actual_len, requestid, &signal, raw);
-
-	if (signal)
-		vmbus_setevent(channel);
-
-	return ret;
 }
 
 int vmbus_recvpacket(struct vmbus_channel *channel, void *buffer,

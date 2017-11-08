@@ -631,7 +631,7 @@ static void cache_limit_defers(void)
 
 	/* Consider removing either the first or the last */
 	if (cache_defer_cnt > DFR_MAX) {
-		if (net_random() & 1)
+		if (prandom_u32() & 1)
 			discard = list_entry(cache_defer_list.next,
 					     struct cache_deferred_req, recent);
 		else
@@ -1244,7 +1244,7 @@ int qword_get(char **bpp, char *dest, int bufsize)
 	if (bp[0] == '\\' && bp[1] == 'x') {
 		/* HEX STRING */
 		bp += 2;
-		while (len < bufsize) {
+		while (len < bufsize - 1) {
 			int h, l;
 
 			h = hex_to_bin(bp[0]);

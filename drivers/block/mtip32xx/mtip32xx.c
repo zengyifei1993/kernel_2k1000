@@ -176,7 +176,7 @@ static struct mtip_cmd *mtip_get_int_command(struct driver_data *dd)
 	if (mtip_check_surprise_removal(dd->pdev))
 		return NULL;
 
-	rq = blk_mq_alloc_request(dd->queue, 0, __GFP_WAIT, true);
+	rq = blk_mq_alloc_request(dd->queue, 0, BLK_MQ_REQ_RESERVED);
 	if (IS_ERR(rq))
 		return NULL;
 
@@ -2035,23 +2035,19 @@ static int exec_drive_taskfile(struct driver_data *dd,
 	taskout = req_task->out_size;
 	taskin = req_task->in_size;
 	/* 130560 = 512 * 0xFF*/
-	if (taskin > 130560 || taskout > 130560) {
-		err = -EINVAL;
-		goto abort;
-	}
+	if (taskin > 130560 || taskout > 130560)
+		return -EINVAL;
 
 	if (taskout) {
 		outbuf = memdup_user(buf + outtotal, taskout);
-		if (IS_ERR(outbuf)) {
-			err = PTR_ERR(outbuf);
-			outbuf = NULL;
-			goto abort;
-		}
+		if (IS_ERR(outbuf))
+			return PTR_ERR(outbuf);
+
 		outbuf_dma = pci_map_single(dd->pdev,
 					 outbuf,
 					 taskout,
 					 DMA_TO_DEVICE);
-		if (outbuf_dma == 0) {
+		if (pci_dma_mapping_error(dd->pdev, outbuf_dma)) {
 			err = -ENOMEM;
 			goto abort;
 		}
@@ -2068,7 +2064,7 @@ static int exec_drive_taskfile(struct driver_data *dd,
 		inbuf_dma = pci_map_single(dd->pdev,
 					 inbuf,
 					 taskin, DMA_FROM_DEVICE);
-		if (inbuf_dma == 0) {
+		if (pci_dma_mapping_error(dd->pdev, inbuf_dma)) {
 			err = -ENOMEM;
 			goto abort;
 		}
@@ -3000,14 +2996,14 @@ restart_eh:
 					"Completion workers still active!");
 
 			spin_lock(dd->queue->queue_lock);
-			blk_mq_all_tag_busy_iter(*dd->tags.tags,
+			blk_mq_tagset_busy_iter(&dd->tags,
 							mtip_queue_cmd, dd);
 			spin_unlock(dd->queue->queue_lock);
 
 			set_bit(MTIP_PF_ISSUE_CMDS_BIT, &dd->port->flags);
 
 			if (mtip_device_reset(dd))
-				blk_mq_all_tag_busy_iter(*dd->tags.tags,
+				blk_mq_tagset_busy_iter(&dd->tags,
 							mtip_abort_cmd, dd);
 
 			clear_bit(MTIP_PF_TO_ACTIVE_BIT, &dd->port->flags);
@@ -3686,7 +3682,7 @@ static int mtip_block_open(struct block_device *dev, fmode_t mode)
 	return -ENODEV;
 }
 
-void mtip_block_release(struct gendisk *disk, fmode_t mode)
+static void mtip_block_release(struct gendisk *disk, fmode_t mode)
 {
 }
 
@@ -3939,8 +3935,10 @@ static int mtip_block_initialize(struct driver_data *dd)
 
 	/* Generate the disk name, implemented same as in sd.c */
 	do {
-		if (!ida_pre_get(&rssd_index_ida, GFP_KERNEL))
+		if (!ida_pre_get(&rssd_index_ida, GFP_KERNEL)) {
+			rv = -ENOMEM;
 			goto ida_get_error;
+		}
 
 		spin_lock(&rssd_index_lock);
 		rv = ida_get_new(&rssd_index_ida, &index);
@@ -4173,9 +4171,9 @@ static int mtip_block_remove(struct driver_data *dd)
 		dev_info(&dd->pdev->dev, "device %s surprise removal\n",
 						dd->disk->disk_name);
 
-	blk_mq_freeze_queue_start(dd->queue);
+	blk_freeze_queue_start(dd->queue);
 	blk_mq_stop_hw_queues(dd->queue);
-	blk_mq_all_tag_busy_iter(dd->tags.tags[0], mtip_no_dev_cleanup, dd);
+	blk_mq_tagset_busy_iter(&dd->tags, mtip_no_dev_cleanup, dd);
 
 	/*
 	 * Delete our gendisk structure. This also removes the device

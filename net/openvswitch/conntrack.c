@@ -448,7 +448,6 @@ ovs_ct_find_existing(struct net *net, const struct nf_conntrack_zone *zone,
 	struct nf_conntrack_l4proto *l4proto;
 	struct nf_conntrack_tuple tuple;
 	struct nf_conntrack_tuple_hash *h;
-	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
 	unsigned int dataoff;
 	u8 protonum;
@@ -473,13 +472,8 @@ ovs_ct_find_existing(struct net *net, const struct nf_conntrack_zone *zone,
 
 	ct = nf_ct_tuplehash_to_ctrack(h);
 
-	ctinfo = ovs_ct_get_info(h);
-	if (ctinfo == IP_CT_NEW) {
-		/* This should not happen. */
-		WARN_ONCE(1, "ovs_ct_find_existing: new packet for %p\n", ct);
-	}
 	skb->nfct = &ct->ct_general;
-	skb->nfctinfo = ctinfo;
+	skb->nfctinfo = ovs_ct_get_info(h);
 	return ct;
 }
 
@@ -532,7 +526,7 @@ static int ovs_ct_nat_execute(struct sk_buff *skb, struct nf_conn *ct,
 	int hooknum, nh_off, err = NF_ACCEPT;
 
 	nh_off = skb_network_offset(skb);
-	skb_pull(skb, nh_off);
+	skb_pull_rcsum(skb, nh_off);
 
 	/* See HOOK2MANIP(). */
 	if (maniptype == NF_NAT_MANIP_SRC)
@@ -597,6 +591,7 @@ static int ovs_ct_nat_execute(struct sk_buff *skb, struct nf_conn *ct,
 	err = nf_nat_packet(ct, ctinfo, hooknum, skb);
 push:
 	skb_push(skb, nh_off);
+	skb_postpush_rcsum(skb, skb->data, nh_off);
 
 	return err;
 }
@@ -889,7 +884,7 @@ int ovs_ct_execute(struct net *net, struct sk_buff *skb,
 
 	/* The conntrack module expects to be working at L3. */
 	nh_ofs = skb_network_offset(skb);
-	skb_pull(skb, nh_ofs);
+	skb_pull_rcsum(skb, nh_ofs);
 
 	if (key->ip.frag != OVS_FRAG_TYPE_NONE) {
 		err = handle_fragments(net, key, info->zone.id, skb);
@@ -915,6 +910,7 @@ int ovs_ct_execute(struct net *net, struct sk_buff *skb,
 					&info->labels.mask);
 err:
 	skb_push(skb, nh_ofs);
+	skb_postpush_rcsum(skb, skb->data, nh_ofs);
 	if (err)
 		kfree_skb(skb);
 	return err;

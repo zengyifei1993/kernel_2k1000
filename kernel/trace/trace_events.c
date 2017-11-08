@@ -28,6 +28,7 @@
 DEFINE_MUTEX(event_mutex);
 
 LIST_HEAD(ftrace_events);
+static LIST_HEAD(ftrace_generic_fields);
 static LIST_HEAD(ftrace_common_fields);
 
 #define GFP_TRACE (GFP_KERNEL | __GFP_ZERO)
@@ -92,12 +93,16 @@ trace_find_event_field(struct ftrace_event_call *call, char *name)
 	struct ftrace_event_field *field;
 	struct list_head *head;
 
-	field = __find_event_field(&ftrace_common_fields, name);
+	head = trace_get_fields(call);
+	field = __find_event_field(head, name);
 	if (field)
 		return field;
 
-	head = trace_get_fields(call);
-	return __find_event_field(head, name);
+	field = __find_event_field(&ftrace_generic_fields, name);
+	if (field)
+		return field;
+
+	return __find_event_field(&ftrace_common_fields, name);
 }
 
 static int __trace_define_field(struct list_head *head, const char *type,
@@ -142,6 +147,13 @@ int trace_define_field(struct ftrace_event_call *call, const char *type,
 }
 EXPORT_SYMBOL_GPL(trace_define_field);
 
+#define __generic_field(type, item, filter_type)			\
+	ret = __trace_define_field(&ftrace_generic_fields, #type,	\
+				   #item, 0, 0, is_signed_type(type),	\
+				   filter_type);			\
+	if (ret)							\
+		return ret;
+
 #define __common_field(type, item)					\
 	ret = __trace_define_field(&ftrace_common_fields, #type,	\
 				   "common_" #item,			\
@@ -150,6 +162,18 @@ EXPORT_SYMBOL_GPL(trace_define_field);
 				   is_signed_type(type), FILTER_OTHER);	\
 	if (ret)							\
 		return ret;
+
+static int trace_define_generic_fields(void)
+{
+	int ret;
+
+	__generic_field(int, CPU, FILTER_CPU);
+	__generic_field(int, cpu, FILTER_CPU);
+	__generic_field(char *, COMM, FILTER_COMM);
+	__generic_field(char *, comm, FILTER_COMM);
+
+	return ret;
+}
 
 static int trace_define_common_fields(void)
 {
@@ -602,7 +626,8 @@ t_next(struct seq_file *m, void *v, loff_t *pos)
 		 * The ftrace subsystem is for showing formats only.
 		 * They can not be enabled or disabled via the event files.
 		 */
-		if (call->class && call->class->reg)
+		if (call->class && call->class->reg &&
+		    !(call->flags & TRACE_EVENT_FL_IGNORE_ENABLE))
 			return file;
 	}
 
@@ -2574,6 +2599,9 @@ static __init int event_trace_init(void)
 	if (!entry)
 		pr_warning("Could not create debugfs "
 			   "'available_events' entry\n");
+
+	if (trace_define_generic_fields())
+		pr_warn("tracing: Failed to allocated generic fields");
 
 	if (trace_define_common_fields())
 		pr_warning("tracing: Failed to allocate common fields");

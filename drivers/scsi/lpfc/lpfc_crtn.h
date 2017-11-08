@@ -1,7 +1,7 @@
 /*******************************************************************
  * This file is part of the Emulex Linux Device Driver for         *
  * Fibre Channel Host Bus Adapters.                                *
- * Copyright (C) 2004-2015 Emulex.  All rights reserved.           *
+ * Copyright (C) 2004-2016 Emulex.  All rights reserved.           *
  * EMULEX and SLI are trademarks of Emulex.                        *
  * www.emulex.com                                                  *
  *                                                                 *
@@ -360,9 +360,6 @@ extern struct scsi_host_template lpfc_template_no_hr;
 extern struct scsi_host_template lpfc_vport_template;
 extern struct fc_function_template lpfc_transport_functions;
 extern struct fc_function_template lpfc_vport_transport_functions;
-extern int lpfc_sli_mode;
-extern int lpfc_enable_npiv;
-extern int lpfc_delay_discovery;
 
 int  lpfc_vport_symbolic_node_name(struct lpfc_vport *, char *, size_t);
 int  lpfc_vport_symbolic_port_name(struct lpfc_vport *, char *,	size_t);
@@ -486,19 +483,20 @@ void lpfc_sli4_offline_eratt(struct lpfc_hba *);
 struct lpfc_device_data *lpfc_create_device_data(struct lpfc_hba *,
 						struct lpfc_name *,
 						struct lpfc_name *,
-						uint64_t, bool);
+						uint64_t, uint32_t,  bool);
 void lpfc_delete_device_data(struct lpfc_hba *, struct lpfc_device_data*);
 struct lpfc_device_data *__lpfc_get_device_data(struct lpfc_hba *,
 					struct list_head *list,
 					struct lpfc_name *,
 					struct lpfc_name *, uint64_t);
 bool lpfc_enable_oas_lun(struct lpfc_hba *, struct lpfc_name *,
-			 struct lpfc_name *, uint64_t);
+			 struct lpfc_name *, uint64_t, uint8_t);
 bool lpfc_disable_oas_lun(struct lpfc_hba *, struct lpfc_name *,
-			  struct lpfc_name *, uint64_t);
+			  struct lpfc_name *, uint64_t, uint8_t);
 bool lpfc_find_next_oas_lun(struct lpfc_hba *, struct lpfc_name *,
 			    struct lpfc_name *, uint64_t *, struct lpfc_name *,
-			    struct lpfc_name *, uint64_t *, uint32_t *);
+			    struct lpfc_name *, uint64_t *,
+			    uint32_t *, uint32_t *);
 int lpfc_sli4_dump_page_a0(struct lpfc_hba *phba, struct lpfcMboxq *mbox);
 void lpfc_mbx_cmpl_rdp_page_a0(struct lpfc_hba *phba, LPFC_MBOXQ_t *pmb);
 extern int lpfc_no_hba_reset_cnt;

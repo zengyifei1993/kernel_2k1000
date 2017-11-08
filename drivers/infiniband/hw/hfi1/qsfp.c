@@ -161,7 +161,7 @@ static struct hfi1_i2c_bus *init_i2c_bus(struct hfi1_devdata *dd,
 	bus->algo.getsda = hfi1_getsda;
 	bus->algo.getscl = hfi1_getscl;
 	bus->algo.udelay = 5;
-	bus->algo.timeout = usecs_to_jiffies(50);
+	bus->algo.timeout = usecs_to_jiffies(100000);
 	bus->algo.data = bus;
 
 	bus->adapter.owner = THIS_MODULE;
@@ -446,7 +446,7 @@ int qsfp_write(struct hfi1_pportdata *ppd, u32 target, int addr, void *bp,
 
 /*
  * Perform a stand-alone single QSFP write.  Acquire the resource, do the
- * read, then release the resource.
+ * write, then release the resource.
  */
 int one_qsfp_write(struct hfi1_pportdata *ppd, u32 target, int addr, void *bp,
 		   int len)
@@ -706,8 +706,8 @@ int get_cable_info(struct hfi1_devdata *dd, u32 port_num, u32 addr, u32 len,
 		   u8 *data)
 {
 	struct hfi1_pportdata *ppd;
-	u32 excess_len = 0;
-	int ret = 0;
+	u32 excess_len = len;
+	int ret = 0, offset = 0;
 
 	if (port_num > dd->num_pports || port_num < 1) {
 		dd_dev_info(dd, "%s: Invalid port number %d\n",
@@ -740,6 +740,34 @@ int get_cable_info(struct hfi1_devdata *dd, u32 port_num, u32 addr, u32 len,
 	}
 
 	memcpy(data, &ppd->qsfp_info.cache[addr], len);
+
+	if (addr <= QSFP_MONITOR_VAL_END &&
+	    (addr + len) >= QSFP_MONITOR_VAL_START) {
+		/* Overlap with the dynamic channel monitor range */
+		if (addr < QSFP_MONITOR_VAL_START) {
+			if (addr + len <= QSFP_MONITOR_VAL_END)
+				len = addr + len - QSFP_MONITOR_VAL_START;
+			else
+				len = QSFP_MONITOR_RANGE;
+			offset = QSFP_MONITOR_VAL_START - addr;
+			addr = QSFP_MONITOR_VAL_START;
+		} else if (addr == QSFP_MONITOR_VAL_START) {
+			offset = 0;
+			if (addr + len > QSFP_MONITOR_VAL_END)
+				len = QSFP_MONITOR_RANGE;
+		} else {
+			offset = 0;
+			if (addr + len > QSFP_MONITOR_VAL_END)
+				len = QSFP_MONITOR_VAL_END - addr + 1;
+		}
+		/* Refresh the values of the dynamic monitors from the cable */
+		ret = one_qsfp_read(ppd, dd->hfi1_id, addr, data + offset, len);
+		if (ret != len) {
+			ret = -EAGAIN;
+			goto set_zeroes;
+		}
+	}
+
 	return 0;
 
 set_zeroes:
@@ -774,7 +802,8 @@ int qsfp_dump(struct hfi1_pportdata *ppd, char *buf, int len)
 
 	if (ppd->qsfp_info.cache_valid) {
 		if (QSFP_IS_CU(cache[QSFP_MOD_TECH_OFFS]))
-			sprintf(lenstr, "%dM ", cache[QSFP_MOD_LEN_OFFS]);
+			snprintf(lenstr, sizeof(lenstr), "%dM ",
+				 cache[QSFP_MOD_LEN_OFFS]);
 
 		power_byte = cache[QSFP_MOD_PWR_OFFS];
 		sofar += scnprintf(buf + sofar, len - sofar, "PWR:%.3sW\n",

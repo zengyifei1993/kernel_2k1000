@@ -62,19 +62,6 @@ static void pci_fixup_umc_ide(struct pci_dev *d)
 }
 DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_UMC, PCI_DEVICE_ID_UMC_UM8886BF, pci_fixup_umc_ide);
 
-static void pci_fixup_ncr53c810(struct pci_dev *d)
-{
-	/*
-	 * NCR 53C810 returns class code 0 (at least on some systems).
-	 * Fix class to be PCI_CLASS_STORAGE_SCSI
-	 */
-	if (!d->class) {
-		dev_warn(&d->dev, "Fixing NCR 53C810 class code\n");
-		d->class = PCI_CLASS_STORAGE_SCSI << 8;
-	}
-}
-DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_NCR, PCI_DEVICE_ID_NCR_53C810, pci_fixup_ncr53c810);
-
 static void pci_fixup_latency(struct pci_dev *d)
 {
 	/*
@@ -556,15 +543,21 @@ static void twinhead_reserve_killing_zone(struct pci_dev *dev)
 DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, 0x27B9, twinhead_reserve_killing_zone);
 
 /*
- * Broadwell EP Home Agent BARs erroneously return non-zero values when read.
+ * Device [8086:2fc0]
+ * Erratum HSE43
+ * CONFIG_TDP_NOMINAL CSR Implemented at Incorrect Offset
+ * http://www.intel.com/content/www/us/en/processors/xeon/xeon-e5-v3-spec-update.html
  *
- * See http://www.intel.com/content/www/us/en/processors/xeon/xeon-e5-v4-spec-update.html
- * entry BDF2.
+ * Devices [8086:6f60,6fa0,6fc0]
+ * Erratum BDF2
+ * PCI BARs in the Home Agent Will Return Non-Zero Values During Enumeration
+ * http://www.intel.com/content/www/us/en/processors/xeon/xeon-e5-v4-spec-update.html
  */
-static void pci_bdwep_bar(struct pci_dev *dev)
+static void pci_invalid_bar(struct pci_dev *dev)
 {
 	dev->non_compliant_bars = 1;
 }
-DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x6f60, pci_bdwep_bar);
-DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x6fa0, pci_bdwep_bar);
-DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x6fc0, pci_bdwep_bar);
+DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x2fc0, pci_invalid_bar);
+DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x6f60, pci_invalid_bar);
+DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x6fa0, pci_invalid_bar);
+DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x6fc0, pci_invalid_bar);

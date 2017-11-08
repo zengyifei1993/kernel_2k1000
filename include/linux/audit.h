@@ -118,7 +118,7 @@ extern void __audit_getname(struct filename *name);
 #define AUDIT_INODE_HIDDEN	2	/* audit record should be hidden */
 extern void __audit_inode(struct filename *name, const struct dentry *dentry,
 				unsigned int flags);
-extern void __audit_inode_child(const struct inode *parent,
+extern void __audit_inode_child(struct inode *parent,
 				const struct dentry *dentry,
 				const unsigned char type);
 extern void __audit_seccomp(unsigned long syscall, long signr, int code);
@@ -178,7 +178,7 @@ static inline void audit_inode_parent_hidden(struct filename *name,
 		__audit_inode(name, dentry,
 				AUDIT_INODE_PARENT | AUDIT_INODE_HIDDEN);
 }
-static inline void audit_inode_child(const struct inode *parent,
+static inline void audit_inode_child(struct inode *parent,
 				     const struct dentry *dentry,
 				     const unsigned char type) {
 	if (unlikely(!audit_dummy_context()))
@@ -228,8 +228,9 @@ extern void __audit_mq_getsetattr(mqd_t mqdes, struct mq_attr *mqstat);
 extern int __audit_log_bprm_fcaps(struct linux_binprm *bprm,
 				  const struct cred *new,
 				  const struct cred *old);
-extern void __audit_log_capset(pid_t pid, const struct cred *new, const struct cred *old);
+extern void __audit_log_capset(const struct cred *new, const struct cred *old);
 extern void __audit_mmap_fd(int fd, int flags);
+extern void __audit_log_kern_module(char *name);
 
 static inline void audit_ipc_obj(struct kern_ipc_perm *ipcp)
 {
@@ -257,6 +258,20 @@ static inline int audit_socketcall(int nargs, unsigned long *args)
 		return __audit_socketcall(nargs, args);
 	return 0;
 }
+
+static inline int audit_socketcall_compat(int nargs, u32 *args)
+{
+	unsigned long a[AUDITSC_ARGS];
+	int i;
+
+	if (audit_dummy_context())
+		return 0;
+
+	for (i = 0; i < nargs; i++)
+		a[i] = (unsigned long)args[i];
+	return __audit_socketcall(nargs, a);
+}
+
 static inline int audit_sockaddr(int len, void *addr)
 {
 	if (unlikely(!audit_dummy_context()))
@@ -293,17 +308,23 @@ static inline int audit_log_bprm_fcaps(struct linux_binprm *bprm,
 	return 0;
 }
 
-static inline void audit_log_capset(pid_t pid, const struct cred *new,
+static inline void audit_log_capset(const struct cred *new,
 				   const struct cred *old)
 {
 	if (unlikely(!audit_dummy_context()))
-		__audit_log_capset(pid, new, old);
+		__audit_log_capset(new, old);
 }
 
 static inline void audit_mmap_fd(int fd, int flags)
 {
 	if (unlikely(!audit_dummy_context()))
 		__audit_mmap_fd(fd, flags);
+}
+
+static inline void audit_log_kern_module(char *name)
+{
+	if (!audit_dummy_context())
+		__audit_log_kern_module(name);
 }
 
 extern int audit_n_rules;
@@ -335,7 +356,7 @@ static inline void __audit_inode(struct filename *name,
 					const struct dentry *dentry,
 					unsigned int flags)
 { }
-static inline void __audit_inode_child(const struct inode *parent,
+static inline void __audit_inode_child(struct inode *parent,
 					const struct dentry *dentry,
 					const unsigned char type)
 { }
@@ -346,7 +367,7 @@ static inline void audit_inode(struct filename *name,
 static inline void audit_inode_parent_hidden(struct filename *name,
 				const struct dentry *dentry)
 { }
-static inline void audit_inode_child(const struct inode *parent,
+static inline void audit_inode_child(struct inode *parent,
 				     const struct dentry *dentry,
 				     const unsigned char type)
 { }
@@ -380,6 +401,12 @@ static inline int audit_socketcall(int nargs, unsigned long *args)
 {
 	return 0;
 }
+
+static inline int audit_socketcall_compat(int nargs, u32 *args)
+{
+	return 0;
+}
+
 static inline void audit_fd_pair(int fd1, int fd2)
 { }
 static inline int audit_sockaddr(int len, void *addr)
@@ -403,11 +430,16 @@ static inline int audit_log_bprm_fcaps(struct linux_binprm *bprm,
 {
 	return 0;
 }
-static inline void audit_log_capset(pid_t pid, const struct cred *new,
-				   const struct cred *old)
+static inline void audit_log_capset(const struct cred *new,
+				    const struct cred *old)
 { }
 static inline void audit_mmap_fd(int fd, int flags)
 { }
+
+static inline void audit_log_kern_module(char *name)
+{
+}
+
 static inline void audit_ptrace(struct task_struct *t)
 { }
 #define audit_n_rules 0
@@ -465,8 +497,6 @@ extern void audit_log_task_info(struct audit_buffer *ab,
 extern int		    audit_update_lsm_rules(void);
 
 				/* Private API (for audit.c only) */
-extern int audit_filter_user(int type);
-extern int audit_filter_type(int type);
 extern int audit_rule_change(int type, __u32 portid, int seq,
 				void *data, size_t datasz);
 extern int audit_list_rules_send(__u32 portid, int seq);

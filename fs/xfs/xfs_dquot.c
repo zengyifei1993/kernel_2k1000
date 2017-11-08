@@ -74,6 +74,7 @@ xfs_qm_dqdestroy(
 {
 	ASSERT(list_empty(&dqp->q_lru));
 
+	kmem_free(dqp->q_logitem.qli_item.li_lv_shadow);
 	mutex_destroy(&dqp->q_qlock);
 
 	XFS_STATS_DEC(dqp->q_mount, xs_qm_dquot);
@@ -614,11 +615,10 @@ xfs_qm_dqread(
 	trace_xfs_dqread(dqp);
 
 	if (flags & XFS_QMOPT_DQALLOC) {
-		tp = xfs_trans_alloc(mp, XFS_TRANS_QM_DQALLOC);
-		error = xfs_trans_reserve(tp, &M_RES(mp)->tr_qm_dqalloc,
-					  XFS_QM_DQALLOC_SPACE_RES(mp), 0);
+		error = xfs_trans_alloc(mp, &M_RES(mp)->tr_qm_dqalloc,
+				XFS_QM_DQALLOC_SPACE_RES(mp), 0, 0, &tp);
 		if (error)
-			goto error1;
+			goto error0;
 	}
 
 	/*
@@ -692,7 +692,7 @@ error0:
  * end of the chunk, skip ahead to first id in next allocated chunk
  * using the SEEK_DATA interface.
  */
-int
+static int
 xfs_dq_get_next_id(
 	xfs_mount_t		*mp,
 	uint			type,

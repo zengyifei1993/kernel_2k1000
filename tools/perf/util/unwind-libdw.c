@@ -38,6 +38,14 @@ static int __report_module(struct addr_location *al, u64 ip,
 		return 0;
 
 	mod = dwfl_addrmodule(ui->dwfl, ip);
+	if (mod) {
+		Dwarf_Addr s;
+
+		dwfl_module_info(mod, NULL, &s, NULL, NULL, NULL, NULL, NULL);
+		if (s != al->map->start)
+			mod = 0;
+	}
+
 	if (!mod)
 		mod = dwfl_report_elf(ui->dwfl, dso->short_name,
 				      dso->long_name, -1, al->map->start,
@@ -66,7 +74,7 @@ static int entry(u64 ip, struct unwind_info *ui)
 	if (__report_module(&al, ip, ui))
 		return -1;
 
-	e->ip  = ip;
+	e->ip  = al.addr;
 	e->map = al.map;
 	e->sym = al.sym;
 
@@ -219,7 +227,7 @@ int unwind__get_entries(unwind_entry_cb_t cb, void *arg,
 
 	err = dwfl_getthread_frames(ui->dwfl, thread->tid, frame_callback, ui);
 
-	if (err && !ui->max_stack)
+	if (err && ui->max_stack != max_stack)
 		err = 0;
 
 	/*

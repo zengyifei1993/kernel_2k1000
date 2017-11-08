@@ -74,7 +74,7 @@ static inline unsigned __read_seqcount_begin(const seqcount_t *s)
 	unsigned ret;
 
 repeat:
-	ret = ACCESS_ONCE(s->sequence);
+	ret = READ_ONCE(s->sequence);
 	if (unlikely(ret & 1)) {
 		cpu_relax();
 		goto repeat;
@@ -93,7 +93,7 @@ repeat:
  */
 static inline unsigned raw_read_seqcount(const seqcount_t *s)
 {
-	unsigned ret = ACCESS_ONCE(s->sequence);
+	unsigned ret = READ_ONCE(s->sequence);
 	smp_rmb();
 	return ret;
 }
@@ -130,7 +130,7 @@ static inline unsigned read_seqcount_begin(const seqcount_t *s)
  */
 static inline unsigned raw_seqcount_begin(const seqcount_t *s)
 {
-	unsigned ret = ACCESS_ONCE(s->sequence);
+	unsigned ret = READ_ONCE(s->sequence);
 	smp_rmb();
 	return ret & ~1;
 }
@@ -170,6 +170,17 @@ static inline int read_seqcount_retry(const seqcount_t *s, unsigned start)
 	return __read_seqcount_retry(s, start);
 }
 
+
+/*
+ * raw_write_seqcount_latch - redirect readers to even/odd copy
+ * @s: pointer to seqcount_t
+ */
+static inline void raw_write_seqcount_latch(seqcount_t *s)
+{
+       smp_wmb();      /* prior stores before incrementing "sequence" */
+       s->sequence++;
+       smp_wmb();      /* increment "sequence" before following stores */
+}
 
 /*
  * Sequence counter only version assumes that callers are using their

@@ -216,7 +216,8 @@
 #define  PCI_CAP_ID_MSIX	0x11	/* MSI-X */
 #define  PCI_CAP_ID_SATA	0x12	/* SATA Data/Index Conf. */
 #define  PCI_CAP_ID_AF		0x13	/* PCI Advanced Features */
-#define  PCI_CAP_ID_MAX		PCI_CAP_ID_AF
+#define  PCI_CAP_ID_EA		0x14	/* PCI Enhanced Allocation */
+#define  PCI_CAP_ID_MAX		PCI_CAP_ID_EA
 #define PCI_CAP_LIST_NEXT	1	/* Next capability in the list */
 #define PCI_CAP_FLAGS		2	/* Capability defined flags (16 bits) */
 #define PCI_CAP_SIZEOF		4
@@ -352,6 +353,46 @@
 #define PCI_AF_STATUS		5
 #define  PCI_AF_STATUS_TP	0x01
 #define PCI_CAP_AF_SIZEOF	6	/* size of AF registers */
+
+/* PCI Enhanced Allocation registers */
+
+#define PCI_EA_NUM_ENT		2	/* Number of Capability Entries */
+#define  PCI_EA_NUM_ENT_MASK	0x3f	/* Num Entries Mask */
+#define PCI_EA_FIRST_ENT	4	/* First EA Entry in List */
+#define PCI_EA_FIRST_ENT_BRIDGE	8	/* First EA Entry for Bridges */
+#define  PCI_EA_ES		0x00000007 /* Entry Size */
+#define  PCI_EA_BEI		0x000000f0 /* BAR Equivalent Indicator */
+/* 0-5 map to BARs 0-5 respectively */
+#define   PCI_EA_BEI_BAR0		0
+#define   PCI_EA_BEI_BAR5		5
+#define   PCI_EA_BEI_BRIDGE		6	/* Resource behind bridge */
+#define   PCI_EA_BEI_ENI		7	/* Equivalent Not Indicated */
+#define   PCI_EA_BEI_ROM		8	/* Expansion ROM */
+/* 9-14 map to VF BARs 0-5 respectively */
+#define   PCI_EA_BEI_VF_BAR0		9
+#define   PCI_EA_BEI_VF_BAR5		14
+#define   PCI_EA_BEI_RESERVED		15	/* Reserved - Treat like ENI */
+#define  PCI_EA_PP		0x0000ff00	/* Primary Properties */
+#define  PCI_EA_SP		0x00ff0000	/* Secondary Properties */
+#define   PCI_EA_P_MEM			0x00	/* Non-Prefetch Memory */
+#define   PCI_EA_P_MEM_PREFETCH		0x01	/* Prefetchable Memory */
+#define   PCI_EA_P_IO			0x02	/* I/O Space */
+#define   PCI_EA_P_VF_MEM_PREFETCH	0x03	/* VF Prefetchable Memory */
+#define   PCI_EA_P_VF_MEM		0x04	/* VF Non-Prefetch Memory */
+#define   PCI_EA_P_BRIDGE_MEM		0x05	/* Bridge Non-Prefetch Memory */
+#define   PCI_EA_P_BRIDGE_MEM_PREFETCH	0x06	/* Bridge Prefetchable Memory */
+#define   PCI_EA_P_BRIDGE_IO		0x07	/* Bridge I/O Space */
+/* 0x08-0xfc reserved */
+#define   PCI_EA_P_MEM_RESERVED		0xfd	/* Reserved Memory */
+#define   PCI_EA_P_IO_RESERVED		0xfe	/* Reserved I/O Space */
+#define   PCI_EA_P_UNAVAILABLE		0xff	/* Entry Unavailable */
+#define  PCI_EA_WRITABLE	0x40000000	/* Writable: 1 = RW, 0 = HwInit */
+#define  PCI_EA_ENABLE		0x80000000	/* Enable for this entry */
+#define PCI_EA_BASE		4		/* Base Address Offset */
+#define PCI_EA_MAX_OFFSET	8		/* MaxOffset (resource length) */
+/* bit 0 is reserved */
+#define  PCI_EA_IS_64		0x00000002	/* 64-bit field flag */
+#define  PCI_EA_FIELD_MASK	0xfffffffc	/* For Base & Max Offset */
 
 /* PCI-X registers (Type 0 (non-bridge) devices) */
 
@@ -571,6 +612,8 @@
  */
 #define PCI_EXP_DEVCAP2		36	/* Device Capabilities 2 */
 #define  PCI_EXP_DEVCAP2_ARI		0x00000020 /* Alternative Routing-ID */
+#define  PCI_EXP_DEVCAP2_ATOMIC_ROUTE	0x00000040 /* Atomic Op routing */
+#define PCI_EXP_DEVCAP2_ATOMIC_COMP64	0x00000100 /* Atomic 64-bit compare */
 #define  PCI_EXP_DEVCAP2_LTR		0x00000800 /* Latency tolerance reporting */
 #define  PCI_EXP_DEVCAP2_OBFF_MASK	0x000c0000 /* OBFF support mechanism */
 #define  PCI_EXP_DEVCAP2_OBFF_MSG	0x00040000 /* New message signaling */
@@ -578,6 +621,7 @@
 #define PCI_EXP_DEVCTL2		40	/* Device Control 2 */
 #define  PCI_EXP_DEVCTL2_COMP_TIMEOUT	0x000f	/* Completion Timeout Value */
 #define  PCI_EXP_DEVCTL2_ARI		0x0020	/* Alternative Routing-ID */
+#define PCI_EXP_DEVCTL2_ATOMIC_REQ	0x0040	/* Set Atomic requests */
 #define  PCI_EXP_DEVCTL2_IDO_REQ_EN	0x0100	/* Allow IDO for requests */
 #define  PCI_EXP_DEVCTL2_IDO_CMP_EN	0x0200	/* Allow IDO for completions */
 #define  PCI_EXP_DEVCTL2_LTR_EN		0x0400	/* Enable LTR mechanism */

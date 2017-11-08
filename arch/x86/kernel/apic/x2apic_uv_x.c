@@ -44,6 +44,7 @@ DEFINE_PER_CPU(int, x2apic_extra_bits);
 #define PR_DEVEL(fmt, args...)	pr_devel("%s: " fmt, __func__, args)
 
 static enum uv_system_type uv_system_type;
+static bool uv_hubless_system;
 static u64 gru_start_paddr, gru_end_paddr;
 static u64 gru_dist_base, gru_first_node_paddr = -1LL, gru_last_node_paddr;
 static u64 gru_dist_lmask, gru_dist_umask;
@@ -56,6 +57,7 @@ static struct {
 	unsigned int socketid_shift;	/* aka pnode_shift for UV1/2/3 */
 	unsigned int pnode_mask;
 	unsigned int gpa_shift;
+	unsigned int gnode_shift;
 } uv_cpuid;
 
 int uv_min_hub_revision_id;
@@ -133,6 +135,7 @@ static int __init early_get_pnodeid(void)
 		break;
 	case UV4_HUB_PART_NUMBER:
 		uv_min_hub_revision_id += UV4_HUB_REVISION_BASE - 1;
+		uv_cpuid.gnode_shift = 2; /* min partition is 4 sockets */
 		break;
 	}
 
@@ -220,8 +223,14 @@ static int __init uv_acpi_madt_oem_check(char *oem_id, char *oem_table_id)
 	int pnodeid;
 	int uv_apic;
 
-	if (strncmp(oem_id, "SGI", 3) != 0)
+	if (strncmp(oem_id, "SGI", 3) != 0) {
+		if (strncmp(oem_id, "NSGI", 4) == 0) {
+			uv_hubless_system = true;
+			pr_info("UV: OEM IDs %s/%s, HUBLESS\n",
+				oem_id, oem_table_id);
+		}
 		return 0;
+	}
 
 	if (numa_off) {
 		pr_err("UV: NUMA is off, disabling UV support\n");
@@ -293,6 +302,12 @@ int is_uv_system(void)
 	return uv_system_type != UV_NONE;
 }
 EXPORT_SYMBOL_GPL(is_uv_system);
+
+int is_uv_hubless(void)
+{
+	return uv_hubless_system;
+}
+EXPORT_SYMBOL_GPL(is_uv_hubless);
 
 void **__uv_hub_info_list;
 EXPORT_SYMBOL_GPL(__uv_hub_info_list);
@@ -1107,11 +1122,13 @@ void __init uv_init_hub_info(struct uv_hub_info_s *hub_info)
 		(1UL << uv_cpuid.gpa_shift) - 1;
 
 	node_id.v = uv_read_local_mmr(UVH_NODE_ID);
+	uv_cpuid.gnode_shift = max_t(unsigned int,
+					uv_cpuid.gnode_shift, mn.n_val);
 	hub_info->gnode_extra =
-		(node_id.s.node_id & ~((1 << mn.n_val) - 1)) >> 1;
+		(node_id.s.node_id & ~((1 << uv_cpuid.gnode_shift) - 1)) >> 1;
 
-	hub_info->gnode_upper =
-		((unsigned long)hub_info->gnode_extra << mn.m_val);
+	if (mn.m_val)
+		hub_info->gnode_upper = (u64)hub_info->gnode_extra << mn.m_val;
 
 	if (uv_gp_table) {
 		hub_info->global_mmr_base = uv_gp_table->mmr_base;
@@ -1205,19 +1222,25 @@ static void __init decode_gam_rng_tbl(unsigned long ptr)
 		index, _min_socket, _max_socket, _min_pnode, _max_pnode);
 }
 
-static void __init decode_uv_systab(void)
+static int __init decode_uv_systab(void)
 {
 	struct uv_systab *st;
 	int i;
 
+	if (uv_hub_info->hub_revision < UV4_HUB_REVISION_BASE)
+		return 0;	/* No extended UVsystab required */
+
 	st = uv_systab;
-	if ((!st || st->revision < UV_SYSTAB_VERSION_UV4) && !is_uv4_hub())
-		return;
-	if (st->revision != UV_SYSTAB_VERSION_UV4_LATEST) {
-		pr_crit(
+	if ((!st) || (st->revision < UV_SYSTAB_VERSION_UV4_LATEST)) {
+		int rev = st ? st->revision : 0;
+
+		pr_err(
 		"UV: BIOS UVsystab version(%x) mismatch, expecting(%x)\n",
-			st->revision, UV_SYSTAB_VERSION_UV4_LATEST);
-		BUG();
+			rev, UV_SYSTAB_VERSION_UV4_LATEST);
+		pr_err(
+		"UV: Cannot support UV operations, switching to generic PC\n");
+		uv_system_type = UV_NONE;
+		return -EINVAL;
 	}
 
 	for (i = 0; st->entry[i].type != UV_SYSTAB_TYPE_UNUSED; i++) {
@@ -1238,6 +1261,7 @@ static void __init decode_uv_systab(void)
 			break;
 		}
 	}
+	return 0;
 }
 
 /*
@@ -1387,7 +1411,7 @@ static void __init build_socket_tables(void)
 	}
 }
 
-void __init uv_system_init(void)
+static void __init uv_system_init_hub(void)
 {
 	struct uv_hub_info_s hub_info = {0};
 	int bytes, cpu, nodeid;
@@ -1405,7 +1429,8 @@ void __init uv_system_init(void)
 	map_low_mmrs();
 
 	uv_bios_init();			/* get uv_systab for decoding */
-	decode_uv_systab();
+	if (decode_uv_systab() < 0)
+		return;			/* UVsystab problem, abort UV init */
 	build_socket_tables();
 	build_uv_gr_table();
 	uv_init_hub_info(&hub_info);
@@ -1520,6 +1545,21 @@ void __init uv_system_init(void)
 	 */
 	if (is_kdump_kernel())
 		reboot_type = BOOT_ACPI;
+}
+
+/*
+ * There is a small amount of UV specific code needed to initialize a
+ * UV system that does not have a "UV HUB" (referred to as "hubless").
+ */
+void __init uv_system_init(void)
+{
+	if (likely(!is_uv_system() && !is_uv_hubless()))
+		return;
+
+	if (is_uv_system())
+		uv_system_init_hub();
+	else
+		uv_nmi_setup_hubless();
 }
 
 apic_driver(apic_x2apic_uv_x);

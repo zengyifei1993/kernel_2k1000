@@ -23,7 +23,7 @@ struct map_lookup;
 struct extent_buffer;
 struct btrfs_work;
 struct __btrfs_workqueue;
-struct btrfs_qgroup_operation;
+struct btrfs_qgroup_extent_record;
 
 #define show_ref_type(type)						\
 	__print_symbolic(type,						\
@@ -45,7 +45,8 @@ struct btrfs_qgroup_operation;
 		{ BTRFS_TREE_LOG_OBJECTID,	"TREE_LOG"	},	\
 		{ BTRFS_QUOTA_TREE_OBJECTID,	"QUOTA_TREE"	},	\
 		{ BTRFS_TREE_RELOC_OBJECTID,	"TREE_RELOC"	},	\
-		{ BTRFS_UUID_TREE_OBJECTID,	"UUID_RELOC"	},	\
+		{ BTRFS_UUID_TREE_OBJECTID,	"UUID_TREE"	},	\
+		{ BTRFS_FREE_SPACE_TREE_OBJECTID, "FREE_SPACE_TREE" },	\
 		{ BTRFS_DATA_RELOC_TREE_OBJECTID, "DATA_RELOC_TREE" })
 
 #define show_root_type(obj)						\
@@ -437,6 +438,46 @@ TRACE_EVENT(btrfs_sync_fs,
 	TP_printk("wait = %d", __entry->wait)
 );
 
+TRACE_EVENT(btrfs_add_block_group,
+
+	TP_PROTO(struct btrfs_fs_info *fs_info,
+		 struct btrfs_block_group_cache *block_group, int create),
+
+	TP_ARGS(fs_info, block_group, create),
+
+	TP_STRUCT__entry(
+		__array(	u8,	fsid,	BTRFS_UUID_SIZE	)
+		__field(	u64,	offset			)
+		__field(	u64,	size			)
+		__field(	u64,	flags			)
+		__field(	u64,	bytes_used		)
+		__field(	u64,	bytes_super		)
+		__field(	int,	create			)
+	),
+
+	TP_fast_assign(
+		memcpy(__entry->fsid, fs_info->fsid, BTRFS_UUID_SIZE);
+		__entry->offset		= block_group->key.objectid;
+		__entry->size		= block_group->key.offset;
+		__entry->flags		= block_group->flags;
+		__entry->bytes_used	=
+			btrfs_block_group_used(&block_group->item);
+		__entry->bytes_super	= block_group->bytes_super;
+		__entry->create		= create;
+	),
+
+	TP_printk("%pU: block_group offset = %llu, size = %llu, "
+		  "flags = %llu(%s), bytes_used = %llu, bytes_super = %llu, "
+		  "create = %d", __entry->fsid,
+		  (unsigned long long)__entry->offset,
+		  (unsigned long long)__entry->size,
+		  (unsigned long long)__entry->flags,
+		  __print_flags((unsigned long)__entry->flags, "|",
+				BTRFS_GROUP_FLAGS),
+		  (unsigned long long)__entry->bytes_used,
+		  (unsigned long long)__entry->bytes_super, __entry->create)
+);
+
 #define show_ref_action(action)						\
 	__print_symbolic(action,					\
 		{ BTRFS_ADD_DELAYED_REF,    "ADD_DELAYED_REF" },	\
@@ -739,6 +780,88 @@ TRACE_EVENT(btrfs_space_reservation,
 	TP_printk("%pU: %s: %Lu %s %Lu", __entry->fsid, __get_str(type),
 		  __entry->val, __entry->reserve ? "reserve" : "release",
 		  __entry->bytes)
+);
+
+#define show_flush_action(action)						\
+	__print_symbolic(action,						\
+		{ BTRFS_RESERVE_NO_FLUSH,	"BTRFS_RESERVE_NO_FLUSH"},	\
+		{ BTRFS_RESERVE_FLUSH_LIMIT,	"BTRFS_RESERVE_FLUSH_LIMIT"},	\
+		{ BTRFS_RESERVE_FLUSH_ALL,	"BTRFS_RESERVE_FLUSH_ALL"})
+
+TRACE_EVENT(btrfs_trigger_flush,
+
+	TP_PROTO(struct btrfs_fs_info *fs_info, u64 flags, u64 bytes,
+		 int flush, char *reason),
+
+	TP_ARGS(fs_info, flags, bytes, flush, reason),
+
+	TP_STRUCT__entry(
+		__array(	u8,	fsid,	BTRFS_UUID_SIZE	)
+		__field(	u64,	flags			)
+		__field(	u64,	bytes			)
+		__field(	int,	flush			)
+		__string(	reason,	reason			)
+	),
+
+	TP_fast_assign(
+		memcpy(__entry->fsid, fs_info->fsid, BTRFS_UUID_SIZE);
+		__entry->flags	= flags;
+		__entry->bytes	= bytes;
+		__entry->flush	= flush;
+		__assign_str(reason, reason)
+	),
+
+	TP_printk("%pU: %s: flush = %d(%s), flags = %llu(%s), bytes = %llu",
+		  __entry->fsid, __get_str(reason), __entry->flush,
+		  show_flush_action(__entry->flush),
+		  (unsigned long long)__entry->flags,
+		  __print_flags((unsigned long)__entry->flags, "|",
+				BTRFS_GROUP_FLAGS),
+		  (unsigned long long)__entry->bytes)
+);
+
+#define show_flush_state(state)							\
+	__print_symbolic(state,							\
+		{ FLUSH_DELAYED_ITEMS_NR,	"FLUSH_DELAYED_ITEMS_NR"},	\
+		{ FLUSH_DELAYED_ITEMS,		"FLUSH_DELAYED_ITEMS"},		\
+		{ FLUSH_DELALLOC,		"FLUSH_DELALLOC"},		\
+		{ FLUSH_DELALLOC_WAIT,		"FLUSH_DELALLOC_WAIT"},		\
+		{ ALLOC_CHUNK,			"ALLOC_CHUNK"},			\
+		{ COMMIT_TRANS,			"COMMIT_TRANS"})
+
+TRACE_EVENT(btrfs_flush_space,
+
+	TP_PROTO(struct btrfs_fs_info *fs_info, u64 flags, u64 num_bytes,
+		 u64 orig_bytes, int state, int ret),
+
+	TP_ARGS(fs_info, flags, num_bytes, orig_bytes, state, ret),
+
+	TP_STRUCT__entry(
+		__array(	u8,	fsid,	BTRFS_UUID_SIZE	)
+		__field(	u64,	flags			)
+		__field(	u64,	num_bytes		)
+		__field(	u64,	orig_bytes		)
+		__field(	int,	state			)
+		__field(	int,	ret			)
+	),
+
+	TP_fast_assign(
+		memcpy(__entry->fsid, fs_info->fsid, BTRFS_UUID_SIZE);
+		__entry->flags		=	flags;
+		__entry->num_bytes	=	num_bytes;
+		__entry->orig_bytes	=	orig_bytes;
+		__entry->state		=	state;
+		__entry->ret		=	ret;
+	),
+
+	TP_printk("%pU: state = %d(%s), flags = %llu(%s), num_bytes = %llu, "
+		  "orig_bytes = %llu, ret = %d", __entry->fsid, __entry->state,
+		  show_flush_state(__entry->state),
+		  (unsigned long long)__entry->flags,
+		  __print_flags((unsigned long)__entry->flags, "|",
+				BTRFS_GROUP_FLAGS),
+		  (unsigned long long)__entry->num_bytes,
+		  (unsigned long long)__entry->orig_bytes, __entry->ret)
 );
 
 DECLARE_EVENT_CLASS(btrfs__reserved_extent,
@@ -1232,6 +1355,93 @@ DEFINE_EVENT(btrfs__qgroup_delayed_ref, btrfs_qgroup_free_delayed_ref,
 
 	TP_ARGS(ref_root, reserved)
 );
+
+DECLARE_EVENT_CLASS(btrfs_qgroup_extent,
+	TP_PROTO(struct btrfs_qgroup_extent_record *rec),
+
+	TP_ARGS(rec),
+
+	TP_STRUCT__entry(
+		__field(	u64,  bytenr		)
+		__field(	u64,  num_bytes		)
+	),
+
+	TP_fast_assign(
+		__entry->bytenr		= rec->bytenr,
+		__entry->num_bytes	= rec->num_bytes;
+	),
+
+	TP_printk("bytenr = %llu, num_bytes = %llu",
+		  (unsigned long long)__entry->bytenr,
+		  (unsigned long long)__entry->num_bytes)
+);
+
+DEFINE_EVENT(btrfs_qgroup_extent, btrfs_qgroup_account_extents,
+
+	TP_PROTO(struct btrfs_qgroup_extent_record *rec),
+
+	TP_ARGS(rec)
+);
+
+DEFINE_EVENT(btrfs_qgroup_extent, btrfs_qgroup_insert_dirty_extent,
+
+	TP_PROTO(struct btrfs_qgroup_extent_record *rec),
+
+	TP_ARGS(rec)
+);
+
+TRACE_EVENT(btrfs_qgroup_account_extent,
+
+	TP_PROTO(u64 bytenr, u64 num_bytes, u64 nr_old_roots, u64 nr_new_roots),
+
+	TP_ARGS(bytenr, num_bytes, nr_old_roots, nr_new_roots),
+
+	TP_STRUCT__entry(
+		__field(	u64,  bytenr			)
+		__field(	u64,  num_bytes			)
+		__field(	u64,  nr_old_roots		)
+		__field(	u64,  nr_new_roots		)
+	),
+
+	TP_fast_assign(
+		__entry->bytenr		= bytenr;
+		__entry->num_bytes	= num_bytes;
+		__entry->nr_old_roots	= nr_old_roots;
+		__entry->nr_new_roots	= nr_new_roots;
+	),
+
+	TP_printk("bytenr = %llu, num_bytes = %llu, nr_old_roots = %llu, "
+		  "nr_new_roots = %llu",
+		  __entry->bytenr,
+		  __entry->num_bytes,
+		  __entry->nr_old_roots,
+		  __entry->nr_new_roots)
+);
+
+TRACE_EVENT(qgroup_update_counters,
+
+	TP_PROTO(u64 qgid, u64 cur_old_count, u64 cur_new_count),
+
+	TP_ARGS(qgid, cur_old_count, cur_new_count),
+
+	TP_STRUCT__entry(
+		__field(	u64,  qgid			)
+		__field(	u64,  cur_old_count		)
+		__field(	u64,  cur_new_count		)
+	),
+
+	TP_fast_assign(
+		__entry->qgid		= qgid;
+		__entry->cur_old_count	= cur_old_count;
+		__entry->cur_new_count	= cur_new_count;
+	),
+
+	TP_printk("qgid = %llu, cur_old_count = %llu, cur_new_count = %llu",
+		  __entry->qgid,
+		  __entry->cur_old_count,
+		  __entry->cur_new_count)
+);
+
 #endif /* _TRACE_BTRFS_H */
 
 /* This part must be outside protection */

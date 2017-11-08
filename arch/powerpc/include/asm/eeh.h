@@ -73,6 +73,7 @@ struct pci_dn;
 #define EEH_PE_PHB	(1 << 1)	/* PHB PE    */
 #define EEH_PE_DEVICE 	(1 << 2)	/* Device PE */
 #define EEH_PE_BUS	(1 << 3)	/* Bus PE    */
+#define EEH_PE_VF	(1 << 4)	/* VF PE     */
 
 #define EEH_PE_ISOLATED		(1 << 0)	/* Isolated PE		*/
 #define EEH_PE_RECOVERING	(1 << 1)	/* Recovering PE	*/
@@ -82,6 +83,7 @@ struct pci_dn;
 #define EEH_PE_KEEP		(1 << 8)	/* Keep PE on hotplug	*/
 #define EEH_PE_CFG_RESTRICTED	(1 << 9)	/* Block config on error */
 #define EEH_PE_REMOVED		(1 << 10)	/* Removed permanently	*/
+#define EEH_PE_PRI_BUS		(1 << 11)	/* Cached primary bus   */
 
 struct eeh_pe {
 	int type;			/* PE type: PHB/Bus/Device	*/
@@ -149,6 +151,10 @@ struct eeh_dev {
 	RH_KABI_EXTEND(int pcix_cap)	/* Saved PCIx capability	*/
 	RH_KABI_EXTEND(int pcie_cap)	/* Saved PCIe capability	*/
 	RH_KABI_EXTEND(int aer_cap)	/* Saved AER capability		*/
+	RH_KABI_EXTEND(struct pci_dev *physfn)	/* Associated SRIOV PF	*/
+	RH_KABI_EXTEND(int af_cap)	/* Saved AF capability		*/
+	RH_KABI_EXTEND(struct list_head rmv_list)	/* Record the removed edevs	*/
+	RH_KABI_EXTEND(bool in_error)	/* Error flag for edev		*/
 };
 
 static inline struct pci_dn *eeh_dev_to_pdn(struct eeh_dev *edev)

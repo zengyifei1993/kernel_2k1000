@@ -114,6 +114,9 @@ MODULE_PARM_DESC(sdma_comp_size, "Size of User SDMA completion ring. Default: 12
 #define KDETH_HCRC_LOWER_SHIFT    24
 #define KDETH_HCRC_LOWER_MASK     0xff
 
+#define AHG_KDETH_INTR_SHIFT 12
+#define AHG_KDETH_SH_SHIFT   13
+
 #define PBC2LRH(x) ((((x) & 0xfff) << 2) - 4)
 #define LRH2PBC(x) ((((x) >> 2) + 1) & 0xfff)
 
@@ -142,8 +145,9 @@ MODULE_PARM_DESC(sdma_comp_size, "Size of User SDMA completion ring. Default: 12
 #define KDETH_OM_LARGE     64
 #define KDETH_OM_MAX_SIZE  (1 << ((KDETH_OM_LARGE / KDETH_OM_SMALL) + 1))
 
-/* Last packet in the request */
-#define TXREQ_FLAGS_REQ_LAST_PKT BIT(0)
+/* Tx request flag bits */
+#define TXREQ_FLAGS_REQ_ACK   BIT(0)      /* Set the ACK bit in the header */
+#define TXREQ_FLAGS_REQ_DISABLE_SH BIT(1) /* Disable header suppression */
 
 /* SDMA request flag bits */
 #define SDMA_REQ_FOR_THREAD 1
@@ -182,6 +186,8 @@ struct user_sdma_iovec {
 	u64 offset;
 	struct sdma_mmu_node *node;
 };
+
+#define SDMA_CACHE_NODE_EVICT 0
 
 struct sdma_mmu_node {
 	struct mmu_rb_node rb;
@@ -509,6 +515,27 @@ int hfi1_user_sdma_free_queues(struct hfi1_filedata *fd)
 	return 0;
 }
 
+static u8 dlid_to_selector(u16 dlid)
+{
+	static u8 mapping[256];
+	static int initialized;
+	static u8 next;
+	int hash;
+
+	if (!initialized) {
+		memset(mapping, 0xFF, 256);
+		initialized = 1;
+	}
+
+	hash = ((dlid >> 8) ^ dlid) & 0xFF;
+	if (mapping[hash] == 0xFF) {
+		mapping[hash] = next;
+		next = (next + 1) & 0x7F;
+	}
+
+	return mapping[hash];
+}
+
 int hfi1_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 				   unsigned long dim, unsigned long *count)
 {
@@ -524,6 +551,8 @@ int hfi1_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 	struct user_sdma_request *req;
 	u8 opcode, sc, vl;
 	int req_queued = 0;
+	u16 dlid;
+	u32 selector;
 
 	if (iovec[idx].iov_len < sizeof(info) + sizeof(req->hdr)) {
 		hfi1_cdbg(
@@ -726,10 +755,11 @@ int hfi1_user_sdma_process_request(struct file *fp, struct iovec *iovec,
 		idx++;
 	}
 
-	/* Have to select the engine */
-	req->sde = sdma_select_engine_vl(dd,
-					 (u32)(uctxt->ctxt + fd->subctxt),
-					 vl);
+	dlid = be16_to_cpu(req->hdr.lrh[1]);
+	selector = dlid_to_selector(dlid);
+	selector += uctxt->ctxt + fd->subctxt;
+	req->sde = sdma_select_user_engine(dd, selector, vl);
+
 	if (!req->sde || !sdma_running(req->sde)) {
 		ret = -ECOMM;
 		goto free_req;
@@ -806,14 +836,21 @@ static inline u32 compute_data_length(struct user_sdma_request *req,
 	 * The size of the data of the first packet is in the header
 	 * template. However, it includes the header and ICRC, which need
 	 * to be subtracted.
+	 * The minimum representable packet data length in a header is 4 bytes,
+	 * therefore, when the data length request is less than 4 bytes, there's
+	 * only one packet, and the packet data length is equal to that of the
+	 * request data length.
 	 * The size of the remaining packets is the minimum of the frag
 	 * size (MTU) or remaining data in the request.
 	 */
 	u32 len;
 
 	if (!req->seqnum) {
-		len = ((be16_to_cpu(req->hdr.lrh[2]) << 2) -
-		       (sizeof(tx->hdr) - 4));
+		if (req->data_len < sizeof(u32))
+			len = req->data_len;
+		else
+			len = ((be16_to_cpu(req->hdr.lrh[2]) << 2) -
+			       (sizeof(tx->hdr) - 4));
 	} else if (req_opcode(req->info.ctrl) == EXPECTED) {
 		u32 tidlen = EXP_TID_GET(req->tids[req->tididx], LEN) *
 			PAGE_SIZE;
@@ -843,6 +880,13 @@ static inline u32 compute_data_length(struct user_sdma_request *req,
 	return len;
 }
 
+static inline u32 pad_len(u32 len)
+{
+	if (len & (sizeof(u32) - 1))
+		len += sizeof(u32) - (len & (sizeof(u32) - 1));
+	return len;
+}
+
 static inline u32 get_lrh_len(struct hfi1_pkt_header hdr, u32 len)
 {
 	/* (Size of complete header - size of PBC) + 4B ICRC + data length */
@@ -851,7 +895,7 @@ static inline u32 get_lrh_len(struct hfi1_pkt_header hdr, u32 len)
 
 static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 {
-	int ret = 0;
+	int ret = 0, count;
 	unsigned npkts = 0;
 	struct user_sdma_txreq *tx = NULL;
 	struct hfi1_user_sdma_pkt_q *pq = NULL;
@@ -903,8 +947,13 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 		tx->busycount = 0;
 		INIT_LIST_HEAD(&tx->list);
 
+		/*
+		 * For the last packet set the ACK request
+		 * and disable header suppression.
+		 */
 		if (req->seqnum == req->info.npkts - 1)
-			tx->flags |= TXREQ_FLAGS_REQ_LAST_PKT;
+			tx->flags |= (TXREQ_FLAGS_REQ_ACK |
+				      TXREQ_FLAGS_REQ_DISABLE_SH);
 
 		/*
 		 * Calculate the payload size - this is min of the fragment
@@ -923,18 +972,30 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 			}
 
 			datalen = compute_data_length(req, tx);
+
+			/*
+			 * Disable header suppression for the payload <= 8DWS.
+			 * If there is an uncorrectable error in the receive
+			 * data FIFO when the received payload size is less than
+			 * or equal to 8DWS then the RxDmaDataFifoRdUncErr is
+			 * not reported.There is set RHF.EccErr if the header
+			 * is not suppressed.
+			 */
 			if (!datalen) {
 				SDMA_DBG(req,
 					 "Request has data but pkt len is 0");
 				ret = -EFAULT;
 				goto free_tx;
+			} else if (datalen <= 32) {
+				tx->flags |= TXREQ_FLAGS_REQ_DISABLE_SH;
 			}
 		}
 
 		if (test_bit(SDMA_REQ_HAVE_AHG, &req->flags)) {
 			if (!req->seqnum) {
 				u16 pbclen = le16_to_cpu(req->hdr.pbc[0]);
-				u32 lrhlen = get_lrh_len(req->hdr, datalen);
+				u32 lrhlen = get_lrh_len(req->hdr,
+							 pad_len(datalen));
 				/*
 				 * Copy the request header into the tx header
 				 * because the HW needs a cacheline-aligned
@@ -949,6 +1010,10 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 						LRH2PBC(lrhlen);
 					tx->hdr.pbc[0] = cpu_to_le16(pbclen);
 				}
+				ret = check_header_template(req, &tx->hdr,
+							    lrhlen, datalen);
+				if (ret)
+					goto free_tx;
 				ret = sdma_txinit_ahg(&tx->txreq,
 						      SDMA_TXREQ_F_AHG_COPY,
 						      sizeof(tx->hdr) + datalen,
@@ -1046,23 +1111,18 @@ static int user_sdma_send_pkts(struct user_sdma_request *req, unsigned maxpkts)
 		npkts++;
 	}
 dosend:
-	ret = sdma_send_txlist(req->sde, &pq->busy, &req->txps);
-	if (list_empty(&req->txps)) {
-		req->seqsubmitted = req->seqnum;
-		if (req->seqnum == req->info.npkts) {
-			set_bit(SDMA_REQ_SEND_DONE, &req->flags);
-			/*
-			 * The txreq has already been submitted to the HW queue
-			 * so we can free the AHG entry now. Corruption will not
-			 * happen due to the sequential manner in which
-			 * descriptors are processed.
-			 */
-			if (test_bit(SDMA_REQ_HAVE_AHG, &req->flags))
-				sdma_ahg_free(req->sde, req->ahg_idx);
-		}
-	} else if (ret > 0) {
-		req->seqsubmitted += ret;
-		ret = 0;
+	ret = sdma_send_txlist(req->sde, &pq->busy, &req->txps, &count);
+	req->seqsubmitted += count;
+	if (req->seqsubmitted == req->info.npkts) {
+		set_bit(SDMA_REQ_SEND_DONE, &req->flags);
+		/*
+		 * The txreq has already been submitted to the HW queue
+		 * so we can free the AHG entry now. Corruption will not
+		 * happen due to the sequential manner in which
+		 * descriptors are processed.
+		 */
+		if (test_bit(SDMA_REQ_HAVE_AHG, &req->flags))
+			sdma_ahg_free(req->sde, req->ahg_idx);
 	}
 	return ret;
 
@@ -1108,7 +1168,7 @@ static int pin_vector_pages(struct user_sdma_request *req,
 	rb_node = hfi1_mmu_rb_extract(pq->handler,
 				      (unsigned long)iovec->iov.iov_base,
 				      iovec->iov.iov_len);
-	if (rb_node && !IS_ERR(rb_node))
+	if (rb_node)
 		node = container_of(rb_node, struct sdma_mmu_node, rb);
 	else
 		rb_node = NULL;
@@ -1196,16 +1256,14 @@ static int check_header_template(struct user_sdma_request *req,
 	/*
 	 * Perform safety checks for any type of packet:
 	 *    - transfer size is multiple of 64bytes
-	 *    - packet length is multiple of 4bytes
-	 *    - entire request length is multiple of 4bytes
+	 *    - packet length is multiple of 4 bytes
 	 *    - packet length is not larger than MTU size
 	 *
 	 * These checks are only done for the first packet of the
 	 * transfer since the header is "given" to us by user space.
 	 * For the remainder of the packets we compute the values.
 	 */
-	if (req->info.fragsize % PIO_BLOCK_SIZE ||
-	    lrhlen & 0x3 || req->data_len & 0x3  ||
+	if (req->info.fragsize % PIO_BLOCK_SIZE || lrhlen & 0x3 ||
 	    lrhlen > get_lrh_len(*hdr, req->info.fragsize))
 		return -EINVAL;
 
@@ -1267,7 +1325,7 @@ static int set_txreq_header(struct user_sdma_request *req,
 	struct hfi1_pkt_header *hdr = &tx->hdr;
 	u16 pbclen;
 	int ret;
-	u32 tidval = 0, lrhlen = get_lrh_len(*hdr, datalen);
+	u32 tidval = 0, lrhlen = get_lrh_len(*hdr, pad_len(datalen));
 
 	/* Copy the header template to the request before modification */
 	memcpy(hdr, &req->hdr, sizeof(*hdr));
@@ -1317,7 +1375,7 @@ static int set_txreq_header(struct user_sdma_request *req,
 				req->seqnum));
 
 	/* Set ACK request on last packet */
-	if (unlikely(tx->flags & TXREQ_FLAGS_REQ_LAST_PKT))
+	if (unlikely(tx->flags & TXREQ_FLAGS_REQ_ACK))
 		hdr->bth[2] |= cpu_to_be32(1UL << 31);
 
 	/* Set the new offset */
@@ -1350,8 +1408,8 @@ static int set_txreq_header(struct user_sdma_request *req,
 		/* Set KDETH.TID based on value for this TID */
 		KDETH_SET(hdr->kdeth.ver_tid_offset, TID,
 			  EXP_TID_GET(tidval, IDX));
-		/* Clear KDETH.SH only on the last packet */
-		if (unlikely(tx->flags & TXREQ_FLAGS_REQ_LAST_PKT))
+		/* Clear KDETH.SH when DISABLE_SH flag is set */
+		if (unlikely(tx->flags & TXREQ_FLAGS_REQ_DISABLE_SH))
 			KDETH_SET(hdr->kdeth.ver_tid_offset, SH, 0);
 		/*
 		 * Set the KDETH.OFFSET and KDETH.OM based on size of
@@ -1359,11 +1417,11 @@ static int set_txreq_header(struct user_sdma_request *req,
 		 */
 		SDMA_DBG(req, "TID offset %ubytes %uunits om%u",
 			 req->tidoffset, req->tidoffset / req->omfactor,
-			 !!(req->omfactor - KDETH_OM_SMALL));
+			 req->omfactor != KDETH_OM_SMALL);
 		KDETH_SET(hdr->kdeth.ver_tid_offset, OFFSET,
 			  req->tidoffset / req->omfactor);
 		KDETH_SET(hdr->kdeth.ver_tid_offset, OM,
-			  !!(req->omfactor - KDETH_OM_SMALL));
+			  req->omfactor != KDETH_OM_SMALL);
 	}
 done:
 	trace_hfi1_sdma_user_header(pq->dd, pq->ctxt, pq->subctxt,
@@ -1378,7 +1436,7 @@ static int set_txreq_header_ahg(struct user_sdma_request *req,
 	struct hfi1_user_sdma_pkt_q *pq = req->pq;
 	struct hfi1_pkt_header *hdr = &req->hdr;
 	u16 pbclen = le16_to_cpu(hdr->pbc[0]);
-	u32 val32, tidval = 0, lrhlen = get_lrh_len(*hdr, len);
+	u32 val32, tidval = 0, lrhlen = get_lrh_len(*hdr, pad_len(len));
 
 	if (PBC2LRH(pbclen) != lrhlen) {
 		/* PBC.PbcLengthDWs */
@@ -1395,7 +1453,7 @@ static int set_txreq_header_ahg(struct user_sdma_request *req,
 	/* BTH.PSN and BTH.A */
 	val32 = (be32_to_cpu(hdr->bth[2]) + req->seqnum) &
 		(HFI1_CAP_IS_KSET(EXTENDED_PSN) ? 0x7fffffff : 0xffffff);
-	if (unlikely(tx->flags & TXREQ_FLAGS_REQ_LAST_PKT))
+	if (unlikely(tx->flags & TXREQ_FLAGS_REQ_ACK))
 		val32 |= 1UL << 31;
 	AHG_HEADER_SET(req->ahg, diff, 6, 0, 16, cpu_to_be16(val32 >> 16));
 	AHG_HEADER_SET(req->ahg, diff, 6, 16, 16, cpu_to_be16(val32 & 0xffff));
@@ -1434,18 +1492,23 @@ static int set_txreq_header_ahg(struct user_sdma_request *req,
 		AHG_HEADER_SET(req->ahg, diff, 7, 0, 16,
 			       ((!!(req->omfactor - KDETH_OM_SMALL)) << 15 |
 				((req->tidoffset / req->omfactor) & 0x7fff)));
-		/* KDETH.TIDCtrl, KDETH.TID */
+		/* KDETH.TIDCtrl, KDETH.TID, KDETH.Intr, KDETH.SH */
 		val = cpu_to_le16(((EXP_TID_GET(tidval, CTRL) & 0x3) << 10) |
-					(EXP_TID_GET(tidval, IDX) & 0x3ff));
-		/* Clear KDETH.SH on last packet */
-		if (unlikely(tx->flags & TXREQ_FLAGS_REQ_LAST_PKT)) {
-			val |= cpu_to_le16(KDETH_GET(hdr->kdeth.ver_tid_offset,
-								INTR) >> 16);
-			val &= cpu_to_le16(~(1U << 13));
-			AHG_HEADER_SET(req->ahg, diff, 7, 16, 14, val);
+				   (EXP_TID_GET(tidval, IDX) & 0x3ff));
+
+		if (unlikely(tx->flags & TXREQ_FLAGS_REQ_DISABLE_SH)) {
+			val |= cpu_to_le16((KDETH_GET(hdr->kdeth.ver_tid_offset,
+						      INTR) <<
+					    AHG_KDETH_INTR_SHIFT));
 		} else {
-			AHG_HEADER_SET(req->ahg, diff, 7, 16, 12, val);
+			val |= KDETH_GET(hdr->kdeth.ver_tid_offset, SH) ?
+			       cpu_to_le16(0x1 << AHG_KDETH_SH_SHIFT) :
+			       cpu_to_le16((KDETH_GET(hdr->kdeth.ver_tid_offset,
+						      INTR) <<
+					     AHG_KDETH_INTR_SHIFT));
 		}
+
+		AHG_HEADER_SET(req->ahg, diff, 7, 16, 14, val);
 	}
 
 	trace_hfi1_sdma_user_header_ahg(pq->dd, pq->ctxt, pq->subctxt,

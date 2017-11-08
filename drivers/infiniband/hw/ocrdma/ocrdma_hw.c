@@ -1113,7 +1113,7 @@ mbx_err:
 static int ocrdma_nonemb_mbx_cmd(struct ocrdma_dev *dev, struct ocrdma_mqe *mqe,
 				 void *payload_va)
 {
-	int status = 0;
+	int status;
 	struct ocrdma_mbx_rsp *rsp = payload_va;
 
 	if ((mqe->hdr.spcl_sge_cnt_emb & OCRDMA_MQE_HDR_EMB_MASK) >>
@@ -1596,10 +1596,9 @@ void ocrdma_alloc_pd_pool(struct ocrdma_dev *dev)
 
 	dev->pd_mgr = kzalloc(sizeof(struct ocrdma_pd_resource_mgr),
 			      GFP_KERNEL);
-	if (!dev->pd_mgr) {
-		pr_err("%s(%d)Memory allocation failure.\n", __func__, dev->id);
+	if (!dev->pd_mgr)
 		return;
-	}
+
 	status = ocrdma_mbx_alloc_pd_range(dev);
 	if (status) {
 		pr_err("%s(%d) Unable to initialize PD pool, using default.\n",
@@ -1642,7 +1641,7 @@ static int ocrdma_build_q_conf(u32 *num_entries, int entry_size,
 static int ocrdma_mbx_create_ah_tbl(struct ocrdma_dev *dev)
 {
 	int i;
-	int status = 0;
+	int status = -ENOMEM;
 	int max_ah;
 	struct ocrdma_create_ah_tbl *cmd;
 	struct ocrdma_create_ah_tbl_rsp *rsp;
@@ -2141,7 +2140,6 @@ int ocrdma_qp_state_change(struct ocrdma_qp *qp, enum ib_qp_state new_ib_state,
 			   enum ib_qp_state *old_ib_state)
 {
 	unsigned long flags;
-	int status = 0;
 	enum ocrdma_qp_state new_state;
 	new_state = get_ocrdma_qp_state(new_ib_state);
 
@@ -2166,7 +2164,7 @@ int ocrdma_qp_state_change(struct ocrdma_qp *qp, enum ib_qp_state new_ib_state,
 	qp->state = new_state;
 
 	spin_unlock_irqrestore(&qp->q_lock, flags);
-	return status;
+	return 0;
 }
 
 static u32 ocrdma_set_create_qp_mbx_access_flags(struct ocrdma_qp *qp)
@@ -2893,7 +2891,7 @@ int ocrdma_mbx_destroy_srq(struct ocrdma_dev *dev, struct ocrdma_srq *srq)
 static int ocrdma_mbx_get_dcbx_config(struct ocrdma_dev *dev, u32 ptype,
 				      struct ocrdma_dcbx_cfg *dcbxcfg)
 {
-	int status = 0;
+	int status;
 	dma_addr_t pa;
 	struct ocrdma_mqe cmd;
 

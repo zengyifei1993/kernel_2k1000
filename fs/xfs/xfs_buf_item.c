@@ -431,7 +431,7 @@ xfs_buf_item_unpin(
 	if (freed && stale) {
 		ASSERT(bip->bli_flags & XFS_BLI_STALE);
 		ASSERT(xfs_buf_islocked(bp));
-		ASSERT(XFS_BUF_ISSTALE(bp));
+		ASSERT(bp->b_flags & XBF_STALE);
 		ASSERT(bip->__bli_format.blf_flags & XFS_BLF_CANCEL);
 
 		trace_xfs_buf_item_unpin_stale(bip);
@@ -493,7 +493,7 @@ xfs_buf_item_unpin(
 		xfs_buf_hold(bp);
 		bp->b_flags |= XBF_ASYNC;
 		xfs_buf_ioerror(bp, -EIO);
-		XFS_BUF_UNDONE(bp);
+		bp->b_flags &= ~XBF_DONE;
 		xfs_buf_stale(bp);
 		xfs_buf_ioend(bp);
 	}
@@ -865,7 +865,7 @@ xfs_buf_item_log_segment(
 	 */
 	if (bit) {
 		end_bit = MIN(bit + bits_to_set, (uint)NBWORD);
-		mask = ((1 << (end_bit - bit)) - 1) << bit;
+		mask = ((1U << (end_bit - bit)) - 1) << bit;
 		*wordp |= mask;
 		wordp++;
 		bits_set = end_bit - bit;
@@ -888,7 +888,7 @@ xfs_buf_item_log_segment(
 	 */
 	end_bit = bits_to_set - bits_set;
 	if (end_bit) {
-		mask = (1 << end_bit) - 1;
+		mask = (1U << end_bit) - 1;
 		*wordp |= mask;
 	}
 }
@@ -957,6 +957,7 @@ xfs_buf_item_free(
 	xfs_buf_log_item_t	*bip)
 {
 	xfs_buf_item_free_format(bip);
+	kmem_free(bip->bli_item.li_lv_shadow);
 	kmem_zone_free(xfs_buf_item_zone, bip);
 }
 
@@ -1094,7 +1095,8 @@ xfs_buf_iodone_callback_error(
 	     bp->b_last_error != bp->b_error) {
 		bp->b_flags |= (XBF_WRITE | XBF_DONE | XBF_WRITE_FAIL);
 		bp->b_last_error = bp->b_error;
-		if (cfg->retry_timeout && !bp->b_first_retry_time)
+		if (cfg->retry_timeout != XFS_ERR_RETRY_FOREVER &&
+		    !bp->b_first_retry_time)
 			bp->b_first_retry_time = jiffies;
 
 		xfs_buf_ioerror(bp, 0);
@@ -1110,7 +1112,7 @@ xfs_buf_iodone_callback_error(
 	if (cfg->max_retries != XFS_ERR_RETRY_FOREVER &&
 	    ++bp->b_retries > cfg->max_retries)
 			goto permanent_error;
-	if (cfg->retry_timeout &&
+	if (cfg->retry_timeout != XFS_ERR_RETRY_FOREVER &&
 	    time_after(jiffies, cfg->retry_timeout + bp->b_first_retry_time))
 			goto permanent_error;
 
@@ -1131,7 +1133,7 @@ permanent_error:
 	xfs_force_shutdown(mp, SHUTDOWN_META_IO_ERROR);
 out_stale:
 	xfs_buf_stale(bp);
-	XFS_BUF_DONE(bp);
+	bp->b_flags |= XBF_DONE;
 	trace_xfs_buf_error_relse(bp, _RET_IP_);
 	return false;
 }
@@ -1160,6 +1162,7 @@ xfs_buf_iodone_callbacks(
 	 */
 	bp->b_last_error = 0;
 	bp->b_retries = 0;
+	bp->b_first_retry_time = 0;
 
 	xfs_buf_do_callbacks(bp);
 	bp->b_fspriv = NULL;

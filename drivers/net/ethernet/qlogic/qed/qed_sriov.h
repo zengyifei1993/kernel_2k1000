@@ -1,28 +1,56 @@
 /* QLogic qed NIC Driver
- * Copyright (c) 2015 QLogic Corporation
+ * Copyright (c) 2015-2017  QLogic Corporation
  *
- * This software is available under the terms of the GNU General Public License
- * (GPL) Version 2, available from the file COPYING in the main directory of
- * this source tree.
+ * This software is available to you under a choice of one of two
+ * licenses.  You may choose to be licensed under the terms of the GNU
+ * General Public License (GPL) Version 2, available from the file
+ * COPYING in the main directory of this source tree, or the
+ * OpenIB.org BSD license below:
+ *
+ *     Redistribution and use in source and binary forms, with or
+ *     without modification, are permitted provided that the following
+ *     conditions are met:
+ *
+ *      - Redistributions of source code must retain the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer.
+ *
+ *      - Redistributions in binary form must reproduce the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer in the documentation and /or other materials
+ *        provided with the distribution.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+ * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
  */
 
 #ifndef _QED_SRIOV_H
 #define _QED_SRIOV_H
 #include <linux/types.h>
 #include "qed_vf.h"
+
+#define QED_ETH_VF_NUM_MAC_FILTERS 1
+#define QED_ETH_VF_NUM_VLAN_FILTERS 2
 #define QED_VF_ARRAY_LENGTH (3)
 
+#ifdef CONFIG_QED_SRIOV
 #define IS_VF(cdev)             ((cdev)->b_is_vf)
 #define IS_PF(cdev)             (!((cdev)->b_is_vf))
-#ifdef CONFIG_QED_SRIOV
 #define IS_PF_SRIOV(p_hwfn)     (!!((p_hwfn)->cdev->p_iov_info))
 #else
+#define IS_VF(cdev)             (0)
+#define IS_PF(cdev)             (1)
 #define IS_PF_SRIOV(p_hwfn)     (0)
 #endif
 #define IS_PF_SRIOV_ALLOC(p_hwfn)       (!!((p_hwfn)->pf_iov_info))
 
 #define QED_MAX_VF_CHAINS_PER_PF 16
-#define QED_ETH_VF_NUM_VLAN_FILTERS 2
 
 #define QED_ETH_MAX_VF_NUM_VLAN_FILTERS	\
 	(MAX_NUM_VFS * QED_ETH_VF_NUM_VLAN_FILTERS)
@@ -52,6 +80,23 @@ struct qed_public_vf_info {
 
 	/* Currently configured Tx rate in MB/sec. 0 if unconfigured */
 	int tx_rate;
+};
+
+struct qed_iov_vf_init_params {
+	u16 rel_vf_id;
+
+	/* Number of requested Queues; Currently, don't support different
+	 * number of Rx/Tx queues.
+	 */
+
+	u16 num_queues;
+
+	/* Allow the client to choose which qzones to use for Rx/Tx,
+	 * and which queue_base to use for Tx queues on a per-queue basis.
+	 * Notice values should be relative to the PF resources.
+	 */
+	u16 req_rx_queue[QED_MAX_VF_CHAINS_PER_PF];
+	u16 req_tx_queue[QED_MAX_VF_CHAINS_PER_PF];
 };
 
 /* This struct is part of qed_dev and contains data relevant to all hwfns;
@@ -95,10 +140,10 @@ struct qed_iov_vf_mbx {
 
 struct qed_vf_q_info {
 	u16 fw_rx_qid;
+	struct qed_queue_cid *p_rx_cid;
 	u16 fw_tx_qid;
+	struct qed_queue_cid *p_tx_cid;
 	u8 fw_cid;
-	u8 rxq_active;
-	u8 txq_active;
 };
 
 enum vf_state {
@@ -118,6 +163,8 @@ struct qed_vf_shadow_config {
 	/* Shadow copy of all guest vlans */
 	struct qed_vf_vlan_shadow vlans[QED_ETH_VF_NUM_VLAN_FILTERS + 1];
 
+	/* Shadow copy of all configured MACs; Empty if forcing MACs */
+	u8 macs[QED_ETH_VF_NUM_MAC_FILTERS][ETH_ALEN];
 	u8 inner_vlan_removal;
 };
 
@@ -126,10 +173,14 @@ struct qed_vf_info {
 	struct qed_iov_vf_mbx vf_mbx;
 	enum vf_state state;
 	bool b_init;
+	bool b_malicious;
 	u8 to_disable;
 
 	struct qed_bulletin bulletin;
 	dma_addr_t vf_bulletin;
+
+	/* PF saves a copy of the last VF acquire message */
+	struct vfpf_acquire_tlv acquire;
 
 	u32 concrete_fid;
 	u16 opaque_fid;

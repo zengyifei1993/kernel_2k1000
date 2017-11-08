@@ -17,6 +17,7 @@
 #include <asm/proto.h>
 #include <asm/dma.h>		/* for MAX_DMA_PFN */
 #include <asm/microcode.h>
+#include <asm/kaslr.h>
 
 #include "mm_internal.h"
 
@@ -113,8 +114,18 @@ __ref void *alloc_low_pages(unsigned int num)
 	return __va(pfn << PAGE_SHIFT);
 }
 
-/* need 3 4k for initial PMD_SIZE,  3 4k for 0-ISA_END_ADDRESS */
-#define INIT_PGT_BUF_SIZE	(6 * PAGE_SIZE)
+/*
+ * By default need 3 4k for initial PMD_SIZE,  3 4k for 0-ISA_END_ADDRESS.
+ * With KASLR memory randomization, depending on the machine e820 memory
+ * and the PUD alignment. We may need twice more pages when KASLR memory
+ * randomization is enabled.
+ */
+#ifndef CONFIG_RANDOMIZE_MEMORY
+#define INIT_PGD_PAGE_COUNT      6
+#else
+#define INIT_PGD_PAGE_COUNT      12
+#endif
+#define INIT_PGT_BUF_SIZE	(INIT_PGD_PAGE_COUNT * PAGE_SIZE)
 RESERVE_BRK(early_pgt_alloc, INIT_PGT_BUF_SIZE);
 void  __init early_alloc_pgt_buf(void)
 {
@@ -568,6 +579,9 @@ void __init init_mem_mapping(void)
 
 	/* the ISA range is always mapped regardless of memory holes */
 	init_memory_mapping(0, ISA_END_ADDRESS);
+
+	/* Init the trampoline, possibly with KASLR memory offset */
+	init_trampoline();
 
 	/*
 	 * If the allocation is in bottom-up direction, we setup direct mapping

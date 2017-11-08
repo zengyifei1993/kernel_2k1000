@@ -126,6 +126,8 @@ struct of_drconf_cell {
 #define OV5_XCMO		0x0440	/* Page Coalescing */
 #define OV5_TYPE1_AFFINITY	0x0580	/* Type 1 NUMA affinity */
 #define OV5_PRRN		0x0540	/* Platform Resource Reassignment */
+#define OV5_RESIZE_HPT		0x0601  /* Hash Page Table resizing */
+#define OV5_HP_EVT		0x0604	/* Hot Plug Event support */
 #define OV5_PFO_HW_RNG		0x0E80	/* PFO Random Number Generator */
 #define OV5_PFO_HW_842		0x0E40	/* PFO Compression Accelerator */
 #define OV5_PFO_HW_ENCR		0x0E20	/* PFO Encryption Accelerator */
@@ -133,12 +135,6 @@ struct of_drconf_cell {
 
 /* Option Vector 6: IBM PAPR hints */
 #define OV6_LINUX		0x02	/* Linux is our OS */
-
-/*
- * The architecture vector has an array of PVR mask/value pairs,
- * followed by # option vectors - 1, followed by the option vectors.
- */
-extern unsigned char ibm_architecture_vec[];
 
 #endif /* __KERNEL__ */
 #endif /* _POWERPC_PROM_H */

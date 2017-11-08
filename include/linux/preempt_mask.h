@@ -2,7 +2,10 @@
 #define LINUX_PREEMPT_MASK_H
 
 #include <linux/preempt.h>
-#include <asm/hardirq.h>
+
+#ifdef CONFIG_S390
+# include <asm/hardirq.h>
+#endif
 
 /*
  * We put the hardirq and softirq counter into the preemption
@@ -96,6 +99,21 @@
 #else
 # define PREEMPT_CHECK_OFFSET 0
 #endif
+
+/*
+ * The preempt_count offset needed for things like:
+ *
+ *  spin_lock_bh()
+ *
+ * Which need to disable both preemption (CONFIG_PREEMPT_COUNT) and
+ * softirqs, such that unlock sequences of:
+ *
+ *  spin_unlock();
+ *  local_bh_enable();
+ *
+ * Work as expected.
+ */
+#define SOFTIRQ_LOCK_OFFSET (SOFTIRQ_DISABLE_OFFSET + PREEMPT_CHECK_OFFSET)
 
 /*
  * Are we running in atomic context?  WARNING: this macro cannot

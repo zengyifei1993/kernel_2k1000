@@ -427,8 +427,8 @@ static struct net_device *brnf_get_logical_dev(struct sk_buff *skb, const struct
 	if (brnf_pass_vlan_indev == 0 || !skb_vlan_tag_present(skb))
 		return br;
 
-	vlan = __vlan_find_dev_deep(br, skb->vlan_proto,
-				    skb_vlan_tag_get(skb) & VLAN_VID_MASK);
+	vlan = __vlan_find_dev_deep_rcu(br, skb->vlan_proto,
+					skb_vlan_tag_get(skb) & VLAN_VID_MASK);
 
 	return vlan ? vlan : br;
 }
@@ -690,7 +690,7 @@ static int
 br_nf_ip_fragment(struct net *net, struct sock *sk, struct sk_buff *skb,
 		  int (*output)(struct sock *, struct sk_buff *))
 {
-	unsigned int mtu = ip_skb_dst_mtu(skb);
+	unsigned int mtu = ip_skb_dst_mtu(sk, skb);
 	struct iphdr *iph = ip_hdr(skb);
 
 	if (unlikely(((iph->frag_off & htons(IP_DF)) && !skb->ignore_df) ||

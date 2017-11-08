@@ -14,6 +14,7 @@
 #include <linux/cred.h>
 #include <linux/posix_acl.h>
 #include <linux/posix_acl_xattr.h>
+#include <linux/atomic.h>
 #include "overlayfs.h"
 
 void ovl_cleanup(struct inode *wdir, struct dentry *wdentry)
@@ -37,8 +38,10 @@ struct dentry *ovl_lookup_temp(struct dentry *workdir, struct dentry *dentry)
 {
 	struct dentry *temp;
 	char name[20];
+	static atomic_t temp_id = ATOMIC_INIT(0);
 
-	snprintf(name, sizeof(name), "#%lx", (unsigned long) dentry);
+	/* counter is allowed to wrap, since temp dentries are ephemeral */
+	snprintf(name, sizeof(name), "#%x", atomic_inc_return(&temp_id));
 
 	temp = lookup_one_len(name, workdir, strlen(name));
 	if (!IS_ERR(temp) && temp->d_inode) {
@@ -312,23 +315,29 @@ static struct dentry *ovl_check_empty_and_clear(struct dentry *dentry)
 {
 	int err;
 	struct dentry *ret = NULL;
+	enum ovl_path_type type = ovl_path_type(dentry);
 	LIST_HEAD(list);
 
 	err = ovl_check_empty_dir(dentry, &list);
-	if (err)
+	if (err) {
 		ret = ERR_PTR(err);
-	else {
-		/*
-		 * If no upperdentry then skip clearing whiteouts.
-		 *
-		 * Can race with copy-up, since we don't hold the upperdir
-		 * mutex.  Doesn't matter, since copy-up can't create a
-		 * non-empty directory from an empty one.
-		 */
-		if (ovl_dentry_upper(dentry))
-			ret = ovl_clear_empty(dentry, &list);
+		goto out_free;
 	}
 
+	/*
+	 * When removing an empty opaque directory, then it makes no sense to
+	 * replace it with an exact replica of itself.
+	 *
+	 * If no upperdentry then skip clearing whiteouts.
+	 *
+	 * Can race with copy-up, since we don't hold the upperdir mutex.
+	 * Doesn't matter, since copy-up can't create a non-empty directory
+	 * from an empty one.
+	 */
+	if (OVL_TYPE_UPPER(type) && OVL_TYPE_MERGE(type))
+		ret = ovl_clear_empty(dentry, &list);
+
+out_free:
 	ovl_cache_free(&list);
 
 	return ret;
@@ -527,6 +536,15 @@ static int ovl_create_or_link(struct dentry *dentry, struct inode *inode,
 	if (override_cred) {
 		override_cred->fsuid = inode->i_uid;
 		override_cred->fsgid = inode->i_gid;
+		if (!hardlink) {
+			err = security_dentry_create_files_as(dentry,
+					stat->mode, &dentry->d_name, old_cred,
+					override_cred);
+			if (err) {
+				put_cred(override_cred);
+				goto out_revert_creds;
+			}
+		}
 		put_cred(override_creds(override_cred));
 		put_cred(override_cred);
 
@@ -537,6 +555,7 @@ static int ovl_create_or_link(struct dentry *dentry, struct inode *inode,
 			err = ovl_create_over_whiteout(dentry, inode, stat,
 							link, hardlink);
 	}
+out_revert_creds:
 	revert_creds(old_cred);
 	if (!err) {
 		struct inode *realinode = d_inode(ovl_dentry_upper(dentry));
@@ -649,24 +668,10 @@ static int ovl_remove_and_whiteout(struct dentry *dentry, bool is_dir)
 		return -EROFS;
 
 	if (is_dir) {
-		if (OVL_TYPE_MERGE_OR_LOWER(ovl_path_type(dentry))) {
-			opaquedir = ovl_check_empty_and_clear(dentry);
-			err = PTR_ERR(opaquedir);
-			if (IS_ERR(opaquedir))
-				goto out;
-		} else {
-			LIST_HEAD(list);
-
-			/*
-			 * When removing an empty opaque directory, then it
-			 * makes no sense to replace it with an exact replica of
-			 * itself.  But emptiness still needs to be checked.
-			 */
-			err = ovl_check_empty_dir(dentry, &list);
-			ovl_cache_free(&list);
-			if (err)
-				goto out;
-		}
+		opaquedir = ovl_check_empty_and_clear(dentry);
+		err = PTR_ERR(opaquedir);
+		if (IS_ERR(opaquedir))
+			goto out;
 	}
 
 	err = ovl_lock_rename_workdir(workdir, upperdir);
@@ -1063,10 +1068,11 @@ const struct inode_operations_wrapper ovl_dir_inode_operations = {
 	.permission	= ovl_permission,
 	.getattr	= ovl_dir_getattr,
 	.setxattr	= generic_setxattr,
-	.getxattr	= ovl_getxattr,
+	.getxattr	= generic_getxattr,
 	.listxattr	= ovl_listxattr,
 	.removexattr	= generic_removexattr,
 	.get_acl	= ovl_get_acl,
+	.update_time	= ovl_update_time,
 	},
 	.rename2	= ovl_rename2,
 };

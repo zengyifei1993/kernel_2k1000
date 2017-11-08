@@ -175,6 +175,8 @@ static void pma_cnt_assign(struct ib_pma_portcounters *pma_cnt,
 			     port_xmit_discards);
 	MLX5_ASSIGN_PMA_CNTR(pma_cnt->port_xmit_constraint_errors,
 			     port_xmit_constraint_errors);
+	MLX5_ASSIGN_PMA_CNTR(pma_cnt->port_xmit_wait,
+			     port_xmit_wait);
 	MLX5_ASSIGN_PMA_CNTR(pma_cnt->port_rcv_constraint_errors,
 			     port_rcv_constraint_errors);
 	MLX5_ASSIGN_PMA_CNTR(pma_cnt->link_overrun_errors,
@@ -394,7 +396,7 @@ int mlx5_query_mad_ifc_node_desc(struct mlx5_ib_dev *dev, char *node_desc)
 	if (err)
 		goto out;
 
-	memcpy(node_desc, out_mad->data, 64);
+	memcpy(node_desc, out_mad->data, IB_DEVICE_NODE_DESC_MAX);
 out:
 	kfree(in_mad);
 	kfree(out_mad);

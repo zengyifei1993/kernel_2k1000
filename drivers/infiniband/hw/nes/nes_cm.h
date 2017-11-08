@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006 - 2011 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2006 - 2014 Intel Corporation.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -363,7 +363,6 @@ struct nes_cm_info {
 	u16 rem_port;
 	nes_addr_t loc_addr;
 	nes_addr_t rem_addr;
-
 	enum nes_cm_conn_type  conn_type;
 	int backlog;
 };
