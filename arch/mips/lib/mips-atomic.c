@@ -101,7 +101,12 @@ EXPORT_SYMBOL(loongson3_phase_lock_release);
  *
  * Workaround: mask EXL bit of the result or place a nop before mfc0.
  */
-notrace void arch_local_irq_disable(void)
+#ifdef CONFIG_CPU_LOONGSON3
+#define REDEF(name) legacy_##name
+#else
+#define REDEF(name) name
+#endif
+notrace void REDEF(arch_local_irq_disable)(void)
 {
 	preempt_disable();
 
@@ -130,7 +135,7 @@ notrace void arch_local_irq_disable(void)
 
 	preempt_enable();
 }
-EXPORT_SYMBOL(arch_local_irq_disable);
+EXPORT_SYMBOL(REDEF(arch_local_irq_disable));
 
 
 notrace unsigned long arch_local_irq_save(void)

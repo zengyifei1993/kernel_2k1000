@@ -1,6 +1,7 @@
 #include <linux/delay.h>
 #include <linux/gpio.h>
 #include <linux/irq.h>
+#include <linux/types.h>
 #include <asm/bootinfo.h>
 #include <ec_wpce775l.h>
 #include <workarounds.h>
@@ -186,11 +187,19 @@ void loongson3_arch_func_optimize(unsigned int cpu_type)
 		memset(labels, 0, sizeof(labels));
 		memset(relocs, 0, sizeof(relocs));
 
-		/* optimize arch_local_irq_disable */
-		p = (unsigned int *)&arch_local_irq_disable;
-		uasm_i_di(&p, 0);
-		uasm_i_jr(&p, RA);
-		uasm_i_nop(&p);
+		for (p = (uint32_t *)&_text; p < (uint32_t *)&_etext; p++) {
+			switch(*p) {
+			/* optimize arch_local_irq_disable */
+			case IRQ_DISABLE_MARK_NUM:
+				p++;
+				while((*p >> 27) != 0x1)
+					p++;
+				*p = *(p + 1);
+				p++;
+				uasm_i_di(&p, 0);
+				break;
+			}
+		}
 
 		/* optimize arch_local_irq_save */
 		p = (unsigned int *)&arch_local_irq_save;

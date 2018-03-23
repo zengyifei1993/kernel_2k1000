@@ -15,6 +15,7 @@
 
 #include <linux/compiler.h>
 #include <linux/stringify.h>
+#include <linux/preempt.h>
 #include <asm/hazards.h>
 
 #if defined(CONFIG_CPU_MIPSR2) && !defined(CONFIG_MIPS_MT_SMTC)
@@ -117,6 +118,30 @@ static inline void __arch_local_irq_restore(unsigned long flags)
 	: "0" (flags)
 	: "memory");
 }
+#elif CONFIG_CPU_LOONGSON3
+
+#define IRQ_DISABLE_MARK_NUM		0x00000002
+#define IRQ_DISABLE_MARK_ASM		".word 0x00000002\n"
+
+extern void legacy_arch_local_irq_disable(void);
+static inline void arch_local_irq_disable(void)
+{
+	__asm__ __volatile__(
+	"	.set	push						\n"
+	"	.set	noreorder					\n"
+	"	.set	noat						\n"
+	IRQ_DISABLE_MARK_ASM
+	"	.set	pop						\n"
+	: /* no outputs */
+	: /* no inputs */
+	: );
+
+	legacy_arch_local_irq_disable();
+}
+
+unsigned long arch_local_irq_save(void);
+void arch_local_irq_restore(unsigned long flags);
+void __arch_local_irq_restore(unsigned long flags);
 #else
 /* Functions that require preempt_{dis,en}able() are in mips-atomic.c */
 void arch_local_irq_disable(void);
