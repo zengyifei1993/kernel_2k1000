@@ -21,6 +21,7 @@
 
 #include <linux/i2c.h>
 #include <linux/i2c-gpio.h>
+#include <linux/spi/spi.h>
 
 extern void ls7a_init_irq(void);
 extern void ls7a_irq_dispatch(void);
@@ -267,10 +268,21 @@ const struct i2c_board_info __initdata ls7a_fb_edid_eep_info = {
 	I2C_BOARD_INFO("eeprom-edid", 0x50),
 };
 
+static const struct spi_board_info ls_spi_devs[] __initdata = {
+	{
+		/* Winbond spi flash */
+		.modalias	= "w25q16dvssig",
+		.bus_num	= 0,
+		.chip_select	= 0,
+		.mode		= 0,
+	},
+};
 static void __init ls7a_device_initcall(void)
 {
 	i2c_register_board_info(6, &ls7a_fb_ch7034_eep_info, 1);
 	i2c_register_board_info(6, &ls7a_fb_edid_eep_info, 1);
+
+	spi_register_board_info(ls_spi_devs, ARRAY_SIZE(ls_spi_devs));
 
 	platform_add_devices(ls7a_platform_devices,
 			ARRAY_SIZE(ls7a_platform_devices));
