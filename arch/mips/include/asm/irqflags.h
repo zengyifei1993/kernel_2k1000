@@ -139,7 +139,37 @@ static inline void arch_local_irq_disable(void)
 	legacy_arch_local_irq_disable();
 }
 
-unsigned long arch_local_irq_save(void);
+#define IRQ_SAVE_MARK_NUM		0x00000003
+#define IRQ_SAVE_MARK_ASM		".word 0x00000003\n"
+
+extern unsigned long legacy_arch_local_irq_save(void);
+static inline unsigned long arch_local_irq_save(void)
+{
+	unsigned long flags;
+	__asm__ __volatile__(
+	"	.set	push						\n"
+	"	.set	noreorder					\n"
+	"	.set	noat						\n"
+	IRQ_SAVE_MARK_ASM
+	"	.set	pop						\n"
+	: /* no outputs */
+	: /* no inputs */
+	: );
+
+	flags = legacy_arch_local_irq_save();
+
+	__asm__ __volatile__(
+	"	.set	push						\n"
+	"	.set	noreorder					\n"
+	"	nop							\n"
+	"	.set	pop						\n"
+	: /* no outputs */
+	: /* no inputs */
+	: );
+	return flags;
+}
+
+
 void arch_local_irq_restore(unsigned long flags);
 void __arch_local_irq_restore(unsigned long flags);
 #else

@@ -138,7 +138,7 @@ notrace void REDEF(arch_local_irq_disable)(void)
 EXPORT_SYMBOL(REDEF(arch_local_irq_disable));
 
 
-notrace unsigned long arch_local_irq_save(void)
+notrace unsigned long REDEF(arch_local_irq_save)(void)
 {
 	unsigned long flags;
 
@@ -173,7 +173,7 @@ notrace unsigned long arch_local_irq_save(void)
 
 	return flags;
 }
-EXPORT_SYMBOL(arch_local_irq_save);
+EXPORT_SYMBOL(REDEF(arch_local_irq_save));
 
 notrace void arch_local_irq_restore(unsigned long flags)
 {
