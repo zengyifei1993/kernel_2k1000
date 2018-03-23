@@ -169,8 +169,36 @@ static inline unsigned long arch_local_irq_save(void)
 	return flags;
 }
 
+#define IRQ_RESTORE_MARK_NUM		0x00000004
+#define IRQ_RESTORE_MARK_ASM		".word 0x00000004\n"
 
-void arch_local_irq_restore(unsigned long flags);
+extern void legacy_arch_local_irq_restore(unsigned long flags);
+static inline void arch_local_irq_restore(unsigned long flags)
+{
+	__asm__ __volatile__(
+	"	.set	push						\n"
+	"	.set	noreorder					\n"
+	"	.set	noat						\n"
+	IRQ_RESTORE_MARK_ASM
+	"	.set	pop						\n"
+	: /* no outputs */
+	: /* no inputs */
+	: );
+
+	legacy_arch_local_irq_restore(flags);
+
+	__asm__ __volatile__(
+	"	.set	push						\n"
+	"	.set	noreorder					\n"
+	"	nop							\n"
+	"	nop							\n"
+	"	nop							\n"
+	"	.set	pop						\n"
+	: /* no outputs */
+	: /* no inputs */
+	: );
+}
+
 void __arch_local_irq_restore(unsigned long flags);
 #else
 /* Functions that require preempt_{dis,en}able() are in mips-atomic.c */

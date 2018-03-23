@@ -175,7 +175,7 @@ notrace unsigned long REDEF(arch_local_irq_save)(void)
 }
 EXPORT_SYMBOL(REDEF(arch_local_irq_save));
 
-notrace void arch_local_irq_restore(unsigned long flags)
+notrace void REDEF(arch_local_irq_restore)(unsigned long flags)
 {
 	unsigned long __tmp1;
 
@@ -221,8 +221,7 @@ notrace void arch_local_irq_restore(unsigned long flags)
 
 	preempt_enable();
 }
-EXPORT_SYMBOL(arch_local_irq_restore);
-
+EXPORT_SYMBOL(REDEF(arch_local_irq_restore));
 
 notrace void __arch_local_irq_restore(unsigned long flags)
 {

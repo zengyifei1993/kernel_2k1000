@@ -221,17 +221,21 @@ void loongson3_arch_func_optimize(unsigned int cpu_type)
 				if(delay_slot_inst)
 					*p = delay_slot_inst;
 				break;
+			/* optimize arch_local_irq_restore */
+			case IRQ_RESTORE_MARK_NUM:
+				p++;
+				while((*p >> 24) != 0xc)
+					p++;
+				*p = *(p + 1);
+				p++;
+				/* beqz a0,0xc */
+				*p++ = 0x10800002;
+				uasm_i_di(&p, 0);
+				uasm_i_ei(&p, 0);
+				uasm_i_nop(&p);
+				break;
 			}
 		}
-
-		/* optimize arch_local_irq_restore */
-		p = (unsigned int *)&arch_local_irq_restore;
-		uasm_il_beqz(&p, &r, A0, label_irq_restore_out);
-		uasm_i_di(&p, 0);
-		uasm_i_ei(&p, 0);
-		uasm_l_irq_restore_out(&l, p);
-		uasm_i_jr(&p, RA);
-		uasm_i_nop(&p);
 
 		/* optimize __arch_local_irq_restore */
 		p = (unsigned int *)&__arch_local_irq_restore;
