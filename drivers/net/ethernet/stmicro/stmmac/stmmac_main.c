@@ -50,6 +50,7 @@
 #if defined(CONFIG_CPU_LOONGSON3)
 #include <linux/i2c.h>
 #include <loongson-pch.h>
+#include <linux/spi/spi.h>
 #endif
 #include <linux/net_tstamp.h>
 #include "stmmac_ptp.h"
@@ -59,6 +60,16 @@
 #ifdef CONFIG_CPU_LOONGSON3
 rwlock_t stmmac0_rwlock;
 rwlock_t stmmac1_rwlock;
+
+#define PROGRAM		0x02
+#define READ_DATA	0x03
+#define WR_DIS		0x04
+#define RD_STATUS	0x05
+#define WR_EN		0x06
+#define MAC_OFFSET	0x10
+#define SEC_ERASE	0x20
+#define MAC_LEN		0x6
+#define DEV_BUSY	0x1
 #endif
 
 #undef STMMAC_DEBUG
@@ -137,6 +148,9 @@ static struct eep_info {
 	unsigned short addr;
 	struct i2c_adapter *adapter;
 } eeprom_info;
+
+static struct spi_device *spi_dev;
+int spi_register_driver(struct spi_driver *sdrv);
 #endif
 
 static const u32 default_msg_level = (NETIF_MSG_DRV | NETIF_MSG_PROBE |
@@ -1667,7 +1681,6 @@ static int stmmac_eep_get_mac_addr(struct stmmac_priv *priv, unsigned char *buf)
 			.buf	= buf,
 		}
 	};
-
 	start[0] = (data_addr >> 8) & 0x1f;
 	start[1] = data_addr & 0xff;
 
@@ -1680,7 +1693,6 @@ static int stmmac_eep_get_mac_addr(struct stmmac_priv *priv, unsigned char *buf)
 		return 1;
 	else
 		return 0;
-
 }
 
 static int stmmac_eep_set_mac_addr(struct stmmac_priv *priv, unsigned char *buf)
@@ -1709,6 +1721,218 @@ static int stmmac_eep_set_mac_addr(struct stmmac_priv *priv, unsigned char *buf)
 	else
 		return 0;
 }
+
+static void spidev_complete(void *arg)
+{
+	complete(arg);
+}
+
+static int spi_flash_write_en(unsigned char wr_en)
+{
+	u8 cmd[1];
+	struct spi_message msg;
+	DECLARE_COMPLETION_ONSTACK(done);
+
+	struct spi_transfer instruction = {
+			.tx_buf = cmd,
+			.rx_buf = NULL,
+			.len = 1,
+	};
+
+	cmd[0] = wr_en;
+	spi_message_init(&msg);
+	spi_message_add_tail(&instruction, &msg);
+
+	msg.complete = spidev_complete;
+	msg.context = &done;
+	msg.spi = spi_dev;
+
+	spi_dev->master->transfer(spi_dev,&msg);
+	wait_for_completion(&done);
+
+	return 0;
+}
+
+static unsigned char spi_flash_read_status(void)
+{
+	u8 cmd[1],ret;
+	struct spi_message msg;
+	DECLARE_COMPLETION_ONSTACK(done);
+
+	struct spi_transfer instruction = {
+			.tx_buf = cmd,
+			.rx_buf = NULL,
+			.len = 1,
+	};
+
+	struct spi_transfer status = {
+			.tx_buf = NULL,
+			.rx_buf = &ret,
+			.len = 1,
+	};
+
+	cmd[0] = RD_STATUS;
+	spi_message_init(&msg);
+	spi_message_add_tail(&instruction, &msg);
+	spi_message_add_tail(&status, &msg);
+
+	msg.complete = spidev_complete;
+	msg.context = &done;
+	msg.spi = spi_dev;
+
+	spi_dev->master->transfer(spi_dev,&msg);
+	wait_for_completion(&done);
+
+	return ret;
+}
+
+static int spi_flash_sec_erase(void)
+{
+	u8 cmd[4];
+	struct spi_message msg;
+	DECLARE_COMPLETION_ONSTACK(done);
+
+	struct spi_transfer instruction = {
+			.tx_buf = cmd,
+			.rx_buf = NULL,
+			.len = 4,
+	};
+
+	cmd[0] = SEC_ERASE;
+	cmd[1] = 0x0;
+	cmd[2] = 0x0;
+	cmd[3] = 0x0;
+
+	spi_message_init(&msg);
+	spi_message_add_tail(&instruction, &msg);
+
+	msg.complete = spidev_complete;
+	msg.context = &done;
+	msg.spi = spi_dev;
+
+	spi_dev->master->transfer(spi_dev,&msg);
+	wait_for_completion(&done);
+
+	return 0;
+}
+
+static int spi_flash_read(int addr, unsigned char *buf,int data_len)
+{
+	u8 cmd[4];
+	struct spi_message msg;
+	DECLARE_COMPLETION_ONSTACK(done);
+
+	struct spi_transfer instruction = {
+			.tx_buf = cmd,
+			.rx_buf = NULL,
+			.len = 4,
+	};
+
+	struct spi_transfer mac_addr = {
+			.tx_buf = NULL,
+			.rx_buf = buf,
+			.len = data_len,
+	};
+
+	cmd[0] = READ_DATA;
+	cmd[1] = (addr >> 16) & 0xff;
+	cmd[2] = (addr >> 8) & 0xff;
+	cmd[3] = addr & 0xff;
+
+	spi_message_init(&msg);
+	spi_message_add_tail(&instruction, &msg);
+	spi_message_add_tail(&mac_addr, &msg);
+
+	msg.complete = spidev_complete;
+	msg.context = &done;
+	msg.spi = spi_dev;
+
+	spi_dev->master->transfer(spi_dev,&msg);
+	wait_for_completion(&done);
+
+	return 0;
+}
+
+static int stmmac_spi_flash_get_mac_addr(struct stmmac_priv *priv, unsigned char *buf)
+{
+	struct plat_stmmacenet_data *plat_dat = priv->plat;
+
+	spi_flash_read((plat_dat->bus_id  - 1)* MAC_OFFSET,buf,MAC_LEN);
+
+	return 0;
+}
+
+static int spi_flash_program(int addr, unsigned char *buf,int data_len)
+{
+	u8 cmd[4];
+	struct spi_message msg;
+	DECLARE_COMPLETION_ONSTACK(done);
+
+	struct spi_transfer instruction = {
+			.tx_buf = cmd,
+			.rx_buf = NULL,
+			.len = 4,
+	};
+
+	struct spi_transfer mac_addr = {
+			.rx_buf = NULL,
+			.tx_buf = buf,
+			.len = data_len,
+	};
+
+	cmd[0] = PROGRAM;
+	cmd[1] = (addr >> 16) & 0xff;
+	cmd[2] = (addr >> 8) & 0xff;
+	cmd[3] = addr & 0xff;
+
+	spi_message_init(&msg);
+	spi_message_add_tail(&instruction, &msg);
+	spi_message_add_tail(&mac_addr, &msg);
+
+	msg.complete = spidev_complete;
+	msg.context = &done;
+	msg.spi = spi_dev;
+
+	spi_dev->master->transfer(spi_dev,&msg);
+	wait_for_completion(&done);
+
+	return 0;
+}
+
+static int stmmac_spi_flash_set_mac_addr(struct stmmac_priv *priv, unsigned char *buf)
+{
+	unsigned char mac[MAC_LEN];
+	struct plat_stmmacenet_data *plat_dat = priv->plat;
+
+	if ((plat_dat->bus_id - 1) == 0)
+		spi_flash_read(MAC_OFFSET,mac,MAC_LEN);
+	else
+		spi_flash_read(0,mac,MAC_LEN);
+
+	spi_flash_write_en(WR_EN);
+	spi_flash_sec_erase();
+	while ((spi_flash_read_status() & DEV_BUSY) == DEV_BUSY);
+
+	if ((plat_dat->bus_id - 1) == 0) {
+		spi_flash_write_en(WR_EN);
+		spi_flash_program(0, buf,MAC_LEN);
+		while ((spi_flash_read_status() & DEV_BUSY) == DEV_BUSY);
+
+		spi_flash_write_en(WR_EN);
+		spi_flash_program(MAC_OFFSET, mac,MAC_LEN);
+		while ((spi_flash_read_status() & DEV_BUSY) == DEV_BUSY);
+	} else {
+		spi_flash_write_en(WR_EN);
+		spi_flash_program(0x0, mac,MAC_LEN);
+		while ((spi_flash_read_status() & DEV_BUSY) == DEV_BUSY);
+
+		spi_flash_write_en(WR_EN);
+		spi_flash_program(MAC_OFFSET, buf,MAC_LEN);
+		while ((spi_flash_read_status() & DEV_BUSY) == DEV_BUSY);
+	}
+
+	return 0;
+}
 #endif
 
 /**
@@ -1721,7 +1945,10 @@ static int stmmac_eep_set_mac_addr(struct stmmac_priv *priv, unsigned char *buf)
 static void stmmac_check_ether_addr(struct stmmac_priv *priv, const char *of_mac)
 {
 #if defined(CONFIG_CPU_LOONGSON3)
-	stmmac_eep_get_mac_addr(priv, priv->dev->dev_addr);
+    if (loongson_pch->board_type == LS2H)
+		stmmac_eep_get_mac_addr(priv, priv->dev->dev_addr);
+	else if (loongson_pch->board_type == LS7A)
+		stmmac_spi_flash_get_mac_addr(priv, priv->dev->dev_addr);
 #endif
 	if (of_mac) {
 		memcpy(priv->dev->dev_addr, of_mac, ETH_ALEN);
@@ -2816,7 +3043,11 @@ int stmmac_set_mac_address(struct net_device *dev, void *p)
 	if (!is_valid_ether_addr(addr->sa_data))
 		return -EADDRNOTAVAIL;
 
-	stmmac_eep_set_mac_addr(priv, addr->sa_data);
+	if (loongson_pch->board_type == LS2H)
+		stmmac_eep_set_mac_addr(priv, addr->sa_data);
+	else if (loongson_pch->board_type == LS7A)
+		stmmac_spi_flash_set_mac_addr(priv, addr->sa_data);
+
 	memcpy(dev->dev_addr, addr->sa_data, ETH_ALEN);
 	priv->hw->mac->set_umac_addr((void *) dev->base_addr, dev->dev_addr, 0);
 
@@ -2949,6 +3180,17 @@ static int eep_remove(struct i2c_client *client)
 	return 0;
 }
 
+static int spi_flash_probe(struct spi_device *spi)
+{
+	spi_dev = spi;
+
+	return 0;
+}
+
+static int spi_flash_remove(struct spi_device *spi)
+{
+	return 0;
+}
 static struct i2c_driver eep_driver = {
 	.driver = {
 		.name = "eep-mac",
@@ -2957,6 +3199,15 @@ static struct i2c_driver eep_driver = {
 	.probe = eep_probe,
 	.remove = eep_remove,
 	.id_table = eep_ids,
+};
+static struct spi_driver spi_flash_driver = {
+	.driver = {
+		.name		= "w25q16dvssig",
+		.owner		= THIS_MODULE,
+	},
+
+	.probe		= spi_flash_probe,
+	.remove		= spi_flash_remove,
 };
 #endif
 /**
@@ -3228,7 +3479,6 @@ int stmmac_restore(struct net_device *ndev)
 	return stmmac_open(ndev);
 }
 #endif /* CONFIG_PM */
-
 /* Driver can be configured w/ and w/ both PCI and Platf drivers
  * depending on the configuration selected.
  */
@@ -3239,6 +3489,10 @@ static int __init stmmac_init(void)
 #if defined(CONFIG_CPU_LOONGSON3)
 	if (i2c_add_driver(&eep_driver)) {
 		pr_err("No eeprom device register!");
+		return -ENODEV;
+	}
+	if (spi_register_driver(&spi_flash_driver)) {
+		pr_err("No spi flash device register!");
 		return -ENODEV;
 	}
 #endif
