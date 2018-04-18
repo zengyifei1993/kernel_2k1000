@@ -435,7 +435,7 @@ static int ls_init_regs(struct fb_info *info)
 
 	/* cursor */
 	/* Select full color ARGB mode */
-	ls_writel(0x00050212,base + LS_FB_CUR_CFG_REG);
+	ls_writel(0x00050202,base + LS_FB_CUR_CFG_REG);
 	ls_writel(cursor_dma,base + LS_FB_CUR_ADDR_REG);
 	ls_writel(0x00060122,base + LS_FB_CUR_LOC_ADDR_REG);
 	ls_writel(0x00eeeeee,base + LS_FB_CUR_BACK_REG);
@@ -606,7 +606,7 @@ static void ls_enable_cursor(int mode, unsigned long base)
 {
 	unsigned int tmp = ls_readl(base + LS_FB_CUR_CFG_REG);
 	tmp &= ~0xff;
-	ls_writel(mode ? (tmp | 0x12) : (tmp | 0x10),
+	ls_writel(mode ? (tmp | 0x02) : (tmp | 0x00),
 			base + LS_FB_CUR_CFG_REG);
 }
 
