@@ -295,6 +295,7 @@ config MACH_LOONGSON1
 
 config MACH_LOONGSON2
 	bool "Loongson 64bit SoC"
+    select SYS_SUPPORTS_ZBOOT
 	help
 	  This enable the support for Loongson 2 SoC family of machines.
 
