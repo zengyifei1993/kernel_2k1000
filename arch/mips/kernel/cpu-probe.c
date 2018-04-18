@@ -1058,7 +1058,8 @@ static inline void cpu_probe_loongson(struct cpuinfo_mips *c, unsigned int cpu)
 		break;
 	case PRID_IMP_LOONGSON2K:
 		switch (c->processor_id & PRID_REV_MASK) {
-			case PRID_REV_LOONGSON2K:
+			case PRID_REV_LOONGSON2K_R1:
+			case PRID_REV_LOONGSON2K_R2:
 				c->isa_level = MIPS_CPU_ISA_M64R2;
 				c->options = R4K_OPTS |
 					MIPS_CPU_FPU | MIPS_CPU_LLSC |
