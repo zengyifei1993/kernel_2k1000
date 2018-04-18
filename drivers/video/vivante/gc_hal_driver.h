@@ -23,7 +23,11 @@
 #define __gc_hal_driver_h_
 
 #include <linux/types.h>
+#ifdef CONFIG_CPU_LOONGSON2K
+#include "ls2k.h"
+#else
 #include "boot_param.h"
+#endif
 #include "gc_hal_enum.h"
 #include "gc_hal_types.h"
 

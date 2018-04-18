@@ -13,7 +13,7 @@
 	memory {
 		name = "memory";
 		device_type = "memory";
-		reg =  <0 0x00200000 0 0x0d800000	// 216MiB at 2MiB
+		reg =  <0 0x00200000 0 0x09800000	// 216MiB at 2MiB
 			1 0x10000000 1 0xd0000000>;	// 7424MiB at 4352MiB
 	};
 
@@ -24,7 +24,8 @@
 		#address-cells = <1>;
 		#size-cells = <1>;
 		ranges = <0x10000000 0 0x10000000 0x10000000
-			  0x40000000 0 0x40000000 0x40000000>;
+			  0x40000000 0 0x40000000 0x40000000
+			  0x0a000000 0 0x0a000000 0x05000000>;
 		/*dma-coherent;*/
 		nr_cpus_loongson = <2>;
 		cores_per_package = <2>;
@@ -50,6 +51,15 @@
 			interrupt-parent = <&icu>;
 			interrupts = <36>;
 		};
+
+		gpu@0x40080000 {
+			compatible = "loongson,galcore";
+			reg = <0x40080000 0x3ffff
+				0x0a000000 0x5000000>;
+			interrupt-parent = <&icu>;
+			interrupts = <37>;
+		};
+
 
 		ohci@0x40070000 {
 			compatible = "loongson,ls2k-ohci", "usb-ohci";

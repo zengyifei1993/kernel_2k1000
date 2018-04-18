@@ -28,12 +28,24 @@
 #include <linux/errno.h>
 #include <linux/string.h>
 #include "platform_driver.h"
-
+#ifdef CONFIG_CPU_LOONGSON2K
+#include "ls2k.h"
+#else
 #include <loongson-pch.h>
+#endif
+
+
 #define DEVICE_NAME "galcore"
 
 int lsgpu_hw_coherent = 0;	/* set loongsong gpu use or not use hw coherent */
 EXPORT_SYMBOL_GPL(lsgpu_hw_coherent);
+
+#ifdef CONFIG_OF
+static struct of_device_id ls_gpu_id_table[] = {
+	{ .compatible = "loongson,galcore", },
+};
+#endif
+
 
 static struct platform_driver gpu_driver = {
 	.probe		= loongson_gpu_probe,
@@ -42,6 +54,10 @@ static struct platform_driver gpu_driver = {
 	.resume		= loongson_gpu_resume,
 	.driver		= {
 		   .name = DEVICE_NAME,
+		   .bus = &platform_bus_type,
+#ifdef CONFIG_OF
+		.of_match_table = of_match_ptr(ls_gpu_id_table),
+#endif
 	}
 };
 
@@ -114,14 +130,16 @@ static int loongson_gpu_pci_register(struct pci_dev *pdev,
 	ls2k_gpu_resources[2].start = pci_resource_start (pdev, 2);
 	ls2k_gpu_resources[2].end = pci_resource_end(pdev, 2);
 #endif
+
+#ifndef CONFIG_CPU_LOONGSON2K
 	if(loongson_pch->board_type == LS7A){
 		vram_type = VRAM_TYPE_UMA_LOW;
-	    gpu_brust_type = 1;
+		gpu_brust_type = 1;
 		lsgpu_hw_coherent = hw_coherentio;
 	}
 	printk("lsgpu_hw_coherent = %d\r\n",lsgpu_hw_coherent);
 	platform_device_register(&loongson_gpu_device);
-
+#endif
 	return 0;
 err_out:
 	return ret;

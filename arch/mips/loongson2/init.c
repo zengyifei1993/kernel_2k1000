@@ -30,6 +30,12 @@ extern struct plat_smp_ops loongson_smp_ops;
 
 #endif
 
+u32 gpu_brust_type;
+u32 vram_type;
+u64 uma_vram_addr;
+u64 uma_vram_size;
+
+
 extern struct boot_param_header  __dtb_start;
 
 void prom_init_env(void);
