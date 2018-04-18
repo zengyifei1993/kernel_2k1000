@@ -65,10 +65,10 @@ void __init prom_init(void)
 	}
 
 	/* firmware arguments are initialized in head.S */
-	fdtp = &__dtb_start;
+	fdtp = (struct boot_param_header*)fw_arg2;
 
 	if (!fdtp)
-		fdtp = (struct boot_param_header*)fw_arg2;
+		fdtp = &__dtb_start;
 
 	pr_info("FDT point@%p\n", fdtp);
 	__dt_setup_arch(fdtp);
