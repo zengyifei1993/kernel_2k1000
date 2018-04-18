@@ -244,28 +244,62 @@ static int ls_fb_check_var(struct fb_var_screeninfo *var,
 	return 0;
 }
 
+#define PLL_REF_CLK_MHZ    100
+#define PCLK_PRECISION_INDICATOR 10000
+
+/*for PLL using configuration: (refc, loopc, div). Like LS7A1000 PLL
+for C env without decimal fraction support.*/
 static unsigned int cal_freq(unsigned int pixclock_khz, struct pix_pll * pll_config)
 {
-	unsigned int pstdiv, loopc, frefc;
-	unsigned long a, b, c;
-	unsigned long min = 1000;
+	unsigned int refc_set[] = {4, 5, 3};
+	unsigned int prec_set[] = {1, 5, 10, 50, 100};   /*in 1/PCLK_PRECISION_INDICATOR*/
+	unsigned int pstdiv, loopc, refc;
+	int i, j;
+	unsigned int precision_req, precision;
+	unsigned int loopc_min, loopc_max, loopc_mid;
+	unsigned long long real_dvo, req_dvo;
+	int loopc_offset;
 
-	for (pstdiv = 1; pstdiv < 64; pstdiv++) {
-		a = (unsigned long)pixclock_khz * pstdiv;
-		for (frefc = 3; frefc < 6; frefc++) {
-			for (loopc = 24; loopc < 161; loopc++) {
+	/*try precision from high to low*/
+	for (j = 0; j < sizeof(prec_set)/sizeof(int); j++){
+		precision_req = prec_set[j];
 
-				if ((loopc < 12 * frefc) ||
-						(loopc > 32 * frefc))
-					continue;
+		/*try each refc*/
+		for (i = 0; i < sizeof(refc_set)/sizeof(int); i++) {
+			refc = refc_set[i];
+			loopc_min = (1200 / PLL_REF_CLK_MHZ) * refc;  /*1200 / (PLL_REF_CLK_MHZ / refc)*/
+			loopc_max = (3200 / PLL_REF_CLK_MHZ) * refc;  /*3200 / (PLL_REF_CLK_MHZ / refc)*/
+			loopc_mid = (2200 / PLL_REF_CLK_MHZ) * refc;  /*(loopc_min + loopc_max) / 2;*/
 
-				b = 100000L * loopc / frefc;
-				c = (a > b) ? (a - b) : (b - a);
-				if (c < min) {
+			loopc_offset = -1;
+			/*try each loopc*/
+			for (loopc = loopc_mid; (loopc <= loopc_max) && (loopc >= loopc_min); loopc += loopc_offset) {
+				if(loopc_offset < 0){
+					loopc_offset = -loopc_offset;
+				}else{
+					loopc_offset = -(loopc_offset+1);
+				}
+
+				pstdiv = loopc * PLL_REF_CLK_MHZ * 1000 / refc / pixclock_khz;
+				if((pstdiv > 127) || (pstdiv < 1)) continue;
+
+				/*real_freq is float type which is not available, but read_freq * pstdiv is available.*/
+				real_dvo = (loopc * PLL_REF_CLK_MHZ * 1000 / refc);
+				req_dvo  = (pixclock_khz * pstdiv);
+				precision = abs(real_dvo * PCLK_PRECISION_INDICATOR / req_dvo - PCLK_PRECISION_INDICATOR);
+
+				if(precision < precision_req){
 					pll_config->l2_div = pstdiv;
 					pll_config->l1_loopc = loopc;
-					pll_config->l1_frefc = frefc;
-
+					pll_config->l1_frefc = refc;
+#ifdef LS_FB_DEBUG
+					printk("for pixclock = %d khz, found: pstdiv = %d, "
+					      "loopc = %d, refc = %d, precision = %d / %d.\n", pixclock_khz,
+					      pll_config->l2_div, pll_config->l1_loopc, pll_config->l1_frefc, precision+1, PCLK_PRECISION_INDICATOR);
+#endif
+					if(j > 1){
+						printk("Warning: PIX clock precision degraded to %d / %d\n", precision_req, PCLK_PRECISION_INDICATOR);
+					}
 					return 1;
 				}
 			}
@@ -294,44 +328,48 @@ static void config_pll(unsigned long pll_base, struct pix_pll *pll_cfg)
 
 	ls_writeq((out | 1), pll_base + LO_OFF);
 #else
-	unsigned long val;
-
+	unsigned int val;
 	/* set sel_pll_out0 0 */
-	val = ls_readq(pll_base + LO_OFF);
-	val &= ~(1UL << 40);
-	ls_writeq(val, pll_base + LO_OFF);
+	val = ls_readl(pll_base + 0x4);
+	val &= ~(1UL << 8);
+	ls_writel(val, pll_base + 0x4);
 	/* pll_pd 1 */
-	val = ls_readq(pll_base + LO_OFF);
-	val |= (1UL << 45);
-	ls_writeq(val, pll_base + LO_OFF);
+	val = ls_readl(pll_base + 0x4);
+	val |= (1UL << 13);
+	ls_writel(val, pll_base + 0x4);
 	/* set_pll_param 0 */
-	val = ls_readq(pll_base + LO_OFF);
-	val &= ~(1UL << 43);
-	ls_writeq(val, pll_base + LO_OFF);
-	/* div ref, loopc, div out */
-	val = ls_readq(pll_base + LO_OFF);
+	val = ls_readl(pll_base + 0x4);
+	val &= ~(1UL << 11);
+	ls_writel(val, pll_base + 0x4);
 
-	/* clear old value */
-	val &= ~(0x7fUL << 32);
+	/* set new div ref, loopc, div out */
+	/* clear old value first*/
+	val = ls_readl(pll_base + 0x4);
+	val &= ~(0x7fUL << 0);
+	val |= (pll_cfg->l1_frefc << 0);
+	ls_writel(val, pll_base + 0x4);
+
+	val = ls_readl(pll_base + 0x0);
+	val &= ~(0x7fUL << 0);
+	val |= (pll_cfg->l2_div << 0);
 	val &= ~(0x1ffUL << 21);
-	val &= ~(0x7fUL);
+	val |= (pll_cfg->l1_loopc << 21);
+	ls_writel(val, pll_base + 0x0);
 
-	/* config new value */
-	val |= ((unsigned long)(pll_cfg->l1_frefc) << 32) | ((unsigned long)(pll_cfg->l1_loopc) << 21) |
-		((unsigned long)(pll_cfg->l2_div) << 0);
-	ls_writeq(val, pll_base + LO_OFF);
 	/* set_pll_param 1 */
-	val = ls_readq(pll_base + LO_OFF);
-	val |= (1UL << 43);
-	ls_writeq(val, pll_base + LO_OFF);
+	val = ls_readl(pll_base + 0x4);
+	val |= (1UL << 11);
+	ls_writel(val, pll_base + 0x4);
 	/* pll_pd 0 */
-	val = ls_readq(pll_base + LO_OFF);
-	val &= ~(1UL << 45);
-	ls_writeq(val, pll_base + LO_OFF);
+	val = ls_readl(pll_base + 0x4);
+	val &= ~(1UL << 13);
+	ls_writel(val, pll_base + 0x4);
+	/* wait pll lock */
+	while(!(ls_readl(pll_base + 0x4) & 0x80));
 	/* set sel_pll_out0 1 */
-	val = ls_readq(pll_base + LO_OFF);
-	val |= (1UL << 40);
-	ls_writeq(val, pll_base + LO_OFF);
+	val = ls_readl(pll_base + 0x4);
+	val |= (1UL << 8);
+	ls_writel(val, pll_base + 0x4);
 #endif
 }
 static void ls_reset_cursor_image(void)
