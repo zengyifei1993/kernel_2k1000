@@ -26,8 +26,13 @@
 #   include <linux/platform_device.h>
 #endif
 
+
+#ifdef CONFIG_CPU_LOONGSON2K
+#include "ls2k.h"
+#else
 #include "loongson-pch.h"
 #include "platform_driver.h"
+#endif
 #include "gc_hal_kernel_linux.h"
 #include "gc_hal_driver.h"
 
@@ -125,6 +130,17 @@ struct dma_coherent_mem {
     int             flags;
     unsigned long   *bitmap;
 };
+
+#ifdef CONFIG_CPU_LOONGSON2K
+int loongson_drv_open(struct inode* inode, struct file* filp);
+
+int loongson_drv_release(struct inode* inode, struct file* filp);
+
+long loongson_drv_ioctl(struct file* filp, unsigned int ioctlCode, unsigned long arg);
+
+int loongson_drv_mmap(struct file* filp, struct vm_area_struct* vma);
+#endif
+
 
 static struct file_operations driver_fops =
 {
@@ -442,6 +458,8 @@ long loongson_drv_ioctl(
     {
 	gctUINT32 data;
 
+#ifdef CONFIG_CPU_LOONGSON2K
+#else
 	if(loongson_pch->board_type != LS7A){
 		printk("set outstanding register \n");
 	        for (i = 0; i < gcdMAX_GPU_COUNT; i++)
@@ -466,6 +484,7 @@ long loongson_drv_ioctl(
 	            }
 	        }
 	}
+#endif
     }
 
     if (iface.command == gcvHAL_CHIP_INFO)
@@ -965,6 +984,51 @@ int loongson_gpu_probe(struct platform_device *pdev)
     flags = (DMA_MEMORY_MAP | DMA_MEMORY_EXCLUSIVE);
 #endif
 
+#ifdef CONFIG_CPU_LOONGSON2K
+	vram_type = VRAM_TYPE_UMA_LOW;
+	gpu_brust_type = 1;
+	lsgpu_hw_coherent = hw_coherentio;
+
+	printk("lsgpu_hw_coherent = %d\r\n",lsgpu_hw_coherent);
+
+	irqLine = platform_get_irq(pdev, 0);
+
+	if(0 == irqLine)
+	{
+	    printk(KERN_ERR "%s: No irq line supplied.\n",__FUNCTION__);
+	    goto gpu_probe_fail;
+	}
+
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+
+	if (!res)
+	{
+	    printk(KERN_ERR "%s: No register base supplied.\n",__FUNCTION__);
+	    goto gpu_probe_fail;
+	}
+
+	registerMemBase = res->start;
+	registerMemSize = res->end - res->start + 1;
+
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
+
+	if (!res)
+	{
+	    printk(KERN_ERR "%s: No memory base supplied.\n",__FUNCTION__);
+	    goto gpu_probe_fail;
+	}
+	contiguousBase = 0;
+	/* contiguousSize = all_reserved_size - 16MB */
+	contiguousSize = res->end - res->start + 1 - 0x01000000;
+
+	printk("res->start is 0x%llx, res->end is 0x%llx\n", res->start, res->end);
+	printk("contiguousSize is %lx\n", contiguousSize);
+
+	bus_addr = res->start;
+	all_reserved_size  = res->end - res->start + 1;
+
+	printk("all reserved_size is %lx\n", all_reserved_size);
+#else
     res = platform_get_resource_byname(pdev, IORESOURCE_IRQ, "gpu_irq");
 
     if (!res)
@@ -1003,7 +1067,7 @@ int loongson_gpu_probe(struct platform_device *pdev)
     all_reserved_size  = res->end - res->start + 1;
 
     printk("all reserved_size is %lx\n", all_reserved_size);
-
+#endif
     if(vram_type == VRAM_TYPE_UMA_LOW)
 		device_addr = bus_addr;
     if(vram_type == VRAM_TYPE_SP_LOW)

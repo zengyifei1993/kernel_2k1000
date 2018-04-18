@@ -33,6 +33,8 @@ u32 nr_cpus_loongson;
 u32 cores_per_package;
 u32 loongson_hwmon;
 
+
+
 static void wbflush_loongson(void)
 {
 		asm(".set\tpush\n\t"

@@ -14,6 +14,17 @@
 #ifndef _LS2K_H
 #define _LS2K_H
 #include <asm/addrspace.h>
+
+#define VRAM_TYPE_SP	0
+#define VRAM_TYPE_UMA	1
+#define VRAM_TYPE_SP		0	/*GPU use his private memory with special address space*/
+#define VRAM_TYPE_UMA_SP	1	/*GPU use his private memory with unified address space*/
+#define VRAM_TYPE_UMA_LOW	2	/*GPU use low address syetem memory with unified address space*/
+#define VRAM_TYPE_UMA_HIGH	3	/*GPU use high address syetem memory with unified address space*/
+#define VRAM_TYPE_SP_LOW	4	/*GPU use low address syetem memory with special address space*/
+#define VRAM_TYPE_SP_HIGH	5	/*GPU use high address syetem memory with special address space*/
+
+
 #define LS2K_IO_REG_BASE		0x1f000000
 
 /* CHIP CONFIG regs */
@@ -358,6 +369,8 @@ enum {
 #define LS2K_SOC_GPU    0x01
 #define LS3A_2H_GPU     0x02
 
+
+
 #define MAX_PACKAGES 2
 /* Chip Temperature registor of each physical cpu package, for Loongson2K and successor */
 extern u64 loongson_chiptemp[MAX_PACKAGES];
@@ -392,4 +405,9 @@ struct ls2k_gpu_plat_data {
         u32     vram_kind; /*gpu vram kind, 0x01: vram in 2H DDR; 0x02: vram in 3A DDR */
         u32     board_kind; /*gpu board kind, 0x01: 2HSOC; 0x02: 3A2H */
 };
+
+extern u32 vram_type;
+extern u64 uma_vram_addr;
+extern u64 uma_vram_size;
+extern u32 gpu_brust_type;
 #endif /* _LS2K_H */
