@@ -81,9 +81,9 @@ static int probe_mask[SNDRV_CARDS] = {[0 ... (SNDRV_CARDS - 1)] = -1 };
 static int probe_only[SNDRV_CARDS];
 static int single_cmd;
 static int enable_msi = -1;
-#ifdef CONFIG_LS7A_HDA_INPUT_BEEP
+#ifdef CONFIG_LS_HDA_INPUT_BEEP
 static int beep_mode[SNDRV_CARDS] = {[0 ... (SNDRV_CARDS - 1)] =
-	    CONFIG_LS7A_HDA_INPUT_BEEP_MODE
+	    CONFIG_LS_HDA_INPUT_BEEP_MODE
 };
 #endif
 
@@ -109,14 +109,14 @@ MODULE_PARM_DESC(single_cmd, "Use single command to communicate with codecs "
 		 "(for debugging only).");
 module_param(enable_msi, int, 0444);
 MODULE_PARM_DESC(enable_msi, "Enable Message Signaled Interrupt (MSI)");
-#ifdef CONFIG_LS7A_HDA_INPUT_BEEP
+#ifdef CONFIG_LS_HDA_INPUT_BEEP
 module_param_array(beep_mode, int, NULL, 0444);
 MODULE_PARM_DESC(beep_mode, "Select HDA Beep registration mode "
 		 "(0=off, 1=on, 2=mute switch on/off) (default=1).");
 #endif
 
 #ifdef CONFIG_SND_HDA_POWER_SAVE
-static int power_save = CONFIG_LS7A_HDA_POWER_SAVE_DEFAULT;
+static int power_save = CONFIG_LS_HDA_POWER_SAVE_DEFAULT;
 module_param(power_save, int, 0644);
 MODULE_PARM_DESC(power_save, "Automatic power-saving timeout "
 		 "(in second, 0 = disable).");
@@ -136,7 +136,7 @@ MODULE_SUPPORTED_DEVICE("{{Intel, ICH6},"
 			"{Intel, ICH7},"
 			"{Intel, ESB2},"
 			"{Intel, ICH8}," "{Intel, ICH9}," "{Intel, ICH10}}");
-MODULE_DESCRIPTION("Loongson7A HDA driver");
+MODULE_DESCRIPTION("Loongson HDA driver");
 
 #ifdef CONFIG_SND_VERBOSE_PRINTK
 #define SFX			/* nop */
@@ -459,7 +459,6 @@ static char *driver_short_names[] = {
  * redefine 3A IO functions. ls
  */
 
-//#ifdef CONFIG_LS7A_SB
 #if 1
 spinlock_t mailbox_lock;
 #endif
@@ -831,7 +830,7 @@ static int azx_reset(struct azx *chip, int full_reset)
 	if (!full_reset)
 		goto __skip;
 
-	/* LS7A hda pos buffer will work soon after reset and before
+	/* LS hda pos buffer will work soon after reset and before
 	 * DPLBASE be set. Dma will damanged memory 0xffffffff80000000+n*ch,
 	 * ch=4-7. Here we save code before reset deassert and recover code
 	 * after DPLBASE is set.
@@ -2331,7 +2330,7 @@ static int azx_probe(struct platform_device *devptr)
 		goto out_free;
 	card->private_data = chip;
 
-#ifdef CONFIG_LS7A_HDA_INPUT_BEEP
+#ifdef CONFIG_LS_HDA_INPUT_BEEP
 	chip->beep_mode = beep_mode[dev];
 #endif
 
@@ -2379,6 +2378,12 @@ static int __exit azx_remove(struct platform_device *devptr)
 	return 0;
 }
 
+#ifdef CONFIG_OF
+static struct of_device_id ls_hda_id_table[] = {
+	{ .compatible = "loongson,ls-audio",},
+};
+#endif
+
 /* platform_driver definition */
 static struct platform_driver driver = {
 	.probe = azx_probe,
@@ -2388,8 +2393,11 @@ static struct platform_driver driver = {
 	.resume = azx_resume,
 #endif
 	.driver = {
-		   .name = "ls7a-audio",
-		   .owner = THIS_MODULE,
+		.name = "ls-audio",
+#ifdef CONFIG_OF
+		.of_match_table = of_match_ptr(ls_hda_id_table),
+#endif
+		.owner = THIS_MODULE,
 		   },
 };
 
@@ -2404,7 +2412,7 @@ static DEFINE_PCI_DEVICE_TABLE(azx_id_table) = {
 
 MODULE_DEVICE_TABLE(pci, azx_id_table);
 
-static struct resource ls7a_hda_resources[] = {
+static struct resource ls_hda_resources[] = {
 	[0] = {
 		.flags	= IORESOURCE_MEM,
 	},
@@ -2413,11 +2421,11 @@ static struct resource ls7a_hda_resources[] = {
 	},
 };
 
-static struct platform_device ls7a_hda_device = {
-	.name           = "ls7a-audio",
+static struct platform_device ls_hda_device = {
+	.name           = "ls-audio",
 	.id             = 0,
-	.num_resources	= ARRAY_SIZE(ls7a_hda_resources),
-	.resource	= ls7a_hda_resources,
+	.num_resources	= ARRAY_SIZE(ls_hda_resources),
+	.resource	= ls_hda_resources,
 };
 
 static int azx_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
@@ -2428,30 +2436,30 @@ static int azx_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	/* Enable device in PCI config */
 	ret = pci_enable_device(pdev);
 	if (ret < 0) {
-		printk(KERN_ERR "ls7a hda (%s): Cannot enable PCI device\n",
+		printk(KERN_ERR "ls hda (%s): Cannot enable PCI device\n",
 		       pci_name(pdev));
 		goto err_out;
 	}
 
 	/* request the mem regions */
-	ret = pci_request_region(pdev, 0, "ls7ahda io");
+	ret = pci_request_region(pdev, 0, "lshda io");
 	if (ret < 0) {
-		printk( KERN_ERR "ls7ahda (%s): cannot request region 0.\n",
+		printk( KERN_ERR "lshda (%s): cannot request region 0.\n",
 			pci_name(pdev));
 		goto err_out;
 	}
 
-	ls7a_hda_resources[0].start = pci_resource_start (pdev, 0);
-	ls7a_hda_resources[0].end = pci_resource_end(pdev, 0);
+	ls_hda_resources[0].start = pci_resource_start (pdev, 0);
+	ls_hda_resources[0].end = pci_resource_end(pdev, 0);
 
 	ret = pci_read_config_byte(pdev, PCI_INTERRUPT_LINE, &v8); //need api from pci irq
 
 	if (ret == PCIBIOS_SUCCESSFUL) {
 
-		ls7a_hda_resources[1].start = v8;
-		ls7a_hda_resources[1].end = v8;
+		ls_hda_resources[1].start = v8;
+		ls_hda_resources[1].end = v8;
 
-		platform_device_register(&ls7a_hda_device);
+		platform_device_register(&ls_hda_device);
 		platform_driver_register(&driver);
 
 	}
@@ -2475,9 +2483,10 @@ static struct pci_driver azx_pci_driver = {
 static int __init alsa_card_azx_init(void)
 {
 	int err;
-	err = pci_register_driver(&azx_pci_driver);
-	if (err)
-		pr_err("hda azx pci driver register\n");
+	err = platform_driver_register(&driver);
+	if (!err)
+		err = pci_register_driver(&azx_pci_driver);
+	pr_err("hda azx driver register\n");
 	return err;
 }
 

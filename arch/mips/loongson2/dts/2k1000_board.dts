@@ -45,6 +45,17 @@
 			reg = <0x1fe114a0 0x60>;
 		};
 
+		/* HDA controller nodes:
+		 * If you want to use the "hda" function,enable the "hda"
+		 * controller by configure general configuration register 0.
+		 */
+		/*hda@0x400d0000 {
+			compatible = "loongson,ls-audio";
+			reg = <0x400d0000 0xffff>;
+			interrupt-parent = <&icu>;
+			interrupts = <12>;
+		};*/
+
 		dc@0x400c0000 {
 			compatible = "loongson,ls-fb";
 			reg = <0x400c0000 0xffff>;
