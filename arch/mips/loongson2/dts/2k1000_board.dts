@@ -269,6 +269,10 @@
 			/*i2c-gpio,sda-open-drain;*/
 			/*i2c-gpio,scl-open-drain;*/
 			i2c-gpio,delay-us = <5>;	/* ~100 kHz */
+			eeprom@50{
+				compatible = "eeprom-edid";
+				reg = <0x50>;
+			};
 		};
 
 		spi0: spi@1fff0220{
