@@ -281,6 +281,7 @@
 	.macro	cfcmsa	rd, cs
 	.set	push
 	.set	noat
+	SET_HARDFLOAT
 	.insn
 	.word	CFC_MSA_INSN | (\cs << 11)
 	move	\rd, $1
@@ -290,6 +291,7 @@
 	.macro	ctcmsa	cd, rs
 	.set	push
 	.set	noat
+	SET_HARDFLOAT
 	move	$1, \rs
 	.word	CTC_MSA_INSN | (\cd << 6)
 	.set	pop
@@ -298,6 +300,7 @@
 	.macro	ld_d	wd, off, base
 	.set	push
 	.set	noat
+	SET_HARDFLOAT
 	add	$1, \base, \off
 	.word	LDD_MSA_INSN | (\wd << 6)
 	.set	pop
@@ -306,6 +309,7 @@
 	.macro	st_d	wd, off, base
 	.set	push
 	.set	noat
+	SET_HARDFLOAT
 	add	$1, \base, \off
 	.word	STD_MSA_INSN | (\wd << 6)
 	.set	pop
@@ -314,6 +318,7 @@
 	.macro	copy_u_w	rd, ws, n
 	.set	push
 	.set	noat
+	SET_HARDFLOAT
 	.insn
 	.word	COPY_UW_MSA_INSN | (\n << 16) | (\ws << 11)
 	/* move triggers an assembler bug... */
@@ -324,6 +329,7 @@
 	.macro	copy_u_d	rd, ws, n
 	.set	push
 	.set	noat
+	SET_HARDFLOAT
 	.insn
 	.word	COPY_UD_MSA_INSN | (\n << 16) | (\ws << 11)
 	/* move triggers an assembler bug... */
@@ -334,6 +340,7 @@
 	.macro	insert_w	wd, n, rs
 	.set	push
 	.set	noat
+	SET_HARDFLOAT
 	/* move triggers an assembler bug... */
 	or	$1, \rs, zero
 	.word	INSERT_W_MSA_INSN | (\n << 16) | (\wd << 6)
@@ -343,6 +350,7 @@
 	.macro	insert_d	wd, n, rs
 	.set	push
 	.set	noat
+	SET_HARDFLOAT
 	/* move triggers an assembler bug... */
 	or	$1, \rs, zero
 	.word	INSERT_D_MSA_INSN | (\n << 16) | (\wd << 6)
@@ -385,6 +393,7 @@
 	st_d	31, THREAD_FPR31, \thread
 	.set	push
 	.set	noat
+	SET_HARDFLOAT
 	cfcmsa	$1, MSA_CSR
 	sw	$1, THREAD_MSA_CSR(\thread)
 	.set	pop
@@ -393,6 +402,7 @@
 	.macro	msa_restore_all	thread
 	.set	push
 	.set	noat
+	SET_HARDFLOAT
 	lw	$1, THREAD_MSA_CSR(\thread)
 	ctcmsa	MSA_CSR, $1
 	.set	pop
@@ -445,6 +455,7 @@
 	.macro	msa_init_all_upper
 	.set	push
 	.set	noat
+	SET_HARDFLOAT
 	not	$1, zero
 	msa_init_upper	0
 	.set	pop

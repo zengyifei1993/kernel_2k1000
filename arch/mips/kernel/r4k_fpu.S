@@ -40,11 +40,14 @@ LEAF(_save_fp_context)
 	.set	push
 	SET_HARDFLOAT
 	cfc1	t1, fcr31
+	.set	pop
 
 #if defined(CONFIG_64BIT) || defined(CONFIG_CPU_MIPS32_R2)
 	.set	push
+	SET_HARDFLOAT
 #ifdef CONFIG_CPU_MIPS32_R2
-	.set	mips64r2
+	.set	mips32r2
+	.set	fp=64
 	mfc0	t0, CP0_STATUS
 	sll	t0, t0, 5
 	bgez	t0, 1f			# skip storing odd if FR=0
@@ -70,6 +73,8 @@ LEAF(_save_fp_context)
 1:	.set	pop
 #endif
 
+	.set push
+	SET_HARDFLOAT
 	/* Store the 16 even double precision registers */
 	EX	sdc1 $f0, SC_FPREGS+0(a0)
 	EX	sdc1 $f2, SC_FPREGS+16(a0)
@@ -162,8 +167,10 @@ LEAF(_restore_fp_context)
 
 #if defined(CONFIG_64BIT) || defined(CONFIG_CPU_MIPS32_R2)
 	.set	push
+	SET_HARDFLOAT
 #ifdef CONFIG_CPU_MIPS32_R2
-	.set	mips64r2
+	.set	mips32r2
+	.set	fp=64
 	mfc0	t0, CP0_STATUS
 	sll	t0, t0, 5
 	bgez	t0, 1f			# skip loading odd if FR=0
@@ -187,6 +194,8 @@ LEAF(_restore_fp_context)
 	EX	ldc1 $f31, SC_FPREGS+248(a0)
 1:	.set pop
 #endif
+	.set push
+	SET_HARDFLOAT
 	EX	ldc1 $f0, SC_FPREGS+0(a0)
 	EX	ldc1 $f2, SC_FPREGS+16(a0)
 	EX	ldc1 $f4, SC_FPREGS+32(a0)

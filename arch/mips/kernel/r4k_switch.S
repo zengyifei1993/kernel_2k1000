@@ -269,7 +269,8 @@ LEAF(_init_fpu)
 
 #ifdef CONFIG_CPU_MIPS32_R2
 	.set    push
-	.set    mips64r2
+	.set    mips32r2
+	.set	fp=64
 	sll     t0, t0, 5			# is Status.FR set?
 	bgez    t0, 1f				# no: skip setting upper 32b
 
