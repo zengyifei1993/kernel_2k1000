@@ -113,7 +113,7 @@
 			/*mac-address = [ 64 48 48 48 48 60 ]; [>mac 64:48:48:48:48:60 <]*/
 			phy-mode = "rgmii";
 			bus_id = <0x0>;
-			phy_addr = <0x0>;
+			phy_addr = <0xffffffff>;
 			dma-mask = <0xffffffff 0xffffffff>;
 		};
 
@@ -126,7 +126,7 @@
 			/*mac-address = [ 64 48 48 48 48 61 ]; [>mac 64:48:48:48:48:61 <]*/
 			phy-mode = "rgmii";
 			bus_id = <0x1>;
-			phy_addr = <0x10>;
+			phy_addr = <0xffffffff>;
 			dma-mask = <0xffffffff 0xffffffff>;
 		};
 
