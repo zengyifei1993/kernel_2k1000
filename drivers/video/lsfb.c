@@ -64,6 +64,7 @@ static void *videomemory;
 static	dma_addr_t dma_A;
 static dma_addr_t cursor_dma;
 
+static bool edid_flag = 0;
 static u_long videomemorysize = 0;
 module_param(videomemorysize, ulong, 0);
 static DEFINE_SPINLOCK(fb_lock);
@@ -473,7 +474,11 @@ static int ls_init_regs(struct fb_info *info)
 
 	/* cursor */
 	/* Select full color ARGB mode */
-	ls_writel(0x00050202,base + LS_FB_CUR_CFG_REG);
+	if(edid_flag == 0){
+		ls_writel(0x00050202,base + LS_FB_CUR_CFG_REG);
+	}else{
+		ls_writel(0x00050212,base + LS_FB_CUR_CFG_REG);
+	}
 	ls_writel(cursor_dma,base + LS_FB_CUR_ADDR_REG);
 	ls_writel(0x00060122,base + LS_FB_CUR_LOC_ADDR_REG);
 	ls_writel(0x00eeeeee,base + LS_FB_CUR_BACK_REG);
@@ -644,8 +649,13 @@ static void ls_enable_cursor(int mode, unsigned long base)
 {
 	unsigned int tmp = ls_readl(base + LS_FB_CUR_CFG_REG);
 	tmp &= ~0xff;
+	if(edid_flag == 0){
 	ls_writel(mode ? (tmp | 0x02) : (tmp | 0x00),
 			base + LS_FB_CUR_CFG_REG);
+	}else{
+	ls_writel(mode ? (tmp | 0x12) : (tmp | 0x10),
+			base + LS_FB_CUR_CFG_REG);
+	}
 }
 
 static void ls_load_cursor_image(int width, int height, u8 *data)
@@ -925,7 +935,6 @@ static struct i2c_driver dvi_eep_driver = {
 	.id_table = dvi_eep_ids,
 };
 
-static bool edid_flag = 0;
 static unsigned char *ls_fb_i2c_connector(struct ls_fb_par *fb_par)
 {
 	unsigned char *edid = NULL;
