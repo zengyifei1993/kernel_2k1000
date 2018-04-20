@@ -160,9 +160,10 @@ static int ahci_probe(struct platform_device *pdev)
 		pdata ? pdata->mask_port_map  : 0);
 
 	/* prepare host */
+#if !defined(CONFIG_CPU_LOONGSON2K)
 	if (hpriv->cap & HOST_CAP_NCQ)
 		pi.flags |= ATA_FLAG_NCQ;
-
+#endif
 	if (hpriv->cap & HOST_CAP_PMP)
 		pi.flags |= ATA_FLAG_PMP;
 
