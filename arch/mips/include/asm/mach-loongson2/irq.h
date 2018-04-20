@@ -22,7 +22,7 @@
 
 
 #define MIPS_CPU_IRQ_BASE 0
-#define NR_IRQS 160
+#define NR_IRQS 192
 
 enum LS2K_ICU {
 	LS2K_IRQ_BASE = 8,
