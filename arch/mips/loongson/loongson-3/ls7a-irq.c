@@ -27,7 +27,7 @@ extern int ls3a_msi_enabled;
 
 /* Maximum 26 IPI irqs */
 #define PCH_DIRQS 26
-unsigned char ls7a_ipi_irq2pos[128] = { [0 ... 63] = -1 };
+unsigned char ls7a_ipi_irq2pos[128] = { [0 ... 127] = -1 };
 unsigned char ls7a_ipi_pos2irq[64] = { [0 ... 63] = -1 };
 static DECLARE_BITMAP(pch_irq_in_use, PCH_DIRQS);
 
