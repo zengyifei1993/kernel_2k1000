@@ -1615,7 +1615,7 @@ gckOS_MapMemory(
 	{
 		res_tmp =remap_pfn_range(mdlMap->vma,
 	                            mdlMap->vma->vm_start,
-	                            (mdl->dmaHandle & 0x0fffffff ) >> PAGE_SHIFT,
+	                            (mdl->dmaHandle & 0xffffffff ) >> PAGE_SHIFT,
 	                            mdl->numPages*PAGE_SIZE,
 	                            mdlMap->vma->vm_page_prot);
 	}
@@ -2105,7 +2105,7 @@ gckOS_AllocateNonPagedMemory(
 		res_tmp = remap_pfn_range(mdlMap->vma,
 	                            mdlMap->vma->vm_start,
 	                            //mdl->dmaHandle >> PAGE_SHIFT,
-	                            (mdl->dmaHandle & 0x0fffffff) >> PAGE_SHIFT,
+	                            (mdl->dmaHandle & 0xffffffff) >> PAGE_SHIFT,
 	                            mdl->numPages * PAGE_SIZE,
 	                            mdlMap->vma->vm_page_prot);
 	}
