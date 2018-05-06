@@ -92,7 +92,12 @@
 #define MAX_DMA_PFN		PFN_DOWN(virt_to_phys((void *)MAX_DMA_ADDRESS))
 
 #ifndef MAX_DMA32_PFN
+#ifdef CONFIG_MACH_LOONGSON3
+extern unsigned long loongson_max_dma32_pfn
+#define MAX_DMA32_PFN		loongson_max_dma32_pfn
+#else
 #define MAX_DMA32_PFN		(1UL << (32 - PAGE_SHIFT))
+#endif
 #endif
 
 /* 8237 DMA controllers */
