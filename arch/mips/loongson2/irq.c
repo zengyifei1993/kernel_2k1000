@@ -22,6 +22,40 @@
 #include <irq.h>
 #include <linux/platform_device.h>
 #include <linux/of.h>
+#include <linux/module.h>
+
+static int irqbalance;
+module_param(irqbalance, int, 0664);
+static unsigned int int_auto[2], int_bounce[2];
+
+static int param_set_intparam(const char *val, struct kernel_param *kp)
+{
+	unsigned long base;
+	int i;
+	*(volatile int *)kp->arg = simple_strtoul(val,0,0);
+	for(i=0;i<2;i++)
+	{
+		base = CKSEG1ADDR(CONF_BASE) + i * 0x40 + INT_LO_OFF ;
+
+		ls64_conf_write32(int_auto[i], (void *)(base + INT_AUTO_OFF));
+		ls64_conf_write32(int_bounce[i], (void *)(base + INT_BCE_OFF));
+	}
+
+ return 0;
+}
+
+
+int param_get_intparam(char *buffer, const struct kernel_param *kp)
+{
+	/* Y and N chosen as being relatively non-coder friendly */
+	return sprintf(buffer, "0x%x", *(unsigned int *)kp->arg);
+}
+module_param_call(int_auto0, param_set_intparam, param_get_intparam, &int_auto[0], 0644);
+module_param_call(int_auto1, param_set_intparam, param_get_intparam, &int_auto[1], 0644);
+module_param_call(int_bounce0, param_set_intparam, param_get_intparam, &int_bounce[0], 0644);
+module_param_call(int_bounce1, param_set_intparam, param_get_intparam, &int_bounce[1], 0644);
+
+
 
 /* ip7 take perf/timer */
 /* ip6 take smp */
@@ -66,12 +100,81 @@ void ls_mask_icu_irq(struct irq_data * data)
 	raw_spin_unlock_irqrestore(&ls2k_irq_lock, flags);
 }
 
+int ls_set_affinity_icu_irq(struct irq_data *data, const struct cpumask *affinity,
+		bool force)
+{
+	cpumask_t tmask;
+	unsigned int cpu;
+        volatile unsigned char *entry;
+	unsigned long *mask;
+	unsigned long base;
+	unsigned int index;
+	int off, sel;
+	unsigned long flags;
+	raw_spin_lock_irqsave(&ls2k_irq_lock, flags);
+	if (data->irq >= LS64_MSI_IRQ_BASE)
+		index = data->irq - LS64_MSI_IRQ_BASE;
+	else
+		index = data->irq - LS2K_IRQ_BASE;
+	off = (index & 0x1f);
+	sel = (index >> 5);
+	base = CKSEG1ADDR(CONF_BASE) + (index > 32) * 0x40 + INT_LO_OFF ;
+
+	cpumask_copy(&tmask, affinity);
+
+	for_each_cpu(cpu, affinity) {
+		if (!cpu_online(cpu))
+			cpu_clear(cpu, tmask);
+	}
+
+	if (cpus_empty(tmask))
+		cpu_set(0, tmask);
+
+	cpumask_copy(data->affinity, &tmask);
+
+	mask = cpumask_bits(&tmask);
+	entry = (void *)(base  + off);
+	switch(*mask&3)
+	{
+		case 1:
+			int_auto[sel] &= ~(1 << off);
+			int_bounce[sel] &= ~(1 << off);
+			writeb((readb(entry) & 0xf0)|0x01, entry);
+		break;
+		case 2:
+			int_auto[sel] &= ~(1 << off);
+			int_bounce[sel] &= ~(1 << off);
+			writeb((readb(entry) & 0xf0)|0x02, entry);
+		break;
+		case 3:
+			if(irqbalance&1)
+			 int_auto[sel] |= (1 << off);
+			else
+			 int_auto[sel] &= ~(1 << off);
+
+			if(irqbalance&2)
+			 int_bounce[sel] |= (1 << off);
+			else
+			 int_bounce[sel] &= ~(1 << off);
+			writeb((readb(entry) & 0xf0)|0x03, entry);
+		break;
+	}
+
+	ls64_conf_write32(int_auto[sel], (void *)(base + INT_AUTO_OFF));
+	ls64_conf_write32(int_bounce[sel], (void *)(base + INT_BCE_OFF));
+	raw_spin_unlock_irqrestore(&ls2k_irq_lock, flags);
+
+	return IRQ_SET_MASK_OK_NOCOPY;
+}
+
+
 static struct irq_chip ls64_irq_chip = {
 	.name		= "ls64soc",
 	/*.irq_ack	= mask_icu_irq,*/
 	/*.irq_eoi	= unmask_icu_irq,*/
 	.irq_unmask	= ls_unmask_icu_irq,
 	.irq_mask	= ls_mask_icu_irq,
+	.irq_set_affinity	= ls_set_affinity_icu_irq,
 };
 
 extern u64 ls_msi_irq_mask;

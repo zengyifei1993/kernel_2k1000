@@ -106,12 +106,15 @@ void enable_ls2k_msi_irq(struct irq_data *d)
 	ls2k_writel(ls2k_readl(reg)|(1<<(pos&0x1f)), reg);
 }
 
+int ls_set_affinity_icu_irq(struct irq_data *data, const struct cpumask *affinity, bool force);
+
 static struct irq_chip ls2k_msi_chip = {
 	.name = "PCI-MSI",
 	.irq_ack	= ls_mask_icu_irq,
 	.irq_mask	= disable_ls2k_msi_irq,
 	.irq_unmask	= enable_ls2k_msi_irq,
 	.irq_eoi	= enable_ls2k_msi_irq,
+	.irq_set_affinity	= ls_set_affinity_icu_irq,
 };
 
 int ls2k_setup_msi_irq(struct pci_dev *pdev, struct msi_desc *desc)
