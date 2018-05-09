@@ -86,6 +86,7 @@ extern char *board_manufacturer;
 extern char _bios_info[];
 extern char _board_info[];
 
+unsigned long loongson_max_dma32_pfn;
 u32 cpu_clock_freq;
 EXPORT_SYMBOL(cpu_clock_freq);
 EXPORT_SYMBOL(loongson_ec_sci_irq);
@@ -245,6 +246,7 @@ void __init prom_init_env(void)
 
 		loongson_pch = &ls2h_pch;
 		loongson_ec_sci_irq = 0x80;
+		loongson_max_dma32_pfn = 0x180000000ULL>> PAGE_SHIFT;
 	}
 	else if (strstr(eboard->name,"7A")) {
 		loongson_pch = &ls7a_pch;
@@ -254,10 +256,12 @@ void __init prom_init_env(void)
 			hw_coherentio = 1;
 			pr_info("Board [%s] detected, **coherent dma** is unconditionally used!\n", eboard->name);
 		}
+		loongson_max_dma32_pfn = 0x100000000ULL>> PAGE_SHIFT;
 	}
 	else {
 		loongson_pch = &rs780_pch;
 		loongson_ec_sci_irq = 0x07;
+		loongson_max_dma32_pfn = 0x100000000ULL>> PAGE_SHIFT;
 	}
 
         /* parse bios info */

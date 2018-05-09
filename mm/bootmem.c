@@ -818,7 +818,12 @@ void * __init __alloc_bootmem_node_high(pg_data_t *pgdat, unsigned long size,
 }
 
 #ifndef ARCH_LOW_ADDRESS_LIMIT
+#ifdef CONFIG_MACH_LOONGSON3
+extern unsigned long loongson_max_dma32_pfn;
+#define ARCH_LOW_ADDRESS_LIMIT	((loongson_max_dma32_pfn<<PAGE_SHIFT)-1)
+#else
 #define ARCH_LOW_ADDRESS_LIMIT	0xffffffffUL
+#endif
 #endif
 
 /**
