@@ -311,25 +311,48 @@ static unsigned int cal_freq(unsigned int pixclock_khz, struct pix_pll * pll_con
 
 static void config_pll(unsigned long pll_base, struct pix_pll *pll_cfg)
 {
+	unsigned long val;
 #ifdef CONFIG_CPU_LOONGSON2K
-	unsigned long out;
+     /* set sel_pll_out0 0 */
+    val = ls_readq(pll_base);
+    val &= ~(1UL << 0);
+    ls_writeq(val, pll_base);
 
-	out = (1 << 7) | (1L << 42) | (3 << 10) |
+    /* pll_pd 1 */
+    val = ls_readq(pll_base);
+    val |= (1UL << 19);
+    ls_writeq(val, pll_base);
+
+    /* set_pll_param 0 */
+    val = ls_readq(pll_base);
+    val &= ~(1UL << 2);
+    ls_writeq(val, pll_base);
+
+    /* set new div ref, loopc, div out */
+    /* clear old value first*/
+	val = (1 << 7) | (1L << 42) | (3 << 10) |
 		((unsigned long)(pll_cfg->l1_loopc) << 32) |
 		((unsigned long)(pll_cfg->l1_frefc) << 26);
+    ls_writeq(val, pll_base);
+    ls_writeq(pll_cfg->l2_div, pll_base + 8);
 
-	ls_writeq(0, pll_base + LO_OFF);
-	ls_writeq(1 << 19, pll_base + LO_OFF);
-	ls_writeq(out, pll_base + LO_OFF);
-	ls_writeq(pll_cfg->l2_div, pll_base + HI_OFF);
-	out = (out | (1 << 2));
-	ls_writeq(out, pll_base + LO_OFF);
+    /* set_pll_param 1 */
+    val = ls_readq(pll_base);
+    val |= (1UL << 2);
+    ls_writeq(val, pll_base);
 
-	while (!(ls_readq(pll_base + LO_OFF) & 0x10000)) ;
+    /* pll_pd 0 */
+    val = ls_readq(pll_base);
+    val &= ~(1UL << 19);
+    ls_writeq(val, pll_base);
 
-	ls_writeq((out | 1), pll_base + LO_OFF);
+    /* wait pll lock */
+    while(!(ls_readl(pll_base) & 0x10000));
+    /* set sel_pll_out0 1 */
+    val = ls_readq(pll_base);
+    val |= (1UL << 0);
+    ls_writeq(val, pll_base);
 #else
-	unsigned int val;
 	/* set sel_pll_out0 0 */
 	val = ls_readl(pll_base + 0x4);
 	val &= ~(1UL << 8);
