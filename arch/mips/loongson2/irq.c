@@ -248,7 +248,7 @@ void set_irq_attr(int irq, unsigned int imask, unsigned int core_mask, int mode)
 	hi = (index >= 32);
 	index = index & 0x1f;
 	au = (mode & 0x1);
-	bounce = ((mode > 1) & 0x1);
+	bounce = ((mode >> 1) & 0x1);
 	base = CKSEG1ADDR(CONF_BASE) + INT_LO_OFF + hi * 0x40;
 
 	ls64_conf_write8(imask << 4 | core_mask, (void *)(base + index));
