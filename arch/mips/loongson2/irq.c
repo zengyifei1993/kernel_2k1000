@@ -77,7 +77,7 @@ void ls_unmask_icu_irq(struct irq_data * data)
 		index = data->irq - LS64_MSI_IRQ_BASE;
 	else
 		index = data->irq - LS2K_IRQ_BASE;
-	base = CKSEG1ADDR(CONF_BASE) + (index > 32) * 0x40 + INT_LO_OFF ;
+	base = CKSEG1ADDR(CONF_BASE) + (index >= 32) * 0x40 + INT_LO_OFF ;
 	ls64_conf_write32(1 << (index & 0x1f), (void *)(base + INT_SET_OFF));
 	raw_spin_unlock_irqrestore(&ls2k_irq_lock, flags);
 }
@@ -95,7 +95,7 @@ void ls_mask_icu_irq(struct irq_data * data)
 		index = data->irq - LS64_MSI_IRQ_BASE;
 	else
 		index = data->irq - LS2K_IRQ_BASE;
-	base = CKSEG1ADDR(CONF_BASE) + (index > 32) * 0x40 + INT_LO_OFF;
+	base = CKSEG1ADDR(CONF_BASE) + (index >= 32) * 0x40 + INT_LO_OFF;
 	ls64_conf_write32(1 << (index & 0x1f), (void *)(base + INT_CLR_OFF));
 	raw_spin_unlock_irqrestore(&ls2k_irq_lock, flags);
 }
@@ -118,7 +118,7 @@ int ls_set_affinity_icu_irq(struct irq_data *data, const struct cpumask *affinit
 		index = data->irq - LS2K_IRQ_BASE;
 	off = (index & 0x1f);
 	sel = (index >> 5);
-	base = CKSEG1ADDR(CONF_BASE) + (index > 32) * 0x40 + INT_LO_OFF ;
+	base = CKSEG1ADDR(CONF_BASE) + sel * 0x40 + INT_LO_OFF ;
 
 	cpumask_copy(&tmask, affinity);
 
