@@ -169,7 +169,7 @@ static inline void arch_spin_lock(arch_spinlock_t *lock)
 
 static inline void arch_spin_unlock(arch_spinlock_t *lock)
 {
-#ifndef CONFIG_CPU_LOONGSON3
+#if !defined(CONFIG_CPU_LOONGSON3) && !defined(CONFIG_CPU_LOONGSON2K)
 	unsigned int serving_now = lock->h.serving_now + 1;
 	wmb();
 	lock->h.serving_now = (u16)serving_now;
