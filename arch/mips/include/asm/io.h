@@ -328,7 +328,8 @@ extern spinlock_t ls2k_io_lock;
 #define ls2k_unlock_apbio(addr)
 #endif
 
-#if defined(CONFIG_CPU_CAVIUM_OCTEON) || defined(CONFIG_CPU_LOONGSON3)
+#if defined(CONFIG_CPU_CAVIUM_OCTEON) || defined(CONFIG_CPU_LOONGSON3) || defined(CONFIG_CPU_LOONGSON2K)
+
 #define war_io_reorder_wmb()		wmb()
 #else
 #define war_io_reorder_wmb()		do { } while (0)
