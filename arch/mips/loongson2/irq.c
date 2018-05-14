@@ -276,6 +276,6 @@ void __init setup_irq_default(void)
 void  __init arch_init_irq(void)
 {
 	mips_cpu_irq_init();
-	set_c0_status(STATUSF_IP4 | STATUSF_IP5 | STATUSF_IP6 | STATUSF_IP7);
+	set_c0_status(STATUSF_IP4 | STATUSF_IP5 | STATUSF_IP6);
 	setup_irq_default();
 }
