@@ -989,39 +989,50 @@ static unsigned char *ls_fb_i2c_connector(struct ls_fb_par *fb_par)
 	return edid;
 }
 
-static void ls_fb_address_init(void)
+static int ls_fb_address_init(struct fb_info *info)
 {
+		struct resource *r;
+		struct ls_fb_par *par;
 #ifdef CONFIG_CPU_LOONGSON3
 		struct pci_dev *pdev;
 
 		pdev= pci_get_device(PCI_VENDOR_ID_LOONGSON,PCI_DEVICE_ID_LOONGSON_GPU ,NULL);
 		if(pdev){
 				/*get frame buffer address from memory of GPU device*/
-				lsfb_dma = pci_resource_start(pdev,2);
-				lsfb_mem = LS7A_HT1_BASE|lsfb_dma;
+				ls_cursor_dma = pci_resource_start(pdev,2);
+				ls_cursor_mem = LS7A_HT1_BASE|ls_cursor_dma;
 
-				ls_cursor_mem = lsfb_mem | LSFB_MASK;
-				ls_cursor_dma = lsfb_dma | LSFB_MASK;
-				ls_fb_mem     = lsfb_mem;
-				ls_phy_addr   = lsfb_mem & LSFB_GPU_MASK;
-				ls_fb_dma     = lsfb_dma;
+				ls_fb_mem = ls_cursor_mem + LSFB_MASK;
+				ls_fb_dma = ls_cursor_dma + LSFB_MASK;
+				ls_phy_addr   = ls_fb_mem & LSFB_GPU_MASK;
 
 				pci_enable_device_mem(pdev);
 		}else{
 #endif
 				/*get frame buffer address from system memory*/
-				ls_cursor_mem = DEFAULT_ADDRESS_CURSOR_MEM;
-				ls_cursor_dma = DEFAULT_ADDRESS_CURSOR_DMA;
-				ls_fb_mem     = DEFAULT_ADDRESS_FB_MEM;
-				ls_phy_addr   = DEFAULT_ADDRESS_PHY_ADDR;
-				ls_fb_dma     = DEFAULT_ADDRESS_FB_DMA;
+				par = (struct ls_fb_par *)info->par;
+				r = platform_get_resource(par->pdev, IORESOURCE_MEM, 1);
+				if (!r) {
+						printk("ls-fb: get fb memory address fail!\n");
+						return -ENOMEM;
+				}
+
+				ls_cursor_dma = r->start;
+				ls_cursor_mem = TO_CAC(ls_cursor_dma);
+
+				ls_fb_dma = ls_cursor_dma + LSFB_OFFSET;
+				ls_fb_mem = ls_cursor_mem + LSFB_OFFSET;
+				ls_phy_addr = ls_fb_dma;
+
 #ifdef CONFIG_CPU_LOONGSON3
 		}
 #endif
+		return 0;
 }
 
-static void ls_find_init_mode(struct fb_info *info)
+static int ls_find_init_mode(struct fb_info *info)
 {
+		int ret;
         struct fb_videomode mode;
         struct fb_var_screeninfo var;
         struct fb_monspecs *specs = &info->monspecs;
@@ -1030,7 +1041,9 @@ static void ls_find_init_mode(struct fb_info *info)
 		unsigned char *edid;
         INIT_LIST_HEAD(&info->modelist);
 
-		ls_fb_address_init();
+		ret = ls_fb_address_init(info);
+		if(ret)
+			return ret;
         memset(&mode, 0, sizeof(struct fb_videomode));
         memset(&var, 0, sizeof(struct fb_var_screeninfo));
 		var.bits_per_pixel = DEFAULT_BITS_PER_PIXEL;
@@ -1066,10 +1079,10 @@ static void ls_find_init_mode(struct fb_info *info)
 	info->var = var;
 	fb_destroy_modedb(specs->modedb);
 	specs->modedb = NULL;
-	return;
+	return 0;
 def:
 	info->var = ls_fb_default;
-	return;
+	return 0;
 }
 
 /* irq */
@@ -1156,7 +1169,9 @@ static int ls_fb_probe(struct platform_device *dev)
 	}
 
 	par->reg_base = r->start;
-	ls_find_init_mode(info);
+	retval = ls_find_init_mode(info);
+	if(retval)
+		goto release_par;
 
 	if (!videomemorysize) {
 		videomemorysize = info->var.xres_virtual *
@@ -1169,7 +1184,8 @@ static int ls_fb_probe(struct platform_device *dev)
 	 */
 	videomemory = (void *)DEFAULT_FB_MEM;
 	dma_A = (dma_addr_t)DEFAULT_FB_DMA;
-
+	if(hw_coherentio != 1)
+		videomemory = TO_UNCAC((u64)videomemory);
 	pr_info("videomemory=%lx\n",(unsigned long)videomemory);
 	pr_info("videomemorysize=%lx\n",videomemorysize);
 	pr_info("dma_A=%x\n",(int)dma_A);
@@ -1177,6 +1193,8 @@ static int ls_fb_probe(struct platform_device *dev)
 
 	cursor_mem = (void *)DEFAULT_CURSOR_MEM;
 	cursor_dma = (dma_addr_t)DEFAULT_CURSOR_DMA;
+	if(hw_coherentio != 1)
+		cursor_mem = TO_UNCAC((u64)cursor_mem);
 	memset (cursor_mem,0x88FFFF00,cursor_size);
 
 	info->screen_base = (char __iomem *)videomemory;

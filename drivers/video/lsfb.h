@@ -35,13 +35,13 @@ static unsigned long	lsfb_mem;
 static unsigned int		lsfb_dma;
 #endif
 
-#define DEFAULT_ADDRESS_CURSOR_MEM   0x900000000ef00000
-#define DEFAULT_ADDRESS_CURSOR_DMA   0x0ef00000
-#define DEFAULT_ADDRESS_FB_MEM		 0x900000000e000000
-#define DEFAULT_ADDRESS_PHY_ADDR	 0x000000000e000000
-#define DEFAULT_ADDRESS_FB_DMA		 0x0e000000
+#define DEFAULT_ADDRESS_FB_MEM		0x900000000ef00000
+#define DEFAULT_ADDRESS_FB_DMA		0x0ef00000
+#define DEFAULT_ADDRESS_CURSOR_MEM	0x900000000e000000
+#define DEFAULT_ADDRESS_PHY_ADDR	0x000000000e000000
+#define DEFAULT_ADDRESS_CURSOR_DMA	0x0e000000
 
-#define LSFB_MASK		(0xf << 20)
+#define LSFB_OFFSET		(0xf << 20)
 #define LSFB_GPU_MASK	(~(0xffUL << 56))
 u64 ls_cursor_mem;
 u32 ls_cursor_dma;
@@ -118,5 +118,5 @@ u32 ls_fb_dma;
 #define LS_FB_DAC_CTRL_REG			(0x1600)
 #define LS_FB_DVO_OUTPUT_REG		(0x1630)
 
-static void ls_fb_address_init(void);
+static int ls_fb_address_init(struct fb_info *info);
 #endif /* LSFB_H */
