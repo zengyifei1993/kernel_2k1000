@@ -163,6 +163,14 @@ int copy_thread(unsigned long clone_flags, unsigned long usp,
 	return 0;
 }
 
+/* Fill in the fpu structure for a core dump.. */
+int dump_fpu(struct pt_regs *regs, elf_fpregset_t *r)
+{
+	memcpy(r, &current->thread.fpu, sizeof(current->thread.fpu));
+
+	return 1;
+}
+
 struct mips_frame_info {
 	void		*func;
 	unsigned long	func_size;
