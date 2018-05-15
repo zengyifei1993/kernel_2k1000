@@ -8,6 +8,8 @@
 #include <linux/of_address.h>
 #include <linux/platform_device.h>
 
+#define LS2K_PCI_IO_MASK 0xffffff
+
 static int bus_no;
 static DEFINE_MUTEX(ls_pci_scan_mutex);
 
@@ -23,7 +25,7 @@ static int ls2k_get_busno(void)
 
 unsigned long pci_address_to_pio(phys_addr_t address)
 {
-	return (unsigned long) address;
+	return (unsigned long) (LS2K_PCI_IO_MASK & address);
 }
 
 static int ls_of_pci_irq_map(const struct pci_dev *dev, u8 slot, u8 pin)
