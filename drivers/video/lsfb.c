@@ -1002,8 +1002,8 @@ static int ls_fb_address_init(struct fb_info *info)
 				ls_cursor_dma = pci_resource_start(pdev,2);
 				ls_cursor_mem = LS7A_HT1_BASE|ls_cursor_dma;
 
-				ls_fb_mem = ls_cursor_mem + LSFB_MASK;
-				ls_fb_dma = ls_cursor_dma + LSFB_MASK;
+			    ls_fb_mem = ls_cursor_mem + LSFB_OFFSET;
+				ls_fb_dma = ls_cursor_dma + LSFB_OFFSET;
 				ls_phy_addr   = ls_fb_mem & LSFB_GPU_MASK;
 
 				pci_enable_device_mem(pdev);
