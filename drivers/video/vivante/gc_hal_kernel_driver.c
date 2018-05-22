@@ -667,17 +667,33 @@ int loongson_drv_mmap(
             gcmkONERROR(gcvSTATUS_INVALID_ARGUMENT);
         }
 
+
+    if(vram_type == VRAM_TYPE_SP_LOW){
         ret = io_remap_pfn_range(
             vma,
             vma->vm_start,
-#ifdef ALL_IN_2H
             (((unsigned long) device->contiguousPhysical) | 0x40000000) >> PAGE_SHIFT,
-#else
-            device->requestedContiguousBase >> PAGE_SHIFT,
-#endif
             size,
             vma->vm_page_prot
             );
+    }else if(vram_type == VRAM_TYPE_UMA_LOW){
+        ret = io_remap_pfn_range(
+            vma,
+            vma->vm_start,
+            (((unsigned long) device->contiguousPhysical)) >> PAGE_SHIFT,
+            size,
+            vma->vm_page_prot
+            );
+
+    }else{
+        ret = io_remap_pfn_range(
+            vma,
+            vma->vm_start,
+            device->requestedContiguousBase >> PAGE_SHIFT,
+            size,
+            vma->vm_page_prot
+            );
+    }
 
         if (ret != 0)
         {
