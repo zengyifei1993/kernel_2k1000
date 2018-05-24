@@ -1,6 +1,7 @@
 #include <linux/delay.h>
 #include <linux/gpio.h>
 #include <linux/irq.h>
+#include <linux/types.h>
 #include <asm/bootinfo.h>
 #include <ec_wpce775l.h>
 #include <workarounds.h>
@@ -157,6 +158,7 @@ extern u32 nr_nodes_loongson;
 void loongson3_arch_func_optimize(unsigned int cpu_type)
 {
 	unsigned int *p;
+	unsigned int delay_slot_inst;
 	struct uasm_label labels[3];
 	struct uasm_reloc relocs[3];
 	struct uasm_label *l = labels;
@@ -186,32 +188,54 @@ void loongson3_arch_func_optimize(unsigned int cpu_type)
 		memset(labels, 0, sizeof(labels));
 		memset(relocs, 0, sizeof(relocs));
 
-		/* optimize arch_local_irq_disable */
-		p = (unsigned int *)&arch_local_irq_disable;
-		uasm_i_di(&p, 0);
-		uasm_i_jr(&p, RA);
-		uasm_i_nop(&p);
-
-		/* optimize arch_local_irq_save */
-		p = (unsigned int *)&arch_local_irq_save;
-		if (cpu_type == PRID_REV_LOONGSON3A_R2) {
-			uasm_i_mfc0(&p, V0, C0_STATUS);
-			uasm_i_di(&p, 0);
+		for (p = (uint32_t *)&_text; p < (uint32_t *)&_etext; p++) {
+			switch(*p) {
+			/* optimize arch_local_irq_disable */
+			case IRQ_DISABLE_MARK_NUM:
+				p++;
+				while((*p >> 27) != 0x1)
+					p++;
+				*p = *(p + 1);
+				p++;
+				uasm_i_di(&p, 0);
+				break;
+			/* optimize arch_local_irq_save */
+			case IRQ_SAVE_MARK_NUM:
+				delay_slot_inst = 0;
+				p++;
+				while((*p >> 27) != 0x1)
+					p++;
+				*p = *(p + 1);
+				p = p + 2;
+				if((*p >> 16) != 0) {
+					delay_slot_inst = *p;
+				}
+				p--;
+				if (cpu_type == PRID_REV_LOONGSON3A_R2) {
+					uasm_i_mfc0(&p, V0, C0_STATUS);
+					uasm_i_di(&p, 0);
+				}
+				else
+					uasm_i_di(&p, V0);
+				uasm_i_andi(&p, V0, V0, 0x1);
+				if(delay_slot_inst)
+					*p = delay_slot_inst;
+				break;
+			/* optimize arch_local_irq_restore */
+			case IRQ_RESTORE_MARK_NUM:
+				p++;
+				while((*p >> 24) != 0xc)
+					p++;
+				*p = *(p + 1);
+				p++;
+				/* beqz a0,0xc */
+				*p++ = 0x10800002;
+				uasm_i_di(&p, 0);
+				uasm_i_ei(&p, 0);
+				uasm_i_nop(&p);
+				break;
+			}
 		}
-		else
-			uasm_i_di(&p, V0);
-		uasm_i_andi(&p, V0, V0, 0x1);
-		uasm_i_jr(&p, RA);
-		uasm_i_nop(&p);
-
-		/* optimize arch_local_irq_restore */
-		p = (unsigned int *)&arch_local_irq_restore;
-		uasm_il_beqz(&p, &r, A0, label_irq_restore_out);
-		uasm_i_di(&p, 0);
-		uasm_i_ei(&p, 0);
-		uasm_l_irq_restore_out(&l, p);
-		uasm_i_jr(&p, RA);
-		uasm_i_nop(&p);
 
 		/* optimize __arch_local_irq_restore */
 		p = (unsigned int *)&__arch_local_irq_restore;

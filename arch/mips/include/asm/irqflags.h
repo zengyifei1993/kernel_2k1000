@@ -15,6 +15,7 @@
 
 #include <linux/compiler.h>
 #include <linux/stringify.h>
+#include <linux/preempt.h>
 #include <asm/hazards.h>
 
 #if defined(CONFIG_CPU_MIPSR2) && !defined(CONFIG_MIPS_MT_SMTC)
@@ -117,6 +118,88 @@ static inline void __arch_local_irq_restore(unsigned long flags)
 	: "0" (flags)
 	: "memory");
 }
+#elif CONFIG_CPU_LOONGSON3
+
+#define IRQ_DISABLE_MARK_NUM		0x00000002
+#define IRQ_DISABLE_MARK_ASM		".word 0x00000002\n"
+
+extern void legacy_arch_local_irq_disable(void);
+static inline void arch_local_irq_disable(void)
+{
+	__asm__ __volatile__(
+	"	.set	push						\n"
+	"	.set	noreorder					\n"
+	"	.set	noat						\n"
+	IRQ_DISABLE_MARK_ASM
+	"	.set	pop						\n"
+	: /* no outputs */
+	: /* no inputs */
+	: );
+
+	legacy_arch_local_irq_disable();
+}
+
+#define IRQ_SAVE_MARK_NUM		0x00000003
+#define IRQ_SAVE_MARK_ASM		".word 0x00000003\n"
+
+extern unsigned long legacy_arch_local_irq_save(void);
+static inline unsigned long arch_local_irq_save(void)
+{
+	unsigned long flags;
+	__asm__ __volatile__(
+	"	.set	push						\n"
+	"	.set	noreorder					\n"
+	"	.set	noat						\n"
+	IRQ_SAVE_MARK_ASM
+	"	.set	pop						\n"
+	: /* no outputs */
+	: /* no inputs */
+	: );
+
+	flags = legacy_arch_local_irq_save();
+
+	__asm__ __volatile__(
+	"	.set	push						\n"
+	"	.set	noreorder					\n"
+	"	nop							\n"
+	"	.set	pop						\n"
+	: /* no outputs */
+	: /* no inputs */
+	: );
+	return flags;
+}
+
+#define IRQ_RESTORE_MARK_NUM		0x00000004
+#define IRQ_RESTORE_MARK_ASM		".word 0x00000004\n"
+
+extern void legacy_arch_local_irq_restore(unsigned long flags);
+static inline void arch_local_irq_restore(unsigned long flags)
+{
+	__asm__ __volatile__(
+	"	.set	push						\n"
+	"	.set	noreorder					\n"
+	"	.set	noat						\n"
+	IRQ_RESTORE_MARK_ASM
+	"	.set	pop						\n"
+	: /* no outputs */
+	: /* no inputs */
+	: );
+
+	legacy_arch_local_irq_restore(flags);
+
+	__asm__ __volatile__(
+	"	.set	push						\n"
+	"	.set	noreorder					\n"
+	"	nop							\n"
+	"	nop							\n"
+	"	nop							\n"
+	"	.set	pop						\n"
+	: /* no outputs */
+	: /* no inputs */
+	: );
+}
+
+void __arch_local_irq_restore(unsigned long flags);
 #else
 /* Functions that require preempt_{dis,en}able() are in mips-atomic.c */
 void arch_local_irq_disable(void);
