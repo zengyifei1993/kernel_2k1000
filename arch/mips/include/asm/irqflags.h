@@ -118,7 +118,7 @@ static inline void __arch_local_irq_restore(unsigned long flags)
 	: "0" (flags)
 	: "memory");
 }
-#elif CONFIG_CPU_LOONGSON3
+#elif defined(CONFIG_CPU_LOONGSON3)
 
 #define IRQ_DISABLE_MARK_NUM		0x00000002
 #define IRQ_DISABLE_MARK_ASM		".word 0x00000002\n"
