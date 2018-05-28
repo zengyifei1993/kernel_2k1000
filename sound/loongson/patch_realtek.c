@@ -14381,6 +14381,9 @@ static struct hda_verb alc269_init_verbs[] = {
 	 * Unmute ADC0 and set the default input to mic-in
 	 */
 	{0x08, AC_VERB_SET_AMP_GAIN_MUTE, AMP_IN_UNMUTE(0)},
+	{0x08, AC_VERB_SET_AMP_GAIN_MUTE, AMP_IN_UNMUTE(0)},
+	{0x09, AC_VERB_SET_CONNECT_SEL, 0x00},
+	{0x09, AC_VERB_SET_AMP_GAIN_MUTE, AMP_IN_UNMUTE(0)},
 
 	/*
 	 * Set up output mixers (0x02 - 0x03)
@@ -14401,10 +14404,15 @@ static struct hda_verb alc269_init_verbs[] = {
 	{0x14, AC_VERB_SET_PIN_WIDGET_CONTROL, PIN_OUT},
 	{0x15, AC_VERB_SET_PIN_WIDGET_CONTROL, PIN_HP},
 	{0x16, AC_VERB_SET_PIN_WIDGET_CONTROL, PIN_OUT},
+	/* Mic1 pin: input vref at 80% */
 	{0x18, AC_VERB_SET_PIN_WIDGET_CONTROL, PIN_VREF80},
+	{0x18, AC_VERB_SET_AMP_GAIN_MUTE, AMP_OUT_MUTE},
+	/* Mic2 pin: input vref at 80% */
 	{0x19, AC_VERB_SET_PIN_WIDGET_CONTROL, PIN_VREF80},
+	{0x19, AC_VERB_SET_AMP_GAIN_MUTE, AMP_OUT_MUTE},
 	{0x1a, AC_VERB_SET_PIN_WIDGET_CONTROL, PIN_IN},
-	{0x1b, AC_VERB_SET_PIN_WIDGET_CONTROL, PIN_IN},
+	{0x1b, AC_VERB_SET_PIN_WIDGET_CONTROL, PIN_HP},
+	{0x1b, AC_VERB_SET_AMP_GAIN_MUTE, AMP_OUT_UNMUTE},
 
 	{0x14, AC_VERB_SET_AMP_GAIN_MUTE, AMP_OUT_UNMUTE},
 	{0x15, AC_VERB_SET_AMP_GAIN_MUTE, AMP_OUT_UNMUTE},
@@ -14413,6 +14421,8 @@ static struct hda_verb alc269_init_verbs[] = {
 	/* Mixer elements: 0x18, 19, 1a, 1b, 1d, 0b */
 	/* Input mixer1: unmute Mic, F-Mic, Line, CD inputs */
 	{0x23, AC_VERB_SET_CONNECT_SEL, 0x00},
+	{0x23, AC_VERB_SET_AMP_GAIN_MUTE, AMP_IN_UNMUTE(1)},
+	{0x23, AC_VERB_SET_AMP_GAIN_MUTE, AMP_IN_UNMUTE(0)},
 
 	/* set EAPD */
 	{0x14, AC_VERB_SET_EAPD_BTLENABLE, 2},
