@@ -1904,6 +1904,9 @@ static int stmmac_spi_flash_set_mac_addr(struct stmmac_priv *priv, unsigned char
 	unsigned char mac[MAC_LEN];
 	struct plat_stmmacenet_data *plat_dat = priv->plat;
 
+	/*first read status to detect external spi flash*/
+	if (spi_flash_read_status() == 0xff) return -ENODEV;
+
 	if ((plat_dat->bus_id - 1) == 0)
 		spi_flash_read(MAC_OFFSET,mac,MAC_LEN);
 	else
