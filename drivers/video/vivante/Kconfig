@@ -131,4 +131,9 @@ config VIV_DIRECTFB_MICRO_VERSION
 	int "DFB driver Micro Version" 
 	depends on VIVANTE
 	default 0
+
+config LS_VRAM_UEFI
+       int "Loongson 7A get vram from UEFI"
+       depends on VIVANTE
+       default 1
 endif

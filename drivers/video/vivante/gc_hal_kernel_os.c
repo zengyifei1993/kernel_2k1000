@@ -1611,6 +1611,14 @@ gckOS_MapMemory(
 #endif
 	}
     mdlMap->vma->vm_pgoff = 0;
+
+#ifdef LS_VRAM_UEFI
+	res_tmp =remap_pfn_range(mdlMap->vma,
+	                    mdlMap->vma->vm_start,
+			    (mdl->dmaHandle + vram_addr_offset ) >> PAGE_SHIFT,
+			    mdl->numPages*PAGE_SIZE,
+	                    mdlMap->vma->vm_page_prot);
+#else
 	if(vram_type == VRAM_TYPE_UMA_LOW)
 	{
 		res_tmp =remap_pfn_range(mdlMap->vma,
@@ -1628,7 +1636,7 @@ gckOS_MapMemory(
 	                            mdl->numPages*PAGE_SIZE,
 	                            mdlMap->vma->vm_page_prot);	
 	}
-
+#endif
 	
         if (res_tmp < 0)
         {
@@ -2099,7 +2107,13 @@ gckOS_AllocateNonPagedMemory(
 	}
 
         mdlMap->vma->vm_pgoff = 0;
-
+#ifdef LS_VRAM_UEFI
+       res_tmp =remap_pfn_range(mdlMap->vma,
+                           mdlMap->vma->vm_start,
+                           (mdl->dmaHandle + vram_addr_offset) >> PAGE_SHIFT,
+                           mdl->numPages*PAGE_SIZE,
+                           mdlMap->vma->vm_page_prot);
+#else
 	if(vram_type == VRAM_TYPE_UMA_LOW)
 	{
 		res_tmp = remap_pfn_range(mdlMap->vma,
@@ -2119,7 +2133,7 @@ gckOS_AllocateNonPagedMemory(
 	                            mdl->numPages * PAGE_SIZE,
 	                            mdlMap->vma->vm_page_prot);
 	}
-
+#endif
         if (res_tmp)
         {
             gcmkTRACE_ZONE(

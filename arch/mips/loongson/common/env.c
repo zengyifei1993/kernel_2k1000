@@ -44,6 +44,8 @@ u32 gpu_brust_type;
 u32 vram_type;
 u64 uma_vram_addr;
 u64 uma_vram_size;
+u64 vuma_vram_addr;
+u64 vuma_vram_size;
 
 u64 loongson_chipcfg[MAX_PACKAGES] = {0xffffffffbfc00180};
 u64 loongson_chiptemp[MAX_PACKAGES];

@@ -142,6 +142,9 @@ int loongson_drv_mmap(struct file* filp, struct vm_area_struct* vma);
 #endif
 
 
+#ifdef LS_VRAM_UEFI
+unsigned long vram_addr_offset;
+#endif
 static struct file_operations driver_fops =
 {
     .owner      = THIS_MODULE,
@@ -1084,12 +1087,25 @@ int loongson_gpu_probe(struct platform_device *pdev)
 
     printk("all reserved_size is %lx\n", all_reserved_size);
 #endif
+
+#ifdef LS_VRAM_UEFI
+    contiguousBase = 0;
+	contiguousSize = uma_vram_size - 0x01000000;
+	bus_addr = uma_vram_addr + 0x100000000;
+    device_addr = vuma_vram_addr;
+	vram_addr_offset = bus_addr - device_addr;
+	all_reserved_size  = uma_vram_size;
+	printk("get VRAM set from UEFI,device_addr = 0x%lx,bus_addr = 0x%lx\n",device_addr,bus_addr);
+	printk("contiguousSize is %lx\n", contiguousSize);
+	printk("all reserved_size is %lx\n", all_reserved_size);
+#else
     if(vram_type == VRAM_TYPE_UMA_LOW)
 		device_addr = bus_addr;
     if(vram_type == VRAM_TYPE_SP_LOW)
 		device_addr = bus_addr | 0x40000000;
     else if(vram_type == VRAM_TYPE_SP)
 		device_addr = bus_addr & 0xffffffff;
+#endif
 
 #ifdef ALL_IN_2H
     if (!dma_declare_coherent_memory(GPU_DEV, bus_addr, device_addr, all_reserved_size, flags))

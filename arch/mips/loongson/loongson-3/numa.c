@@ -37,6 +37,8 @@ unsigned char __node_distances[MAX_NUMNODES][MAX_NUMNODES];
 EXPORT_SYMBOL(__node_distances);
 struct node_data *__node_data[MAX_NUMNODES];
 EXPORT_SYMBOL(__node_data);
+extern u64 vuma_vram_addr;
+extern u64 vuma_vram_size;
 
 static void enable_lpa(void)
 {
@@ -188,8 +190,12 @@ static void __init szmem(unsigned int node)
 				memblock_reserve(((node_id << 44) | emap->map[i].mem_start), mem_size << 20);
 #endif
 
-				uma_vram_addr = emap->map[i].mem_start & 0xffffffff;
-				uma_vram_size = emap->map[i].mem_size;
+				uma_vram_addr = emap->map[i].mem_start;
+				uma_vram_size = emap->map[i].mem_size << 20;
+				break;
+			case VUMA_VIDEO_RAM:
+				vuma_vram_addr = emap->map[i].mem_start;
+				vuma_vram_size = emap->map[i].mem_size << 20;
 				break;
 			}
 		}
