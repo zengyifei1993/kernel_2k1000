@@ -235,7 +235,7 @@ ls_apbdma_parse_dt(struct platform_device *pdev)
 }
 #endif
 
-static int __init ls_apbdma_probe(struct platform_device *pdev)
+static int ls_apbdma_probe(struct platform_device *pdev)
 {
 	struct ls_apbdma_platform_data *pdata;
 	struct ls_apbdma		*apbdma = NULL;

@@ -69,7 +69,7 @@ static u_long videomemorysize = 0;
 module_param(videomemorysize, ulong, 0);
 static DEFINE_SPINLOCK(fb_lock);
 static void config_pll(unsigned long pll_base, struct pix_pll *pll_cfg);
-static struct fb_var_screeninfo ls_fb_default __initdata = {
+static struct fb_var_screeninfo ls_fb_default = {
 	.xres		= 1280,
 	.yres		= 1024,
 	.xres_virtual	= 1280,
@@ -93,7 +93,7 @@ static struct fb_var_screeninfo ls_fb_default __initdata = {
 	.sync		= 3,
 	.vmode =	FB_VMODE_NONINTERLACED,
 };
-static struct fb_fix_screeninfo ls_fb_fix __initdata = {
+static struct fb_fix_screeninfo ls_fb_fix = {
 	.id =		"Virtual FB",
 	.type =		FB_TYPE_PACKED_PIXELS,
 	.visual =	FB_VISUAL_TRUECOLOR,
@@ -103,7 +103,7 @@ static struct fb_fix_screeninfo ls_fb_fix __initdata = {
 	.accel =	FB_ACCEL_NONE,
 };
 
-static bool ls_fb_enable __initdata = 0;	/* disabled by default */
+static bool ls_fb_enable = 0;	/* disabled by default */
 module_param(ls_fb_enable, bool, 0);
 
 /*
