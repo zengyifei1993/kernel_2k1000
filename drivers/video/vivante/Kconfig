@@ -134,6 +134,6 @@ config VIV_DIRECTFB_MICRO_VERSION
 
 config LS_VRAM_UEFI
        int "Loongson 7A get vram from UEFI"
-       depends on VIVANTE
+       depends on VIVANTE && LOONGSON_MACH3X
        default 1
 endif
