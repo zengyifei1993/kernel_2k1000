@@ -162,6 +162,7 @@ static inline unsigned long arch_local_irq_save(void)
 	"	.set	push						\n"
 	"	.set	noreorder					\n"
 	"	nop							\n"
+	"	nop							\n"
 	"	.set	pop						\n"
 	: /* no outputs */
 	: /* no inputs */
