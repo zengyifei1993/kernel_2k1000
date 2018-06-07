@@ -1,0 +1,14 @@
+
+config DRM_LOONGSON_VGA
+	tristate "LOONGSON VGA DRM"
+	depends on DRM && PCI
+	select FB_SYS_FILLRECT
+	select FB_SYS_COPYAREA
+	select FB_SYS_IMAGEBLIT
+	select DRM_KMS_HELPER
+	select DRM_KMS_FB_HELPER
+	select DRM_TTM
+	default n
+	help
+	  DRM display driver for loongson vga control.
+

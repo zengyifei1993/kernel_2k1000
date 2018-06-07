@@ -65,6 +65,7 @@ obj-$(CONFIG_DRM_TILCDC)	+= tilcdc/
 obj-$(CONFIG_DRM_QXL) += qxl/
 obj-$(CONFIG_DRM_BOCHS) += bochs/
 obj-$(CONFIG_DRM_VIRTIO_GPU) += virtio/
+obj-$(CONFIG_DRM_LOONGSON_VGA) += loongson/
 obj-y			+= i2c/
 obj-y			+= panel/
 obj-y			+= bridge/
