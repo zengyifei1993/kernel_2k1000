@@ -219,7 +219,7 @@ static struct platform_device ls7a_rtc_device = {
 /*
  * I2C-GPIO
  */
-static struct i2c_gpio_platform_data i2c_gpio_pdata = {
+static struct i2c_gpio_platform_data i2c_gpio2_pdata = {
 	.sda_pin		= 2 + 16,
 	.sda_is_open_drain	= 0,
 	.scl_pin		= 3 + 16,
@@ -227,15 +227,35 @@ static struct i2c_gpio_platform_data i2c_gpio_pdata = {
 	.udelay			= 100,
 };
 
-static struct platform_device ls7a_i2c_gpio_device = {
+static struct platform_device ls7a_i2c_gpio2_device = {
+	.name			= "i2c-gpio",
+	.id			= 7,
+	.num_resources		= 0,
+	.resource		= NULL,
+	.dev			= {
+		.platform_data  = &i2c_gpio2_pdata,
+	},
+};
+
+/*DVO 0 GPIO I2C*/
+static struct i2c_gpio_platform_data i2c_gpio1_pdata = {
+	.sda_pin		= 0 + 16,
+	.sda_is_open_drain	= 0,
+	.scl_pin		= 1 + 16,
+	.scl_is_open_drain	= 0,
+	.udelay			= 100,
+};
+
+static struct platform_device ls7a_i2c_gpio1_device = {
 	.name			= "i2c-gpio",
 	.id			= 6,
 	.num_resources		= 0,
 	.resource		= NULL,
 	.dev			= {
-		.platform_data  = &i2c_gpio_pdata,
+		.platform_data  = &i2c_gpio1_pdata,
 	},
 };
+
 
 /* platform devices define */
 static struct platform_device *ls7a_platform_devices[] = {
@@ -248,7 +268,8 @@ static struct platform_device *ls7a_platform_devices[] = {
 	&ls7a_i2c5_device,
 	&ls7a_rtc_device,
 
-	&ls7a_i2c_gpio_device,
+	&ls7a_i2c_gpio1_device,
+	&ls7a_i2c_gpio2_device,
 };
 
 
@@ -264,8 +285,12 @@ const struct i2c_board_info __initdata ls7a_fb_ch7034_eep_info = {
 	I2C_BOARD_INFO("dvo1-ch7034", 0x75),
 };
 
-const struct i2c_board_info __initdata ls7a_fb_edid_eep_info = {
-	I2C_BOARD_INFO("eeprom-edid", 0x50),
+const struct i2c_board_info __initdata ls7a_dvo0_edid_eep_info = {
+	I2C_BOARD_INFO("eeprom-edid0", 0x39),
+};
+
+const struct i2c_board_info __initdata ls7a_dvo1_edid_eep_info = {
+	I2C_BOARD_INFO("eeprom-edid1", 0x50),
 };
 
 static const struct spi_board_info ls_spi_devs[] __initdata = {
@@ -279,9 +304,9 @@ static const struct spi_board_info ls_spi_devs[] __initdata = {
 };
 static void __init ls7a_device_initcall(void)
 {
-	i2c_register_board_info(6, &ls7a_fb_ch7034_eep_info, 1);
-	i2c_register_board_info(6, &ls7a_fb_edid_eep_info, 1);
-
+//	i2c_register_board_info(6, &ls7a_fb_ch7034_eep_info, 1);
+	i2c_register_board_info(6, &ls7a_dvo0_edid_eep_info, 1);
+	i2c_register_board_info(7, &ls7a_dvo1_edid_eep_info, 1);
 	spi_register_board_info(ls_spi_devs, ARRAY_SIZE(ls_spi_devs));
 
 	platform_add_devices(ls7a_platform_devices,
