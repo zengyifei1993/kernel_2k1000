@@ -282,7 +282,7 @@ msg_rejected:
 	return -EINVAL;
 }
 
-static int __init ls_spi_probe(struct platform_device *pdev)
+static int ls_spi_probe(struct platform_device *pdev)
 {
 	struct spi_master	*master;
 	struct ls_spi		*spi;
