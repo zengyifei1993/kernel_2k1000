@@ -32,23 +32,28 @@ static void loongson_hide_cursor(struct drm_crtc *crtc)
 	base = (unsigned long)(ldev->rmmio);
 
 
-	if (ldev->cursor_crtc_id != crtc_id)
-		return;
-
-        tmp = ls_readl(base + LS_FB_CUR_CFG_REG);
-        tmp &= ~0xff;
-	if (crtc_id) {
-		ls_writel(tmp | 0x10,base + LS_FB_CUR_CFG_REG);
-	} else {
+	tmp = ls_readl(base + LS_FB_CUR_CFG_REG);
+	tmp &= ~0xff;
+	if (ldev->clone_mode == true) {
 		ls_writel(tmp | 0x00, base + LS_FB_CUR_CFG_REG);
+		ldev->cursor_showed = false;
+		return;
+	} else {
+		if (ldev->cursor_crtc_id != crtc_id)
+			return;
+
+		if (crtc_id) {
+			ls_writel(tmp | 0x10,base + LS_FB_CUR_CFG_REG);
+		} else {
+			ls_writel(tmp | 0x00, base + LS_FB_CUR_CFG_REG);
+		}
+		ldev->cursor_showed = false;
 	}
-	ldev->cursor_showed = false;
 }
 
 
 static void loongson_show_cursor(struct drm_crtc *crtc)
 {
-	unsigned int tmp;
 	unsigned long base;
 	struct drm_device *dev = crtc->dev;
 	struct loongson_drm_device *ldev = (struct loongson_drm_device *)dev->dev_private;
@@ -56,19 +61,21 @@ static void loongson_show_cursor(struct drm_crtc *crtc)
 	unsigned int crtc_id = loongson_crtc->crtc_id;
 
 	base = (unsigned long)(ldev->rmmio);
-        tmp = ls_readl(base + LS_FB_CUR_CFG_REG);
-
-	if ((ldev->cursor_crtc_id == crtc_id) ||(ldev->cursor_crtc_id == ldev->num_crtc)) {
-	        if(ldev->clone_mode == true){
-			ls_writel(0x00050202,base + LS_FB_CUR_CFG_REG);
-	        }else if(crtc_id == 0){
-			ls_writel(0x00050202,base + LS_FB_CUR_CFG_REG);
-	        }else{
-			ls_writel(0x00050212,base + LS_FB_CUR_CFG_REG);
-		}
-
+	if (ldev->clone_mode == true) {
+		ls_writel(0x00050202, base + LS_FB_CUR_CFG_REG);
+		ldev->cursor_crtc_id = 0;
 		ldev->cursor_showed = true;
-		ldev->cursor_crtc_id == crtc_id;
+	} else {
+		if ((ldev->cursor_crtc_id == crtc_id) ||(ldev->cursor_crtc_id == ldev->num_crtc)) {
+			if(crtc_id == 0){
+				ls_writel(0x00050202,base + LS_FB_CUR_CFG_REG);
+		        }else{
+				ls_writel(0x00050212,base + LS_FB_CUR_CFG_REG);
+			}
+
+			ldev->cursor_showed = true;
+			ldev->cursor_crtc_id == crtc_id;
+		}
 	}
 }
 
@@ -201,7 +208,7 @@ int loongson_crtc_cursor_move(struct drm_crtc *crtc, int x, int y)
 	 * but not in curren review */
 	if ( (x < 0 && xorign > 0) ||
 		(y < 0 && yorign > 0)) {
-		if(ldev->cursor_crtc_id == crtc_id)
+		if(ldev->cursor_crtc_id == crtc_id && ldev->clone_mode == false)
 		 /*the cursor is not show, so hide if the (x,y) is in active crtc*/
 			loongson_hide_cursor(crtc);
 		return 0 ;
@@ -219,7 +226,7 @@ int loongson_crtc_cursor_move(struct drm_crtc *crtc, int x, int y)
         tmp = ls_readl(base + LS_FB_CUR_CFG_REG);
         tmp &= ~0xff;
 
-	if (ldev->cursor_crtc_id != crtc_id) {
+	if (ldev->cursor_crtc_id != crtc_id && ldev->clone_mode == false) {
 		ldev->cursor_crtc_id = crtc_id;
 		if (ldev->cursor_showed) {
 			ldev->cursor_showed = false;

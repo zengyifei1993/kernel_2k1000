@@ -481,7 +481,7 @@ static void loongson_crtc_dpms(struct drm_crtc *crtc, int mode)
 	unsigned int crtc_id,val;
 
 	crtc_id = loongson_crtc->crtc_id;
-	if (ldev->inited == false) {
+	if (ldev->inited == false || ldev->clone_mode == true) {
 		return ;
 	}
 	base = (unsigned long)(ldev->rmmio);
