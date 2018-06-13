@@ -123,6 +123,10 @@ static int loongson_gpu_pci_register(struct pci_dev *pdev,
 	loongson_gpu_resources[0].end = pci_resource_end(pdev, 0);
 	loongson_gpu_resources[1].start = pdev->irq;
 	loongson_gpu_resources[1].end = pdev->irq;
+	if(vuma_vram_addr != 0){
+		loongson_gpu_resources[2].start = uma_vram_addr;
+		loongson_gpu_resources[2].end = uma_vram_addr + uma_vram_size - 1;
+	}
 #ifdef LS_VRAM_ADD_BY_PMON
 	loongson_gpu_resources[2].start = pci_resource_start (pdev, 2);
 	loongson_gpu_resources[2].end = pci_resource_end(pdev, 2) - 0x01100000;
