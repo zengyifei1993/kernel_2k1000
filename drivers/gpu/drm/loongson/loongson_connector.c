@@ -59,7 +59,8 @@ static struct drm_encoder *loongson_connector_best_encoder(struct drm_connector
 static unsigned char *loongson_do_probe_ddc_edid(struct i2c_adapter *adapter,unsigned int id)
 {
 	unsigned char start = 0x0;
-	unsigned char *buf = kmalloc(EDID_LENGTH, GFP_KERNEL);
+	unsigned char *buf = kmalloc(EDID_LENGTH * 2, GFP_KERNEL);
+	unsigned int che_tmp = 0,i;
 	struct i2c_msg msgs[] = {
 		{
 			.addr = 0x50,
@@ -69,7 +70,7 @@ static unsigned char *loongson_do_probe_ddc_edid(struct i2c_adapter *adapter,uns
 		},{
 			.addr = 0x50,
 			.flags = I2C_M_RD,
-			.len = EDID_LENGTH,
+			.len = EDID_LENGTH * 2,
 			.buf = buf,
 		}
 	};
@@ -79,6 +80,14 @@ static unsigned char *loongson_do_probe_ddc_edid(struct i2c_adapter *adapter,uns
 		return NULL;
 	}
 	if (i2c_transfer(adapter, msgs, 2) == 2){
+		if(buf[126] != 0){
+			buf[126] = 0;
+			che_tmp = 0;
+			for(i = 0;i < 127;i++){
+				che_tmp += buf[i];
+			}
+			buf[127] = 256-(che_tmp)%256;
+		}
 		return buf;
 	}
 	dev_warn(&adapter->dev, "unable to read EDID block.\n");
@@ -308,9 +317,6 @@ static unsigned char *loongson_i2c_connector(unsigned int id)
 	unsigned char *edid = NULL;
 
 	DRM_INFO("edid entry\n");
-	if(0 == id){
-		loongson_do_probe_ddc_ch7034(eeprom_info[id].adapter);
-	}
 	if (!edid) {
 		if (eeprom_info[id].adapter){
 			edid = loongson_do_probe_ddc_edid(eeprom_info[id].adapter,id);
