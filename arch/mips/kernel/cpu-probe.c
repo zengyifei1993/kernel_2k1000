@@ -212,7 +212,7 @@ static void set_ftlb_enable(struct cpuinfo_mips *c, int enable)
 	}
 	if (c->cputype == CPU_LOONGSON3) {
 		/* Flush ITLB, DTLB, VTLB and FTLB */
-		write_c0_diag(1<<2 | 1<<3 | 1<<12 | 1<<13);
+		change_c0_diag(0x300c, 0x300c);
 		/* Loongson-3 cores use Config6 to enable the FTLB */
 		config6 = read_c0_config6();
 		if (enable)

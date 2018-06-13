@@ -53,16 +53,7 @@ extern void build_tlb_refill_handler(void);
  */
 static inline void flush_micro_tlb(void)
 {
-	switch (current_cpu_type()) {
-	case CPU_LOONGSON2:
-		write_c0_diag(0x4);
-		break;
-	case CPU_LOONGSON3:
-		write_c0_diag(0xc);
-		break;
-	default:
-		break;
-	}
+	change_c0_diag(0x4, 0x4);
 }
 
 static inline void flush_micro_tlb_vm(struct vm_area_struct *vma)
