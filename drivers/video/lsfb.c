@@ -464,32 +464,57 @@ static int ls_init_regs(struct fb_info *info)
 	switch (depth) {
 	case 32:
 	case 24:
+	if(edid_flag == 0){
 		ls_writel(0x00100104, base + LS_FB_CFG_DVO0_REG);
+		ls_writel(0x00100304, base + LS_FB_CFG_DVO1_REG);
+	}else{
+		ls_writel(0x00100304, base + LS_FB_CFG_DVO0_REG);
 		ls_writel(0x00100104, base + LS_FB_CFG_DVO1_REG);
+	}
 		ls_writel((hr * 4 + 255) & ~255, base + LS_FB_STRI_DVO0_REG);
 		ls_writel((hr * 4 + 255) & ~255, base + LS_FB_STRI_DVO1_REG);
 		break;
 	case 16:
+	if(edid_flag == 0){
 		ls_writel(0x00100103, base + LS_FB_CFG_DVO0_REG);
+		ls_writel(0x00100303, base + LS_FB_CFG_DVO1_REG);
+	}else{
+		ls_writel(0x00100303, base + LS_FB_CFG_DVO0_REG);
 		ls_writel(0x00100103, base + LS_FB_CFG_DVO1_REG);
+	}
 		ls_writel((hr * 2 + 255) & ~255, base + LS_FB_STRI_DVO0_REG);
 		ls_writel((hr * 2 + 255) & ~255, base + LS_FB_STRI_DVO1_REG);
 		break;
 	case 15:
+	if(edid_flag == 0){
 		ls_writel(0x00100102, base + LS_FB_CFG_DVO0_REG);
+		ls_writel(0x00100302, base + LS_FB_CFG_DVO1_REG);
+	}else{
+		ls_writel(0x00100302, base + LS_FB_CFG_DVO0_REG);
 		ls_writel(0x00100102, base + LS_FB_CFG_DVO1_REG);
+	}
 		ls_writel((hr * 2 + 255) & ~255, base + LS_FB_STRI_DVO0_REG);
 		ls_writel((hr * 2 + 255) & ~255, base + LS_FB_STRI_DVO1_REG);
 		break;
 	case 12:
+	if(edid_flag == 0){
 		ls_writel(0x00100101, base + LS_FB_CFG_DVO0_REG);
+		ls_writel(0x00100301, base + LS_FB_CFG_DVO1_REG);
+	}else{
+		ls_writel(0x00100301, base + LS_FB_CFG_DVO0_REG);
 		ls_writel(0x00100101, base + LS_FB_CFG_DVO1_REG);
+	}
 		ls_writel((hr * 2 + 255) & ~255, base + LS_FB_STRI_DVO0_REG);
 		ls_writel((hr * 2 + 255) & ~255, base + LS_FB_STRI_DVO1_REG);
 		break;
 	default:
+	if(edid_flag == 0){
 		ls_writel(0x00100104, base + LS_FB_CFG_DVO0_REG);
+		ls_writel(0x00100304, base + LS_FB_CFG_DVO1_REG);
+	}else{
+		ls_writel(0x00100304, base + LS_FB_CFG_DVO0_REG);
 		ls_writel(0x00100104, base + LS_FB_CFG_DVO1_REG);
+	}
 		ls_writel((hr * 4 + 255) & ~255, base + LS_FB_STRI_DVO0_REG);
 		ls_writel((hr * 4 + 255) & ~255, base + LS_FB_STRI_DVO1_REG);
 		break;
