@@ -746,7 +746,7 @@ static void add_timer_randomness(struct timer_rand_state *state, unsigned num)
 		unsigned num;
 	} sample;
 	long delta, delta2, delta3;
-
+	struct entropy_store    *r;
 	preempt_disable();
 	/* if over the trickle threshold, use only 1 in 4096 samples */
 	if (ENTROPY_BITS(&input_pool) > trickle_thresh &&
@@ -756,7 +756,13 @@ static void add_timer_randomness(struct timer_rand_state *state, unsigned num)
 	sample.jiffies = jiffies;
 	sample.cycles = random_get_entropy();
 	sample.num = num;
-	mix_pool_bytes(&input_pool, &sample, sizeof(sample), NULL);
+
+	/*
+	* We check whether nonblocking is initialized, so that nonbolocking pool is
+	* available as soon as possible.
+	*/
+	r = nonblocking_pool.initialized ? &input_pool : &nonblocking_pool;
+	mix_pool_bytes(r, &sample, sizeof(sample), NULL);
 
 	/*
 	 * Calculate number of bits of randomness we probably added.
@@ -790,8 +796,7 @@ static void add_timer_randomness(struct timer_rand_state *state, unsigned num)
 		 * Round down by 1 bit on general principles,
 		 * and limit entropy entimate to 12 bits.
 		 */
-		credit_entropy_bits(&input_pool,
-				    min_t(int, fls(delta>>1), 11));
+		credit_entropy_bits(r, min_t(int, fls(delta>>1), 11));
 	}
 out:
 	preempt_enable();
@@ -833,8 +838,11 @@ void add_interrupt_randomness(int irq, int irq_flags)
 
 	fast_mix(fast_pool, input, sizeof(input));
 
-	if ((fast_pool->count & 1023) &&
-	    !time_after(now, fast_pool->last + HZ))
+	/*
+	 * We check whether nonblocking is initialized, so that nonbolocking pool is
+	 * available as soon as possible.
+	 */
+	if ((fast_pool->count < 64) && !time_after(now, fast_pool->last + HZ) && nonblocking_pool.initialized)
 		return;
 
 	fast_pool->last = now;
