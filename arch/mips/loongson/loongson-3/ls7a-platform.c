@@ -304,9 +304,11 @@ static const struct spi_board_info ls_spi_devs[] __initdata = {
 };
 static void __init ls7a_device_initcall(void)
 {
+#ifndef CONFIG_DRM_LOONGSON_VGA
 //	i2c_register_board_info(6, &ls7a_fb_ch7034_eep_info, 1);
 	i2c_register_board_info(6, &ls7a_dvo0_edid_eep_info, 1);
 	i2c_register_board_info(7, &ls7a_dvo1_edid_eep_info, 1);
+#endif
 	spi_register_board_info(ls_spi_devs, ARRAY_SIZE(ls_spi_devs));
 
 	platform_add_devices(ls7a_platform_devices,

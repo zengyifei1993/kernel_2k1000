@@ -11,6 +11,19 @@
  */
 #include "loongson_drv.h"
 
+
+static const char *phy_type_names[1] = {
+	"NONE or TRANSPARENT PHY",
+};
+
+
+static const char *get_edid_method_names[4] = {
+	"No EDID",
+	"Reading EDID via built-in I2C",
+	"Use the VBIOS built-in EDID information",
+	"Get EDID via phy chip",
+};
+
 void * loongson_vbios_test(void){
 	struct loongson_vbios *vbios;
 	struct loongson_vbios_crtc * crtc_vbios[2];
@@ -21,7 +34,7 @@ void * loongson_vbios_test(void){
 
 	/*Build loongson_vbios struct*/
 	vbios->version_major = 0;
-	vbios->version_minor = 0;
+	vbios->version_minor = 1;
 	vbios->crtc_num = 2;
 	vbios->crtc_offset = sizeof(struct loongson_vbios);
 	vbios->connector_num = 2;
@@ -39,7 +52,7 @@ void * loongson_vbios_test(void){
 	crtc_vbios[0]->crtc_id = 0;
 	crtc_vbios[0]->crtc_max_weight = 2048;
 	crtc_vbios[0]->crtc_max_height = 2048;
-	crtc_vbios[0]->connecotor_id = 0;
+	crtc_vbios[0]->connector_id = 0;
 	crtc_vbios[0]->phy_num = 1;
 	crtc_vbios[0]->phy_id[0] = 0;
 
@@ -47,7 +60,7 @@ void * loongson_vbios_test(void){
 	crtc_vbios[1]->crtc_id = 1;
 	crtc_vbios[1]->crtc_max_weight = 2048;
 	crtc_vbios[1]->crtc_max_height = 2048;
-	crtc_vbios[1]->connecotor_id = 1;
+	crtc_vbios[1]->connector_id = 1;
 	crtc_vbios[1]->phy_num = 1;
 	crtc_vbios[1]->phy_id[0] = 1;
 
@@ -55,9 +68,37 @@ void * loongson_vbios_test(void){
 	connector_vbios[0] = (struct loongson_vbios_connector *)(vbios + vbios->connector_offset);
 	connector_vbios[1] = (struct loongson_vbios_connector *)(vbios + vbios->connector_offset + sizeof(struct loongson_vbios_connector));
 
+	connector_vbios[0]->next_connector_offset = vbios->connector_offset + sizeof(struct loongson_vbios_connector);
+	connector_vbios[1]->next_connector_offset = NULL;
+
+	connector_vbios[0]->crtc_id = 0;
+	connector_vbios[1]->crtc_id = 1;
+
+	connector_vbios[0]->edid_method = edid_method_i2c;
+	connector_vbios[1]->edid_method = edid_method_i2c;
+
+
+	connector_vbios[0]->i2c_id = 6;
+	connector_vbios[1]->i2c_id = 7;
+
+	connector_vbios[0]->i2c_type = i2c_type_gpio;
+	connector_vbios[1]->i2c_type = i2c_type_gpio;
+
 	/*Build loongson_vbios_phy struct*/
 	phy_vbios[0] = (struct loongson_vbios_phy *)(vbios + vbios->phy_offset);
 	phy_vbios[1] = (struct loongson_vbios_phy *)(vbios + vbios->phy_offset + sizeof(struct loongson_vbios_phy));
+
+	phy_vbios[0]->next_phy_offset = vbios->phy_offset + sizeof(struct loongson_vbios_phy);
+	phy_vbios[1]->next_phy_offset = NULL;
+
+	phy_vbios[0]->phy_type = phy_transparent;
+	phy_vbios[1]->phy_type = phy_transparent;
+
+	phy_vbios[0]->crtc_id = 0;
+	phy_vbios[1]->crtc_id = 1;
+
+	phy_vbios[0]->connector_id = 0;
+	phy_vbios[1]->connector_id = 1;
 
 	return (void *)vbios;
 }
@@ -97,5 +138,43 @@ int loongson_vbios_init(struct loongson_drm_device *ldev){
 		}
 	}
 
+	loongson_vbios_information_display(ldev);
 	return 0;
+}
+
+
+
+int loongson_vbios_information_display(struct loongson_drm_device *ldev){
+	int i,j,k;
+	DRM_INFO("===========================LOONGSON VBIOS INFO=================================\n");
+	DRM_INFO("loongson vbios version:%d.%d\n",ldev->vbios->version_major,ldev->vbios->version_minor);
+	DRM_INFO("crtc num:%d\n",ldev->vbios->crtc_num);
+	DRM_INFO("connector num:%d\n",ldev->vbios->connector_num);
+	DRM_INFO("phy num:%d\n",ldev->vbios->phy_num);
+	DRM_INFO("================================CRTC INFO=====================================\n");
+	for(i=0;i<ldev->vbios->crtc_num;i++){
+		DRM_INFO("CRTC-%d:max_weight=%d,max_height=%d\n",ldev->crtc_vbios[i]->crtc_id,ldev->crtc_vbios[i]->crtc_max_weight,ldev->crtc_vbios[i]->crtc_max_height);
+		DRM_INFO("Bind connector id is %d\n",ldev->crtc_vbios[i]->connector_id);
+		DRM_INFO("Bind phy number is %d\n",ldev->crtc_vbios[i]->phy_num);
+		j = ldev->crtc_vbios[i]->phy_num;
+		k = 0;
+		while(j-- > 0){
+			DRM_INFO("Bind phy[%d] ID is:%d\n",k,ldev->crtc_vbios[i]->phy_id[k]);
+			k++;
+		}
+	}
+	DRM_INFO("=============================CONNECTOR INFO===================================\n");
+	for(i=0;i<ldev->vbios->connector_num;i++){
+		DRM_INFO("connector-%d:%s\n",i,get_edid_method_names[ldev->connector_vbios[i]->edid_method]);
+		if(ldev->connector_vbios[i]->edid_method == edid_method_i2c){
+			DRM_INFO("connector-%d use i2c:%d",i,ldev->connector_vbios[i]->i2c_id);
+		}
+	}
+	DRM_INFO("===============================PHY INFO=======================================\n");
+	for(i=0;i<ldev->vbios->phy_num;i++){
+		DRM_INFO("phy-%d:%s\n",i,phy_type_names[ldev->phy_vbios[i]->phy_type]);
+		DRM_INFO("phy-%d:bind with CRTC %d\n",i,ldev->phy_vbios[i]->crtc_id);
+		DRM_INFO("phy-%d:bind with connector %d\n",i,ldev->phy_vbios[i]->connector_id);
+	}
+	DRM_INFO("=================================END==========================================\n");
 }

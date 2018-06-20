@@ -22,7 +22,7 @@ struct loongson_vbios_crtc{
 	uint32_t crtc_max_freq;
 	uint32_t crtc_max_weight;
 	uint32_t crtc_max_height;
-	uint32_t connecotor_id;
+	uint32_t connector_id;
 	uint32_t phy_num;
 	uint32_t phy_id[2];
 };

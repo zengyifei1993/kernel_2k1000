@@ -24,11 +24,14 @@
 
 #define adapter_to_i2c_client(d) container_of(d, struct i2c_client, adapter)
 
+#define DVO_I2C_NAME "loongson_dvo_i2c"
+
 static struct eep_info{
 	struct i2c_adapter *adapter;
 	unsigned short addr;
 }eeprom_info[2];
 
+struct i2c_client * loongson_drm_i2c_client[2];
 
 /**
  * loongson_connector_best_encoder
@@ -174,139 +177,6 @@ static void loongson_do_probe_ddc_ch7034(struct i2c_adapter *adapter)
 	return;
 }
 
-
-/**
- * I2C devices supported by I2C device driver
- */
-static const struct i2c_device_id dvi_eep_ids[] = {
-	{ "dvi-eeprom-edid", 0 },
-	{ /* END OF LIST */ }
-};
-
-static const struct i2c_device_id vga_eep_ids[] = {
-	{ "eeprom-edid1", 2 },
-	{ /* END OF LIST */ }
-};
-
-static const struct i2c_device_id hdmi_eep_ids[] = {
-	{ "eeprom-edid0", 0 },
-	{ /* END OF LIST */ }
-};
-
-MODULE_DEVICE_TABLE(i2c, eep_ids);
-
-
-/**
- * hdmi_eep_probe
- *
- * @client: represent an I2C slave device
- * @id: point to i2c_device_id structure
- *
- * Binding hdmi driver
- */
-static int hdmi_eep_probe(struct i2c_client *client, const struct i2c_device_id *id)
-{
-	eeprom_info[0].adapter = client->adapter;
-	eeprom_info[0].addr = client->addr;
-	return 0;
-}
-
-
-/**
- * hdmi_eep_remove
- *
- * @client: identify a single device connected to an I2C bus
- *
- * Unregister hdmi driver from system
- */
-static int hdmi_eep_remove(struct i2c_client *client)
-{
-	i2c_unregister_device(client);
-	return 0;
-}
-
-
-/**
- * vga_eep_probe
- *
- * @client: represent an I2C slave device
- * @id: point to i2c_device_id structure
- *
- * Binding vga driver
- */
-static int vga_eep_probe(struct i2c_client *client, const struct i2c_device_id *id)
-{
-	eeprom_info[1].adapter = client->adapter;
-	eeprom_info[1].addr = client->addr;
-	return 0;
-}
-
-
-/**
- * vga_eep_remove
- *
- * @client: identify a single device connected to an I2C bus
- *
- * Unregister vga driver from system
- */
-static int vga_eep_remove(struct i2c_client *client)
-{
-	i2c_unregister_device(client);
-	return 0;
-}
-
-
-/**
- * struct i2c_driver can represent an I2C device driver
- *
- * @drive: device driver model driver
- *         represent I2C device driver info,including device model's name and device mode'owner
- * @probe: bind device
- * @remove: unbind device
- * @id_table: list of I2C devices supported by this driver
- *
- * VGA device driver
- */
-static struct i2c_driver vga_eep_driver = {
-	.driver = {
-		.name = "vga_eep-edid",
-		.owner = THIS_MODULE,
-	},
-	.probe = vga_eep_probe,
-	.remove = vga_eep_remove,
-	.id_table = vga_eep_ids,
-};
-
-
-/**
- * struct i2c_driver can represent an I2C device driver
- *
- * HDMI device driver
- */
-static struct i2c_driver hdmi_eep_driver = {
-	.driver = {
-		.name = "hdmi_eep-edid",
-		.owner = THIS_MODULE,
-	},
-	.probe = hdmi_eep_probe,
-	.remove = hdmi_eep_remove,
-	.id_table = hdmi_eep_ids,
-};
-
-
-/*
-static struct i2c_driver dvi_eep_driver = {
-	.driver = {
-		.name = "dvi_eep-edid",
-		.owner = THIS_MODULE,
-	},
-	.probe = eep_probe,
-	.remove = eep_remove,
-	.id_table = dvi_eep_ids,
-};
-*/
-
-
 /**
  * loongson_i2c_connector
  *
@@ -365,8 +235,11 @@ static int loongson_vga_mode_valid(struct drm_connector *connector,
 {
 	struct drm_device *dev = connector->dev;
 	struct loongson_drm_device *ldev = (struct loongson_drm_device*)dev->dev_private;
+	int id = connector->connector_id;
 	int bpp = 32;
         if(mode->hdisplay % 64)
+		return MODE_BAD;
+	if(mode->hdisplay > ldev->crtc_vbios[id]->crtc_max_weight || mode->vdisplay > ldev->crtc_vbios[id]->crtc_max_height)
 		return MODE_BAD;
 	return MODE_OK;
 }
@@ -484,6 +357,8 @@ static const struct drm_connector_funcs loongson_vga_connector_funcs = {
 };
 
 
+static const unsigned short normal_i2c[] = { 0x50, I2C_CLIENT_END };
+
 /**
  * loongson_vga_init
  *
@@ -497,11 +372,28 @@ struct drm_connector *loongson_vga_init(struct drm_device *dev,unsigned int conn
 {
 	struct drm_connector *connector;
 	struct loongson_connector *loongson_connector;
+	struct loongson_drm_device *ldev = (struct loongson_drm_device*)dev->dev_private;
+	struct i2c_adapter *i2c_adap;
+	struct i2c_board_info i2c_info;
+
 
 	loongson_connector = kzalloc(sizeof(struct loongson_connector), GFP_KERNEL);
 	if (!loongson_connector)
 		return NULL;
 
+	i2c_adap = i2c_get_adapter(ldev->connector_vbios[connector_id]->i2c_id);
+	memset(&i2c_info, 0, sizeof(struct i2c_board_info));
+	strlcpy(i2c_info.type, DVO_I2C_NAME, I2C_NAME_SIZE);
+	loongson_drm_i2c_client[connector_id] = i2c_new_probed_device(i2c_adap, &i2c_info,
+						normal_i2c, NULL);
+	i2c_put_adapter(i2c_adap);
+
+	if(loongson_drm_i2c_client[connector_id] != NULL){
+		eeprom_info[connector_id].adapter= loongson_drm_i2c_client[connector_id]->adapter;
+		eeprom_info[connector_id].addr = 0x50;
+	}else{
+		return NULL;
+	}
 	connector = &loongson_connector->base;
 
 	drm_connector_init(dev, connector,
@@ -510,15 +402,5 @@ struct drm_connector *loongson_vga_init(struct drm_device *dev,unsigned int conn
 	drm_connector_helper_add(connector, &loongson_vga_connector_helper_funcs);
 
 	drm_connector_register(connector);
-	if(connector_id == 0){
-		if (i2c_add_driver(&hdmi_eep_driver)) {
-			pr_err("i2c-%d No eeprom device register!",(int)hdmi_eep_driver.id_table->driver_data);
-		}
-	}else{
-		if (i2c_add_driver(&vga_eep_driver)) {
-			pr_err("i2c-%d No eeprom device register!",(int)vga_eep_driver.id_table->driver_data);
-		}
-	}
-
 	return connector;
 }
