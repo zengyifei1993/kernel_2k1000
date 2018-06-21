@@ -418,7 +418,7 @@ enum {
 };
 
 static char *driver_short_names[] = {
-	[AZX_DRIVER_ICH] = "HDA Intel",
+	[AZX_DRIVER_ICH] = "HD-Audio Loongson",
 };
 
 /*
@@ -2267,7 +2267,7 @@ static int azx_create(struct snd_card *card,
 		goto errout;
 	}
 
-	strcpy(card->driver, "hda-intel");
+	strcpy(card->driver, "HDA-Loongson");
 	strlcpy(card->shortname, driver_short_names[chip->driver_type],
 		sizeof(card->shortname));
 	snprintf(card->longname, sizeof(card->longname),
@@ -2486,7 +2486,7 @@ static int __init alsa_card_azx_init(void)
 	err = platform_driver_register(&driver);
 	if (!err)
 		err = pci_register_driver(&azx_pci_driver);
-	pr_err("hda azx driver register\n");
+	printk("hda azx driver register\n");
 	return err;
 }
 
