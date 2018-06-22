@@ -93,7 +93,7 @@
 		};
 
 		otg@0x40020000 {
-			compatible = "loongson,ls2k-otg", "usb-otg";
+			compatible = "loongson,dwc-otg", "dwc-otg";
 			reg = <0x40020000 0x3ffff>;
 			interrupt-parent = <&icu>;
 			interrupts = <57>;
