@@ -293,15 +293,6 @@ const struct i2c_board_info __initdata ls7a_dvo1_edid_eep_info = {
 	I2C_BOARD_INFO("eeprom-edid1", 0x50),
 };
 
-static const struct spi_board_info ls_spi_devs[] __initdata = {
-	{
-		/* Winbond spi flash */
-		.modalias	= "w25q16dvssig",
-		.bus_num	= 0,
-		.chip_select	= 0,
-		.mode		= 0,
-	},
-};
 static void __init ls7a_device_initcall(void)
 {
 #ifndef CONFIG_DRM_LOONGSON_VGA
@@ -309,7 +300,6 @@ static void __init ls7a_device_initcall(void)
 	i2c_register_board_info(6, &ls7a_dvo0_edid_eep_info, 1);
 	i2c_register_board_info(7, &ls7a_dvo1_edid_eep_info, 1);
 #endif
-	spi_register_board_info(ls_spi_devs, ARRAY_SIZE(ls_spi_devs));
 
 	platform_add_devices(ls7a_platform_devices,
 			ARRAY_SIZE(ls7a_platform_devices));
