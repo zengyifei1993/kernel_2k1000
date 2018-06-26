@@ -527,6 +527,13 @@ config SRAM
 	  the genalloc API. It is supposed to be used for small on-chip SRAM
 	  areas found on many SoCs.
 
+config LS_SPIFLASH
+	tristate "LS SPI FLASH SUPPORT"
+	depends on SPI && CPU_LOONGSON3
+	default	n
+	help
+	 SPI flash driver for the Loongson platform
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"

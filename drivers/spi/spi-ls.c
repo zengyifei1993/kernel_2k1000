@@ -457,7 +457,7 @@ static void __exit ls_spi_exit(void)
 	pci_unregister_driver(&ls_spi_pci_driver);
 }
 
-module_init(ls_spi_init);
+subsys_initcall(ls_spi_init);
 module_exit(ls_spi_exit);
 
 MODULE_AUTHOR("Juxin Gao <gaojuxin@loongson.cn>");

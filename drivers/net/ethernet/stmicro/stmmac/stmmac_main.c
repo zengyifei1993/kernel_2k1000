@@ -51,6 +51,7 @@
 #include <linux/i2c.h>
 #include <loongson-pch.h>
 #include <linux/spi/spi.h>
+#include <ls7a-spiflash.h>
 #endif
 #include <linux/net_tstamp.h>
 #include "stmmac_ptp.h"
@@ -61,15 +62,8 @@
 rwlock_t stmmac0_rwlock;
 rwlock_t stmmac1_rwlock;
 
-#define PROGRAM		0x02
-#define READ_DATA	0x03
-#define WR_DIS		0x04
-#define RD_STATUS	0x05
-#define WR_EN		0x06
 #define MAC_OFFSET	0x10
-#define SEC_ERASE	0x20
 #define MAC_LEN		0x6
-#define DEV_BUSY	0x1
 #endif
 
 #undef STMMAC_DEBUG
@@ -149,7 +143,6 @@ static struct eep_info {
 	struct i2c_adapter *adapter;
 } eeprom_info;
 
-static struct spi_device *spi_dev;
 int spi_register_driver(struct spi_driver *sdrv);
 #endif
 
@@ -1722,182 +1715,14 @@ static int stmmac_eep_set_mac_addr(struct stmmac_priv *priv, unsigned char *buf)
 		return 0;
 }
 
-static void spidev_complete(void *arg)
-{
-	complete(arg);
-}
-
-static int spi_flash_write_en(unsigned char wr_en)
-{
-	u8 cmd[1];
-	struct spi_message msg;
-	DECLARE_COMPLETION_ONSTACK(done);
-
-	struct spi_transfer instruction = {
-			.tx_buf = cmd,
-			.rx_buf = NULL,
-			.len = 1,
-	};
-
-	cmd[0] = wr_en;
-	spi_message_init(&msg);
-	spi_message_add_tail(&instruction, &msg);
-
-	msg.complete = spidev_complete;
-	msg.context = &done;
-	msg.spi = spi_dev;
-
-	spi_dev->master->transfer(spi_dev,&msg);
-	wait_for_completion(&done);
-
-	return 0;
-}
-
-static unsigned char spi_flash_read_status(void)
-{
-	u8 cmd[1],ret;
-	struct spi_message msg;
-	DECLARE_COMPLETION_ONSTACK(done);
-
-	struct spi_transfer instruction = {
-			.tx_buf = cmd,
-			.rx_buf = NULL,
-			.len = 1,
-	};
-
-	struct spi_transfer status = {
-			.tx_buf = NULL,
-			.rx_buf = &ret,
-			.len = 1,
-	};
-
-	cmd[0] = RD_STATUS;
-	spi_message_init(&msg);
-	spi_message_add_tail(&instruction, &msg);
-	spi_message_add_tail(&status, &msg);
-
-	msg.complete = spidev_complete;
-	msg.context = &done;
-	msg.spi = spi_dev;
-
-	spi_dev->master->transfer(spi_dev,&msg);
-	wait_for_completion(&done);
-
-	return ret;
-}
-
-static int spi_flash_sec_erase(void)
-{
-	u8 cmd[4];
-	struct spi_message msg;
-	DECLARE_COMPLETION_ONSTACK(done);
-
-	struct spi_transfer instruction = {
-			.tx_buf = cmd,
-			.rx_buf = NULL,
-			.len = 4,
-	};
-
-	cmd[0] = SEC_ERASE;
-	cmd[1] = 0x0;
-	cmd[2] = 0x0;
-	cmd[3] = 0x0;
-
-	spi_message_init(&msg);
-	spi_message_add_tail(&instruction, &msg);
-
-	msg.complete = spidev_complete;
-	msg.context = &done;
-	msg.spi = spi_dev;
-
-	spi_dev->master->transfer(spi_dev,&msg);
-	wait_for_completion(&done);
-
-	return 0;
-}
-
-static int spi_flash_read(int addr, unsigned char *buf,int data_len)
-{
-	u8 cmd[4];
-	struct spi_message msg;
-	DECLARE_COMPLETION_ONSTACK(done);
-
-	struct spi_transfer instruction = {
-			.tx_buf = cmd,
-			.rx_buf = NULL,
-			.len = 4,
-	};
-
-	struct spi_transfer mac_addr = {
-			.tx_buf = NULL,
-			.rx_buf = buf,
-			.len = data_len,
-	};
-
-	cmd[0] = READ_DATA;
-	cmd[1] = (addr >> 16) & 0xff;
-	cmd[2] = (addr >> 8) & 0xff;
-	cmd[3] = addr & 0xff;
-
-	spi_message_init(&msg);
-	spi_message_add_tail(&instruction, &msg);
-	spi_message_add_tail(&mac_addr, &msg);
-
-	msg.complete = spidev_complete;
-	msg.context = &done;
-	msg.spi = spi_dev;
-
-	spi_dev->master->transfer(spi_dev,&msg);
-	wait_for_completion(&done);
-
-	return 0;
-}
-
 static int stmmac_spi_flash_get_mac_addr(struct stmmac_priv *priv, unsigned char *buf)
 {
 	struct plat_stmmacenet_data *plat_dat = priv->plat;
 
-	spi_flash_read((plat_dat->bus_id  - 1)* MAC_OFFSET,buf,MAC_LEN);
-
+	ls_spiflash_read((plat_dat->bus_id  - 1)* MAC_OFFSET,buf,MAC_LEN);
 	return 0;
 }
 
-static int spi_flash_program(int addr, unsigned char *buf,int data_len)
-{
-	u8 cmd[4];
-	struct spi_message msg;
-	DECLARE_COMPLETION_ONSTACK(done);
-
-	struct spi_transfer instruction = {
-			.tx_buf = cmd,
-			.rx_buf = NULL,
-			.len = 4,
-	};
-
-	struct spi_transfer mac_addr = {
-			.rx_buf = NULL,
-			.tx_buf = buf,
-			.len = data_len,
-	};
-
-	cmd[0] = PROGRAM;
-	cmd[1] = (addr >> 16) & 0xff;
-	cmd[2] = (addr >> 8) & 0xff;
-	cmd[3] = addr & 0xff;
-
-	spi_message_init(&msg);
-	spi_message_add_tail(&instruction, &msg);
-	spi_message_add_tail(&mac_addr, &msg);
-
-	msg.complete = spidev_complete;
-	msg.context = &done;
-	msg.spi = spi_dev;
-
-	spi_dev->master->transfer(spi_dev,&msg);
-	wait_for_completion(&done);
-
-	return 0;
-}
 
 static int stmmac_spi_flash_set_mac_addr(struct stmmac_priv *priv, unsigned char *buf)
 {
@@ -1905,33 +1730,22 @@ static int stmmac_spi_flash_set_mac_addr(struct stmmac_priv *priv, unsigned char
 	struct plat_stmmacenet_data *plat_dat = priv->plat;
 
 	/*first read status to detect external spi flash*/
-	if (spi_flash_read_status() == 0xff) return -ENODEV;
+	if (ls_spiflash_read_status() == 0xff)
+		return -ENODEV;
 
 	if ((plat_dat->bus_id - 1) == 0)
-		spi_flash_read(MAC_OFFSET,mac,MAC_LEN);
+		ls_spiflash_read(MAC_OFFSET,mac,MAC_LEN);
 	else
-		spi_flash_read(0,mac,MAC_LEN);
+		ls_spiflash_read(0,mac,MAC_LEN);
 
-	spi_flash_write_en(WR_EN);
-	spi_flash_sec_erase();
-	while ((spi_flash_read_status() & DEV_BUSY) == DEV_BUSY);
+	ls_spiflash_sectors_erase(0x0, 0x1000);
 
 	if ((plat_dat->bus_id - 1) == 0) {
-		spi_flash_write_en(WR_EN);
-		spi_flash_program(0, buf,MAC_LEN);
-		while ((spi_flash_read_status() & DEV_BUSY) == DEV_BUSY);
-
-		spi_flash_write_en(WR_EN);
-		spi_flash_program(MAC_OFFSET, mac,MAC_LEN);
-		while ((spi_flash_read_status() & DEV_BUSY) == DEV_BUSY);
+		ls_spiflash_write(0, buf,MAC_LEN);
+		ls_spiflash_write(MAC_OFFSET, mac,MAC_LEN);
 	} else {
-		spi_flash_write_en(WR_EN);
-		spi_flash_program(0x0, mac,MAC_LEN);
-		while ((spi_flash_read_status() & DEV_BUSY) == DEV_BUSY);
-
-		spi_flash_write_en(WR_EN);
-		spi_flash_program(MAC_OFFSET, buf,MAC_LEN);
-		while ((spi_flash_read_status() & DEV_BUSY) == DEV_BUSY);
+		ls_spiflash_write(0x0, mac,MAC_LEN);
+		ls_spiflash_write(MAC_OFFSET, buf,MAC_LEN);
 	}
 
 	return 0;
@@ -3183,17 +2997,6 @@ static int eep_remove(struct i2c_client *client)
 	return 0;
 }
 
-static int spi_flash_probe(struct spi_device *spi)
-{
-	spi_dev = spi;
-
-	return 0;
-}
-
-static int spi_flash_remove(struct spi_device *spi)
-{
-	return 0;
-}
 static struct i2c_driver eep_driver = {
 	.driver = {
 		.name = "eep-mac",
@@ -3202,15 +3005,6 @@ static struct i2c_driver eep_driver = {
 	.probe = eep_probe,
 	.remove = eep_remove,
 	.id_table = eep_ids,
-};
-static struct spi_driver spi_flash_driver = {
-	.driver = {
-		.name		= "w25q16dvssig",
-		.owner		= THIS_MODULE,
-	},
-
-	.probe		= spi_flash_probe,
-	.remove		= spi_flash_remove,
 };
 #endif
 /**
@@ -3492,10 +3286,6 @@ static int __init stmmac_init(void)
 #if defined(CONFIG_CPU_LOONGSON3)
 	if (i2c_add_driver(&eep_driver)) {
 		pr_err("No eeprom device register!");
-		return -ENODEV;
-	}
-	if (spi_register_driver(&spi_flash_driver)) {
-		pr_err("No spi flash device register!");
 		return -ENODEV;
 	}
 #endif
