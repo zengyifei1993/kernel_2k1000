@@ -10,6 +10,7 @@
  * option) any later version.
  */
 #include "loongson_drv.h"
+#include <ls7a-spiflash.h>
 
 
 static const char *phy_type_names[1] = {
@@ -106,9 +107,22 @@ void * loongson_vbios_test(void){
 int loongson_vbios_init(struct loongson_drm_device *ldev){
 	struct loongson_vbios *vbios;
 	int i;
+		ldev->vbios = NULL;
 	/*get a test vbios,just for test*/
-	ldev->vbios = (struct loongson_vbios *)loongson_vbios_test();
-
+	if (ls_spiflash_read_status() == 0xff){
+		DRM_INFO("There is no VBIOS flash chip,use default setting!\n");
+		ldev->vbios = (struct loongson_vbios *)loongson_vbios_test();
+	}else{
+		DRM_INFO("Read VBIOS data.\n");
+		ldev->vbios = kzalloc(120*1024,GFP_KERNEL);
+		ls_spiflash_read(0x1000,(unsigned char *)ldev->vbios,0x1E000);
+		if(ldev->vbios->version_major != 0 || ldev->vbios->version_minor != 1)
+		{
+			DRM_INFO("VBIOS data is wrong,use default setting!\n");
+			kfree(ldev->vbios);
+			ldev->vbios = (struct loongson_vbios *)loongson_vbios_test();
+		}
+	}
 	vbios = ldev->vbios;
 	if(vbios == NULL)
 		return -1;
