@@ -12,6 +12,8 @@
 #include "loongson_drv.h"
 #include <ls7a-spiflash.h>
 
+#define VBIOS_START_ADDR 0x1000
+#define VBIOS_SIZE 0x1E000
 
 static const char *phy_type_names[1] = {
 	"NONE or TRANSPARENT PHY",
@@ -25,13 +27,45 @@ static const char *get_edid_method_names[4] = {
 	"Get EDID via phy chip",
 };
 
-void * loongson_vbios_test(void){
+static const char *crtc_version_name[] = {
+	"default version",
+};
+
+uint POLYNOMIAL = 0xEDB88320 ;
+int have_table = 0 ;
+uint table[256] ;
+
+
+void make_table()
+{
+    int i, j, crc;
+    have_table = 1 ;
+    for (i = 0 ; i < 256 ; i++)
+        for (j = 0, table[i] = i ; j < 8 ; j++)
+            table[i] = (table[i]>>1)^((table[i]&1)?POLYNOMIAL:0) ;
+}
+
+
+uint lscrc32(uint crc, char *buff, int len)
+{
+    int i;
+    if (!have_table) make_table();
+    crc = ~crc;
+    for (i = 0; i < len; i++)
+        crc = (crc >> 8) ^ table[(crc ^ buff[i]) & 0xff];
+    return ~crc;
+}
+
+
+void * loongson_vbios_default(void){
 	struct loongson_vbios *vbios;
 	struct loongson_vbios_crtc * crtc_vbios[2];
 	struct loongson_vbios_connector *connector_vbios[2];
 	struct loongson_vbios_phy *phy_vbios[2];
+	unsigned char * vbios_start;
 
 	vbios = kzalloc(120*1024,GFP_KERNEL);
+	vbios_start = (unsigned char *)vbios;
 
 	/*Build loongson_vbios struct*/
 	vbios->version_major = 0;
@@ -46,11 +80,12 @@ void * loongson_vbios_test(void){
 
 
 	/*Build loongson_vbios_crtc struct*/
-	crtc_vbios[0] = (struct loongson_vbios_crtc *)(vbios + vbios->crtc_offset);
-	crtc_vbios[1] = (struct loongson_vbios_crtc *)(vbios + vbios->crtc_offset + sizeof(struct loongson_vbios_crtc));
+	crtc_vbios[0] = (struct loongson_vbios_crtc *)(vbios_start + vbios->crtc_offset);
+	crtc_vbios[1] = (struct loongson_vbios_crtc *)(vbios_start + vbios->crtc_offset + sizeof(struct loongson_vbios_crtc));
 
 	crtc_vbios[0]->next_crtc_offset = sizeof(struct loongson_vbios) + sizeof(struct loongson_vbios_crtc);
 	crtc_vbios[0]->crtc_id = 0;
+	crtc_vbios[0]->crtc_version = default_version;
 	crtc_vbios[0]->crtc_max_weight = 2048;
 	crtc_vbios[0]->crtc_max_height = 2048;
 	crtc_vbios[0]->connector_id = 0;
@@ -59,6 +94,7 @@ void * loongson_vbios_test(void){
 
 	crtc_vbios[1]->next_crtc_offset = NULL;
 	crtc_vbios[1]->crtc_id = 1;
+	crtc_vbios[1]->crtc_version = default_version;
 	crtc_vbios[1]->crtc_max_weight = 2048;
 	crtc_vbios[1]->crtc_max_height = 2048;
 	crtc_vbios[1]->connector_id = 1;
@@ -66,8 +102,8 @@ void * loongson_vbios_test(void){
 	crtc_vbios[1]->phy_id[0] = 1;
 
 	/*Build loongson_vbios_connector struct*/
-	connector_vbios[0] = (struct loongson_vbios_connector *)(vbios + vbios->connector_offset);
-	connector_vbios[1] = (struct loongson_vbios_connector *)(vbios + vbios->connector_offset + sizeof(struct loongson_vbios_connector));
+	connector_vbios[0] = (struct loongson_vbios_connector *)(vbios_start + vbios->connector_offset);
+	connector_vbios[1] = (struct loongson_vbios_connector *)(vbios_start + vbios->connector_offset + sizeof(struct loongson_vbios_connector));
 
 	connector_vbios[0]->next_connector_offset = vbios->connector_offset + sizeof(struct loongson_vbios_connector);
 	connector_vbios[1]->next_connector_offset = NULL;
@@ -86,8 +122,8 @@ void * loongson_vbios_test(void){
 	connector_vbios[1]->i2c_type = i2c_type_gpio;
 
 	/*Build loongson_vbios_phy struct*/
-	phy_vbios[0] = (struct loongson_vbios_phy *)(vbios + vbios->phy_offset);
-	phy_vbios[1] = (struct loongson_vbios_phy *)(vbios + vbios->phy_offset + sizeof(struct loongson_vbios_phy));
+	phy_vbios[0] = (struct loongson_vbios_phy *)(vbios_start + vbios->phy_offset);
+	phy_vbios[1] = (struct loongson_vbios_phy *)(vbios_start + vbios->phy_offset + sizeof(struct loongson_vbios_phy));
 
 	phy_vbios[0]->next_phy_offset = vbios->phy_offset + sizeof(struct loongson_vbios_phy);
 	phy_vbios[1]->next_phy_offset = NULL;
@@ -107,48 +143,60 @@ void * loongson_vbios_test(void){
 int loongson_vbios_init(struct loongson_drm_device *ldev){
 	struct loongson_vbios *vbios;
 	int i;
-		ldev->vbios = NULL;
+	unsigned char * vbios_start;
+	unsigned int crc;
+
+	ldev->vbios = NULL;
 	/*get a test vbios,just for test*/
 	if (ls_spiflash_read_status() == 0xff){
 		DRM_INFO("There is no VBIOS flash chip,use default setting!\n");
-		ldev->vbios = (struct loongson_vbios *)loongson_vbios_test();
+		ldev->vbios = (struct loongson_vbios *)loongson_vbios_default();
 	}else{
 		DRM_INFO("Read VBIOS data.\n");
 		ldev->vbios = kzalloc(120*1024,GFP_KERNEL);
-		ls_spiflash_read(0x1000,(unsigned char *)ldev->vbios,0x1E000);
-		if(ldev->vbios->version_major != 0 || ldev->vbios->version_minor != 1)
+		ls_spiflash_read(VBIOS_START_ADDR,(unsigned char *)ldev->vbios,VBIOS_SIZE);
+
+	/*Check VBIOS data.If data is wrong,use default setting*/
+
+		crc = lscrc32(0,(unsigned char *)ldev->vbios, VBIOS_SIZE - 0x4);
+		if(*(unsigned int *)((unsigned char *)ldev->vbios + VBIOS_SIZE - 0x4) != crc)
 		{
-			DRM_INFO("VBIOS data is wrong,use default setting!\n");
+			DRM_ERROR("VBIOS data is wrong,use default setting!\n");
 			kfree(ldev->vbios);
-			ldev->vbios = (struct loongson_vbios *)loongson_vbios_test();
+			ldev->vbios = (struct loongson_vbios *)loongson_vbios_default();
+		}else{
+			DRM_INFO("VBIOS check success!\n");
 		}
 	}
+
 	vbios = ldev->vbios;
+	vbios_start = (unsigned char *)vbios;
+
 	if(vbios == NULL)
 		return -1;
 
 	/*get crtc struct points*/
-	ldev->crtc_vbios[0] = (struct loongson_vbios_crtc *)(vbios + vbios->crtc_offset);
+	ldev->crtc_vbios[0] = (struct loongson_vbios_crtc *)(vbios_start + vbios->crtc_offset);
 	if(vbios->crtc_num > 1)
 	{
 		for(i = 1;i < vbios->crtc_num; i++){
-		ldev->crtc_vbios[i] = (struct loongson_vbios_crtc *)(vbios + ldev->crtc_vbios[i - 1]->next_crtc_offset);
+		ldev->crtc_vbios[i] = (struct loongson_vbios_crtc *)(vbios_start + ldev->crtc_vbios[i - 1]->next_crtc_offset);
 		}
 	}
 
 	/*get connector struct points*/
-	ldev->connector_vbios [0] = (struct loongson_vbios_connector *)(vbios + vbios->connector_offset);
+	ldev->connector_vbios [0] = (struct loongson_vbios_connector *)(vbios_start + vbios->connector_offset);
 	if(vbios->connector_num > 1){
 		for(i = 1;i < vbios->connector_num; i++){
-		ldev->connector_vbios[i] = (struct loongson_vbios_connector *)(vbios + ldev->connector_vbios[i - 1]->next_connector_offset);
+		ldev->connector_vbios[i] = (struct loongson_vbios_connector *)(vbios_start + ldev->connector_vbios[i - 1]->next_connector_offset);
 		}
 	}
 
 	/*get phy struct points*/
-	ldev->phy_vbios[0] = (struct loongson_vbios_phy *)(vbios + vbios->phy_offset);
+	ldev->phy_vbios[0] = (struct loongson_vbios_phy *)(vbios_start + vbios->phy_offset);
 	if(vbios->phy_num > 1){
 		for(i = 1;i < vbios->phy_num; i++){
-		ldev->phy_vbios[1] = (struct loongson_vbios_phy *)(vbios + ldev->phy_vbios[0]->next_phy_offset);
+		ldev->phy_vbios[1] = (struct loongson_vbios_phy *)(vbios_start + ldev->phy_vbios[0]->next_phy_offset);
 		}
 	}
 
@@ -168,6 +216,7 @@ int loongson_vbios_information_display(struct loongson_drm_device *ldev){
 	DRM_INFO("================================CRTC INFO=====================================\n");
 	for(i=0;i<ldev->vbios->crtc_num;i++){
 		DRM_INFO("CRTC-%d:max_weight=%d,max_height=%d\n",ldev->crtc_vbios[i]->crtc_id,ldev->crtc_vbios[i]->crtc_max_weight,ldev->crtc_vbios[i]->crtc_max_height);
+		DRM_INFO("CRTC-%d type is %s\n",ldev->crtc_vbios[i]->crtc_id,crtc_version_name[ldev->crtc_vbios[i]->crtc_version]);
 		DRM_INFO("Bind connector id is %d\n",ldev->crtc_vbios[i]->connector_id);
 		DRM_INFO("Bind phy number is %d\n",ldev->crtc_vbios[i]->phy_num);
 		j = ldev->crtc_vbios[i]->phy_num;
@@ -191,4 +240,5 @@ int loongson_vbios_information_display(struct loongson_drm_device *ldev){
 		DRM_INFO("phy-%d:bind with connector %d\n",i,ldev->phy_vbios[i]->connector_id);
 	}
 	DRM_INFO("=================================END==========================================\n");
+	return 0;
 }

@@ -15,10 +15,14 @@ struct loongson_vbios {
 	uint32_t phy_offset;
 };
 
+enum loongson_crtc_version{
+	default_version = 0,
+};
+
 struct loongson_vbios_crtc{
 	uint32_t next_crtc_offset;
 	uint32_t crtc_id;
-	uint32_t crtc_version;
+	enum loongson_crtc_version crtc_version;
 	uint32_t crtc_max_freq;
 	uint32_t crtc_max_weight;
 	uint32_t crtc_max_height;
