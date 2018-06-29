@@ -148,14 +148,18 @@ int ls_set_affinity_icu_irq(struct irq_data *data, const struct cpumask *affinit
 		break;
 		case 3:
 			if(irqbalance&1)
-			 int_auto[sel] |= (1 << off);
+				int_auto[sel] |= (1 << off);
 			else
-			 int_auto[sel] &= ~(1 << off);
+				int_auto[sel] &= ~(1 << off);
 
 			if(irqbalance&2)
-			 int_bounce[sel] |= (1 << off);
+				int_bounce[sel] |= (1 << off);
 			else
-			 int_bounce[sel] &= ~(1 << off);
+				int_bounce[sel] &= ~(1 << off);
+
+			if(irqbalance == 0)
+				int_bounce[sel] |= (1 << off);
+
 			writeb((readb(entry) & 0xf0)|0x03, entry);
 		break;
 	}
