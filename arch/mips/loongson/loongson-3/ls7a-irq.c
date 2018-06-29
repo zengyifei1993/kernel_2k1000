@@ -83,6 +83,17 @@ void shutdown_pch_irq(struct irq_data *d)
 	pch_destroy_dirq(d->irq);
 }
 
+void ls3a_mask_ht_irq(unsigned int irq)
+{
+	LOONGSON_HT1_INTN_EN64(0) &= (~(1ULL << irq));
+}
+
+void ls3a_unmask_ht_irq(unsigned int irq)
+{
+	LOONGSON_HT1_INTN_EN64(0) |= (1ULL << irq);
+}
+
+
 static void mask_pch_irq(struct irq_data *d)
 {
 	unsigned long flags;
