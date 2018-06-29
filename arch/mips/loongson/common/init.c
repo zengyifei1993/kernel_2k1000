@@ -16,6 +16,8 @@
 #include <loongson.h>
 #include <loongson-pch.h>
 
+#define HT_cache_enable_reg1	*(volatile unsigned int *)(ht_control_base + 0x68)
+#define HT_cache_base_reg1	*(volatile unsigned int *)(ht_control_base + 0x6c)
 #define HT_uncache_enable_reg0	*(volatile unsigned int *)(ht_control_base + 0xF0)
 #define HT_uncache_base_reg0	*(volatile unsigned int *)(ht_control_base + 0xF4)
 #define HT_uncache_enable_reg1	*(volatile unsigned int *)(ht_control_base + 0xF8)
@@ -76,8 +78,13 @@ void __init prom_init(void)
 		switch (cputype) {
 		case Legacy_3A:
 		case Loongson_3A:
-			HT_uncache_enable_reg0	= 0xc0000000; //Low 256M
-			HT_uncache_base_reg0	= 0x0080fff0;
+			if (loongson_pch->board_type == LS7A) {
+				HT_uncache_enable_reg0	= HT_cache_enable_reg1; //for 7a gpu
+				HT_uncache_base_reg0	= HT_cache_base_reg1;
+			} else {
+				HT_uncache_enable_reg0  = 0xc0000000; //Low 256M
+				HT_uncache_base_reg0    = 0x0080fff0;
+			}
 			HT_uncache_enable_reg1	= 0xc0000000; //Node 0
 			HT_uncache_base_reg1	= 0x0000e000;
 			HT_uncache_enable_reg2	= 0xc0100000; //Node 1
