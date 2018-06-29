@@ -21,6 +21,14 @@ void pch_destroy_dirq(unsigned int irq);
 #define irq2bit(irq) (irq - IRQ_LS7A_MSI_0)
 #define bit2irq(bit) (IRQ_LS7A_MSI_0 + bit)
 
+/* LS7A MSI target address only for devices with 64bit MSI */
+#define LS7A_MSI_TARGET_ADDRESS_64_HI		0xFD
+#define LS7A_MSI_TARGET_ADDRESS_64_LO		0xF8000000
+
+/* LS7A MSI target address for devices with 64bit MSI or 32bit MSI */
+#define LS7A_MSI_TARGET_ADDRESS_64_32_HI	0x0
+#define LS7A_MSI_TARGET_ADDRESS_64_32_LO	0x2FF00000
+
 /*
  * Dynamic irq allocate and deallocation
  */
@@ -90,8 +98,8 @@ int ls7a_setup_msi_irq(struct pci_dev *pdev, struct msi_desc *desc)
 
 	irq_set_msi_desc(irq, desc);
 
-	msg.address_hi = 0xfd;
-	msg.address_lo = 0xf8000000;
+	msg.address_hi = LS7A_MSI_TARGET_ADDRESS_64_32_HI;
+	msg.address_lo = LS7A_MSI_TARGET_ADDRESS_64_32_LO;
 
 	msg.data = irq;
 
