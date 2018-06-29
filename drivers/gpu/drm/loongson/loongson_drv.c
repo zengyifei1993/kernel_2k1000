@@ -407,9 +407,39 @@ static int ioctl_get_fb_vram_base(struct drm_device *dev, void *data,
 	return 0;
 }
 
+/**
+ *ioctl_get_bo_vram_base - answer a device specific request.
+ *
+ * @rdev: drm device pointer
+ * @data: request object
+ * @filp: drm filp
+ *
+ * This function is used to pass device specific parameters to the userspace drivers.
+ * Returns 0 on success, -EINVAL on failure.
+ */
+static int ioctl_get_bo_vram_base(struct drm_device *dev, void *data,
+		struct drm_file *file_priv)
+{
+	struct loongson_drm_device *ldev = dev->dev_private;
+	struct drm_loongson_param *args = data;
+	struct drm_gem_object *obj;
+	struct loongson_bo *bo;
+	int ret;
+	unsigned long gpu_addr;
+
+	obj = drm_gem_object_lookup(dev, file_priv, args->value);
+	if (obj == NULL)
+		return -ENOENT;
+	bo = gem_to_loongson_bo(obj);
+	ret = loongson_bo_pin(bo, TTM_PL_FLAG_VRAM, &gpu_addr);
+	args->value = gpu_addr;
+	return 0;
+}
+
 
 static struct drm_ioctl_desc ioctls[DRM_COMMAND_END - DRM_COMMAND_BASE] = {
 	DRM_IOCTL_DEF_DRV(LOONGSON_GET_FB_VRAM_BASE, ioctl_get_fb_vram_base, DRM_UNLOCKED|DRM_AUTH),
+	DRM_IOCTL_DEF_DRV(LOONGSON_GET_BO_VRAM_BASE, ioctl_get_bo_vram_base, DRM_UNLOCKED|DRM_AUTH),
 };
 
 /**
