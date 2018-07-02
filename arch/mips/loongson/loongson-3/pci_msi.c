@@ -17,6 +17,8 @@ extern int ls3a_msi_enabled;
 
 int pch_create_dirq(unsigned int irq);
 void pch_destroy_dirq(unsigned int irq);
+void ls3a_mask_ht_irq(unsigned int irq);
+void ls3a_unmask_ht_irq(unsigned int irq);
 
 #define irq2bit(irq) (irq - IRQ_LS7A_MSI_0)
 #define bit2irq(bit) (IRQ_LS7A_MSI_0 + bit)
@@ -28,6 +30,7 @@ void pch_destroy_dirq(unsigned int irq);
 /* LS7A MSI target address for devices with 64bit MSI or 32bit MSI */
 #define LS7A_MSI_TARGET_ADDRESS_64_32_HI	0x0
 #define LS7A_MSI_TARGET_ADDRESS_64_32_LO	0x2FF00000
+
 
 /*
  * Dynamic irq allocate and deallocation
@@ -78,13 +81,40 @@ static void ls3a_msi_nop(struct irq_data *data)
 	return;
 }
 
+
+static void ls3a_mask_msi_irq(struct irq_data *data)
+{
+	struct msi_desc *desc = irq_data_get_msi(data);
+	if (desc->msi_attrib.maskbit)
+	{
+		mask_msi_irq(data);
+	}
+	else
+	{
+		ls3a_mask_ht_irq(desc->irq);
+	}
+}
+
+static void ls3a_unmask_msi_irq(struct irq_data *data)
+{
+	struct msi_desc *desc = irq_data_get_msi(data);
+	if (desc->msi_attrib.maskbit)
+	{
+		unmask_msi_irq(data);
+	}
+	else
+	{
+		ls3a_unmask_ht_irq(desc->irq);
+	}
+}
+
 static struct irq_chip ls7a_msi_chip = {
 	.name = "PCI-MSI",
 	.irq_ack = ls3a_msi_nop,
-	.irq_enable = unmask_msi_irq,
-	.irq_disable = mask_msi_irq,
-	.irq_mask = mask_msi_irq,
-	.irq_unmask = unmask_msi_irq,
+	.irq_enable = ls3a_unmask_msi_irq,
+	.irq_disable = ls3a_mask_msi_irq,
+	.irq_mask = ls3a_mask_msi_irq,
+	.irq_unmask = ls3a_unmask_msi_irq,
 	.irq_set_affinity = plat_set_irq_affinity,
 };
 
