@@ -38,7 +38,7 @@ uint table[256] ;
 
 void make_table()
 {
-    int i, j, crc;
+    int i, j;
     have_table = 1 ;
     for (i = 0 ; i < 256 ; i++)
         for (j = 0, table[i] = i ; j < 8 ; j++)
@@ -63,9 +63,21 @@ void * loongson_vbios_default(void){
 	struct loongson_vbios_connector *connector_vbios[2];
 	struct loongson_vbios_phy *phy_vbios[2];
 	unsigned char * vbios_start;
+	char * title="Loongson-VBIOS";
+	int i;
 
 	vbios = kzalloc(120*1024,GFP_KERNEL);
 	vbios_start = (unsigned char *)vbios;
+
+	i = 0;
+	while(*title != '\0'){
+		if(i > 15){
+			vbios->title[15] = '\0';
+			break;
+		}
+		vbios->title[i++] = *title;
+		title++;
+	}
 
 	/*Build loongson_vbios struct*/
 	vbios->version_major = 0;
@@ -140,35 +152,68 @@ void * loongson_vbios_default(void){
 	return (void *)vbios;
 }
 
+int loongson_vbios_title_check(struct loongson_vbios *vbios){
+	char * title="Loongson-VBIOS";
+	int i;
+
+	i = 0;
+	while(*title != '\0' && i <= 15){
+		if(vbios->title[i++] != *title){
+			DRM_ERROR("VBIOS title is wrong,use default setting!\n");
+			return -EINVAL;
+		}
+		title++;
+	}
+	return 0;
+
+}
+
+int loongson_vbios_crc_check(void * vbios){
+	unsigned int crc;
+
+	crc = lscrc32(0,(unsigned char *)vbios, VBIOS_SIZE - 0x4);
+	if(*(unsigned int *)((unsigned char *)vbios + VBIOS_SIZE - 0x4) != crc){
+		DRM_ERROR("VBIOS crc check is wrong,use default setting!\n");
+		return -EINVAL;
+	}
+	return 0;
+}
+
 int loongson_vbios_init(struct loongson_drm_device *ldev){
 	struct loongson_vbios *vbios;
 	int i;
 	unsigned char * vbios_start;
-	unsigned int crc;
 
 	ldev->vbios = NULL;
-	/*get a test vbios,just for test*/
+
+	if(vgabios_addr != NULL)
+	{
+		if(loongson_vbios_crc_check((void *)vgabios_addr)||loongson_vbios_title_check((struct loongson_vbios *)vgabios_addr)){
+			DRM_ERROR("UEFI get wrong vbios!");
+		}else{
+			DRM_INFO("VBIOS get from UEFI check success!\n");
+			ldev->vbios = (struct loongson_vbios *)vgabios_addr;
+			goto vbios_set;
+		}
+	}
 	if (ls_spiflash_read_status() == 0xff){
 		DRM_INFO("There is no VBIOS flash chip,use default setting!\n");
 		ldev->vbios = (struct loongson_vbios *)loongson_vbios_default();
 	}else{
-		DRM_INFO("Read VBIOS data.\n");
+		DRM_INFO("Read VBIOS data from spi flash.\n");
 		ldev->vbios = kzalloc(120*1024,GFP_KERNEL);
 		ls_spiflash_read(VBIOS_START_ADDR,(unsigned char *)ldev->vbios,VBIOS_SIZE);
 
-	/*Check VBIOS data.If data is wrong,use default setting*/
-
-		crc = lscrc32(0,(unsigned char *)ldev->vbios, VBIOS_SIZE - 0x4);
-		if(*(unsigned int *)((unsigned char *)ldev->vbios + VBIOS_SIZE - 0x4) != crc)
-		{
-			DRM_ERROR("VBIOS data is wrong,use default setting!\n");
+		/*Check VBIOS data.If data is wrong,use default setting*/
+		if(loongson_vbios_crc_check((void *)ldev->vbios)||loongson_vbios_title_check(ldev->vbios)){
 			kfree(ldev->vbios);
 			ldev->vbios = (struct loongson_vbios *)loongson_vbios_default();
 		}else{
-			DRM_INFO("VBIOS check success!\n");
+			DRM_INFO("VBIOS get from SPI check success!\n");
 		}
 	}
 
+vbios_set:
 	vbios = ldev->vbios;
 	vbios_start = (unsigned char *)vbios;
 
@@ -199,7 +244,6 @@ int loongson_vbios_init(struct loongson_drm_device *ldev){
 		ldev->phy_vbios[1] = (struct loongson_vbios_phy *)(vbios_start + ldev->phy_vbios[0]->next_phy_offset);
 		}
 	}
-
 	loongson_vbios_information_display(ldev);
 	return 0;
 }
@@ -209,7 +253,9 @@ int loongson_vbios_init(struct loongson_drm_device *ldev){
 int loongson_vbios_information_display(struct loongson_drm_device *ldev){
 	int i,j,k;
 	DRM_INFO("===========================LOONGSON VBIOS INFO=================================\n");
+	DRM_INFO("title is %s\n",ldev->vbios->title);
 	DRM_INFO("loongson vbios version:%d.%d\n",ldev->vbios->version_major,ldev->vbios->version_minor);
+	DRM_INFO("vbios information:%s\n",(char *)ldev->vbios->information);
 	DRM_INFO("crtc num:%d\n",ldev->vbios->crtc_num);
 	DRM_INFO("connector num:%d\n",ldev->vbios->connector_num);
 	DRM_INFO("phy num:%d\n",ldev->vbios->phy_num);

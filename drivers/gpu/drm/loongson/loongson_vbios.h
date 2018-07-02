@@ -4,6 +4,7 @@
  * @driver_priv: Pointer to driver-private information.
  */
 struct loongson_vbios {
+	char  title[16];
 	uint32_t version_major;
 	uint32_t version_minor;
 	char  information[20];
