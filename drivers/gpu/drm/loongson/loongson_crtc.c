@@ -58,10 +58,10 @@ static void loongson_set_start_address(struct drm_crtc *crtc, unsigned offset)
 	unsigned long base;
 
 	crtc_id = loongson_crtc->crtc_id;
-	DRM_INFO("crtc_gpu_addr = 0x%x\n",offset);
+	DRM_DEBUG("crtc_gpu_addr = 0x%x\n",offset);
 	ldev = crtc->dev->dev_private;
 	base = (unsigned long)(ldev->rmmio);
-	DRM_INFO("base=0x%x\n",base);
+	DRM_DEBUG("base=0x%x\n",base);
 	if(crtc_id == 0){
 		ls_writel(offset,base +	LS_FB_ADDR0_DVO0_REG);
 		ls_writel(offset,base +	LS_FB_ADDR1_DVO0_REG);
@@ -118,17 +118,17 @@ static int loongson_crtc_do_set_base(struct drm_crtc *crtc,
 		loongson_bo_unreserve(bo);
 	}
 
-	DRM_INFO ("crtc width = %d,height = %d\n",width,crtc->primary->fb->height);
-	DRM_INFO ("crtc pitches[0]=%d\n",crtc->primary->fb->pitches[0]);
+	DRM_DEBUG ("crtc width = %d,height = %d\n",width,crtc->primary->fb->height);
+	DRM_DEBUG ("crtc pitches[0]=%d\n",crtc->primary->fb->pitches[0]);
 	loongson_fb = to_loongson_framebuffer(crtc->primary->fb);
 
 	if(ldev->mode_info[0].connector->base.status == connector_status_connected
 		&& ldev->mode_info[1].connector->base.status == connector_status_connected
 		&& loongson_fb->base.width == crtc->mode.hdisplay && loongson_fb->base.height == crtc->mode.vdisplay && x == 0 && y == 0){
-		DRM_INFO("use clone mode\n");
+		DRM_DEBUG("use clone mode\n");
 		ldev->clone_mode = true;
 	}else{
-		DRM_INFO("not use clone mode\n");
+		DRM_DEBUG("not use clone mode\n");
 		ldev->clone_mode = false;
 	}
 
@@ -145,7 +145,7 @@ static int loongson_crtc_do_set_base(struct drm_crtc *crtc,
 		return ret;
 	}
 
-	DRM_INFO("gpu_addr = 0x%x\n",gpu_addr);
+	DRM_DEBUG("gpu_addr = 0x%x\n",gpu_addr);
 	ldev-> fb_vram_base = gpu_addr;
 	if (&ldev->lfbdev->lfb == loongson_fb) {
 		/* if pushing console in kmap it */
@@ -402,8 +402,8 @@ static int loongson_crtc_mode_set(struct drm_crtc *crtc,
 	vfl	= mode->vtotal;
 	depth = crtc->primary->fb->bits_per_pixel;
 	pix_freq = mode->clock;
-	DRM_INFO("crtc_id = %d,hr = %d,hss = %d,hse = %d,hfl = %d,vr = %d,vss = %d,vse = %d,vfl = %d,depth = %d,pix_freq = %d,x = %d,y = %d\n",crtc_id,hr,hss,hse,hfl,vr,vss,vse,vfl,depth,pix_freq,x,y);
-	DRM_INFO ("fb width = %d,height = %d\n",crtc->primary->fb->width,crtc->primary->fb->height);
+	DRM_DEBUG("crtc_id = %d,hr = %d,hss = %d,hse = %d,hfl = %d,vr = %d,vss = %d,vse = %d,vfl = %d,depth = %d,pix_freq = %d,x = %d,y = %d\n",crtc_id,hr,hss,hse,hfl,vr,vss,vse,vfl,depth,pix_freq,x,y);
+	DRM_DEBUG("fb width = %d,height = %d\n",crtc->primary->fb->width,crtc->primary->fb->height);
 
 	loongson_crtc->width = hr;
 	loongson_crtc->height = vr;
@@ -411,7 +411,7 @@ static int loongson_crtc_mode_set(struct drm_crtc *crtc,
 
 	if(crtc_id == 0){
 		if (ret) {
-			DRM_INFO("cal_freq OK!\n");
+			DRM_DEBUG("cal_freq OK!\n");
 			config_pll(LS_PIX0_PLL, &pll_cfg);
 		}
 
@@ -435,7 +435,7 @@ static int loongson_crtc_mode_set(struct drm_crtc *crtc,
 
 	}else{
 		if (ret) {
-			DRM_INFO("cal_freq OK!\n");
+			DRM_DEBUG("cal_freq OK!\n");
 			config_pll(LS_PIX1_PLL, &pll_cfg);
 		}
 
@@ -532,7 +532,7 @@ static void loongson_crtc_prepare(struct drm_crtc *crtc)
 	 * The hardware wedges sometimes if you reconfigure one CRTC
 	 * whilst another is running
 	 */
-	DRM_INFO("loongson_crtc_prepare\n");
+	DRM_DEBUG("loongson_crtc_prepare\n");
 	list_for_each_entry(crtci, &dev->mode_config.crtc_list, head)
 		if (crtci->enabled) {
 			loongson_crtc_dpms(crtci, DRM_MODE_DPMS_ON);
@@ -556,7 +556,7 @@ static void loongson_crtc_commit(struct drm_crtc *crtc)
 	struct drm_device *dev = crtc->dev;
 	struct drm_crtc *crtci;
 
-	DRM_INFO("loongson_crtc_commit\n");
+	DRM_DEBUG("loongson_crtc_commit\n");
 	list_for_each_entry(crtci, &dev->mode_config.crtc_list, head) {
 		if (crtci->enabled)
 			loongson_crtc_dpms(crtci, DRM_MODE_DPMS_ON);

@@ -219,7 +219,6 @@ static int loongson_vram_init(struct loongson_drm_device *ldev)
 	ldev->mc.vram_base = pci_resource_start(ldev->vram_pdev, 2);
 	ldev->mc.vram_window = pci_resource_len(ldev->vram_pdev, 2);
 
-	DRM_INFO("");
 	aper->ranges[0].base = ldev->mc.vram_base;
 	aper->ranges[0].size = ldev->mc.vram_window;
 
@@ -345,14 +344,14 @@ int loongson_modeset_init(struct loongson_drm_device *ldev)
 	ldev->num_crtc = ldev->vbios->crtc_num;
 
 	for(i=0;i<2;i++){
-		DRM_INFO("loongson drm encoder init\n");
+		DRM_DEBUG("loongson drm encoder init\n");
 		encoder = loongson_encoder_init(ldev->dev,i);
 		if (!encoder) {
 			DRM_ERROR("loongson_encoder_init failed\n");
 			return -1;
 		}
 
-		DRM_INFO("loongson drm i2c init\n");
+		DRM_DEBUG("loongson drm i2c init\n");
 		connector = loongson_vga_init(ldev->dev,i);
 		if (!connector) {
 			DRM_ERROR("loongson_vga_init failed\n");
@@ -362,7 +361,7 @@ int loongson_modeset_init(struct loongson_drm_device *ldev)
 		ldev->mode_info[i].connector = connector;
 		drm_mode_connector_attach_encoder(connector, encoder);
 	}
-	DRM_INFO("loongson drm fbdev init\n");
+	DRM_DEBUG("loongson drm fbdev init\n");
 	ret = loongson_fbdev_init(ldev);
 	if (ret) {
 		DRM_ERROR("loongson_fbdev_init failed\n");
@@ -464,7 +463,7 @@ static int loongson_vga_load(struct drm_device *dev, unsigned long flags)
 	ldev->dev = dev;
 
 	ret = loongson_drm_device_init(dev, flags);
-	DRM_INFO("end loongson drm device init.\n");
+	DRM_DEBUG("end loongson drm device init.\n");
 	loongson_ttm_init(ldev);
 
 	drm_mode_config_init(dev);
@@ -635,7 +634,7 @@ static int loongson_vga_open(struct drm_device *dev, struct drm_file *file)
 {
 	file->driver_priv = NULL;
 
-	DRM_INFO("open: dev=%p, file=%p", dev, file);
+	DRM_DEBUG("open: dev=%p, file=%p", dev, file);
 
 	return 0;
 }
@@ -643,7 +642,7 @@ static int loongson_vga_open(struct drm_device *dev, struct drm_file *file)
 
 static int loongson_vga_firstopen(struct drm_device *dev)
 {
-	DRM_INFO("firstopen: dev=%p", dev);
+	DRM_DEBUG("firstopen: dev=%p", dev);
 	return 0;
 }
 
@@ -665,14 +664,14 @@ static void loongson_vga_lastclose(struct drm_device *dev)
         struct loongson_drm_device *ldev = dev->dev_private;
         int ret;
 
-        DRM_INFO("lastclose: dev=%p", ldev);
+        DRM_DEBUG("lastclose: dev=%p", ldev);
 }
 
 
 
 static void loongson_vga_preclose(struct drm_device *dev, struct drm_file *file)
 {
-       DRM_INFO("loongson_vga_precolse : dev=%p, file=%p", dev, file);
+       DRM_DEBUG("loongson_vga_precolse : dev=%p, file=%p", dev, file);
 }
 
 /**
@@ -687,7 +686,7 @@ static void loongson_vga_preclose(struct drm_device *dev, struct drm_file *file)
  */
 static void loongson_vga_postclose(struct drm_device *dev, struct drm_file *file)
 {
-	DRM_INFO("loongson_vga_posecolse : dev=%p, file=%p", dev, file);
+	DRM_DEBUG("loongson_vga_posecolse : dev=%p, file=%p", dev, file);
 }
 
 /**
@@ -959,7 +958,7 @@ static int loongson_drm_pm_suspend(struct device *dev)
 {
         struct pci_dev *pdev = to_pci_dev(dev);
         struct drm_device *drm_dev = pci_get_drvdata(pdev);
-	DRM_INFO("loongson_drm_pm_suspend");
+	DRM_DEBUG("loongson_drm_pm_suspend");
         return loongson_drm_drm_suspend(drm_dev, true, true, false);
 }
 
@@ -975,7 +974,7 @@ static int loongson_drm_pm_resume(struct device *dev)
 {
         struct pci_dev *pdev = to_pci_dev(dev);
         struct drm_device *drm_dev = pci_get_drvdata(pdev);
-	DRM_INFO("loongson_drm_pm_resume");
+	DRM_DEBUG("loongson_drm_pm_resume");
         return loongson_drm_drm_resume(drm_dev, true, true);
 }
 
@@ -992,7 +991,7 @@ static int loongson_drm_pm_freeze(struct device *dev)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
 	struct drm_device *drm_dev = pci_get_drvdata(pdev);
-	DRM_INFO("loongson_drm_pm_freeze");
+	DRM_DEBUG("loongson_drm_pm_freeze");
 	return loongson_drm_drm_suspend(drm_dev, false, true, true);
 }
 
@@ -1011,7 +1010,7 @@ static int loongson_drm_pm_thaw(struct device *dev)
 {
         struct pci_dev *pdev = to_pci_dev(dev);
         struct drm_device *drm_dev = pci_get_drvdata(pdev);
-	DRM_INFO("loongson_drm_pm_thaw");
+	DRM_DEBUG("loongson_drm_pm_thaw");
         return loongson_drm_drm_resume(drm_dev, false, true);
 }
 
@@ -1027,7 +1026,7 @@ static int loongson_drm_pm_restore(struct device *dev)
 {
         struct pci_dev *pdev = to_pci_dev(dev);
         struct drm_device *drm_dev = pci_get_drvdata(pdev);
-	DRM_INFO("loongson_drm_pm_restore");
+	DRM_DEBUG("loongson_drm_pm_restore");
         return loongson_drm_drm_resume(drm_dev, true, true);
 }
 

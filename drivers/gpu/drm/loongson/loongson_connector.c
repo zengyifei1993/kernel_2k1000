@@ -186,7 +186,7 @@ static unsigned char *loongson_i2c_connector(unsigned int id)
 {
 	unsigned char *edid = NULL;
 
-	DRM_INFO("edid entry\n");
+	DRM_DEBUG("edid entry\n");
 	if (!edid) {
 		if (eeprom_info[id].adapter){
 			edid = loongson_do_probe_ddc_edid(eeprom_info[id].adapter,id);
@@ -211,14 +211,14 @@ static int loongson_vga_get_modes(struct drm_connector *connector)
 	struct edid *edid;
 	int ret = 0;
 
-	DRM_INFO("connecotro_id = %d\n",connector->connector_id);
+	DRM_DEBUG("connecotro_id = %d\n",connector->connector_id);
 	edid = (struct edid *)loongson_i2c_connector(connector->connector_id);
 	if (edid) {
 		drm_mode_connector_update_edid_property(connector, edid);
 		ret = drm_add_edid_modes(connector, edid);
 		kfree(edid);
 	}
-	DRM_INFO("the vga get modes ret is %d\n",ret);
+	DRM_DEBUG("the vga get modes ret is %d\n",ret);
 	return ret;
 }
 
@@ -296,14 +296,14 @@ static enum drm_connector_status loongson_vga_detect(struct drm_connector
         enum drm_connector_status ret = connector_status_disconnected;
         int r;
 
-	DRM_INFO("loongson_vga_detect\n");
+	DRM_DEBUG("loongson_vga_detect\n");
         r = pm_runtime_get_sync(connector->dev->dev);
         if (r < 0)
 		ret = connector_status_disconnected;
         r = loongson_vga_get_modes(connector);
         if (r)
 	{
-		DRM_INFO("loongson_vga_detect: connected");
+		DRM_DEBUG("loongson_vga_detect: connected");
 		ret = connector_status_connected;
 	}
 
@@ -359,6 +359,7 @@ static const struct drm_connector_funcs loongson_vga_connector_funcs = {
 
 static const unsigned short normal_i2c[] = { 0x50, I2C_CLIENT_END };
 
+
 /**
  * loongson_vga_init
  *
@@ -384,8 +385,8 @@ struct drm_connector *loongson_vga_init(struct drm_device *dev,unsigned int conn
 	i2c_adap = i2c_get_adapter(ldev->connector_vbios[connector_id]->i2c_id);
 	memset(&i2c_info, 0, sizeof(struct i2c_board_info));
 	strlcpy(i2c_info.type, DVO_I2C_NAME, I2C_NAME_SIZE);
-	loongson_drm_i2c_client[connector_id] = i2c_new_probed_device(i2c_adap, &i2c_info,
-						normal_i2c, NULL);
+	i2c_info.addr = normal_i2c[0];
+	loongson_drm_i2c_client[connector_id] = i2c_new_device(i2c_adap, &i2c_info);
 	i2c_put_adapter(i2c_adap);
 
 	if(loongson_drm_i2c_client[connector_id] != NULL){

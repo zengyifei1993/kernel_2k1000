@@ -231,7 +231,7 @@ static int loongsonfb_create(struct drm_fb_helper *helper,
 	void *sysram;
 	int size;
 
-	DRM_INFO("loongsonfb_create\n");
+	DRM_DEBUG("loongsonfb_create\n");
 	mode_cmd.width = sizes->surface_width;
 	mode_cmd.height = sizes->surface_height;
 	mode_cmd.pitches[0] = ALIGN(mode_cmd.width,64) * ((sizes->surface_bpp + 7) / 8);
@@ -246,7 +246,7 @@ static int loongsonfb_create(struct drm_fb_helper *helper,
 		return ret;
 	}
 
-	DRM_INFO("mode_cmd.pitches[0]=%d\n",mode_cmd.pitches[0]);
+	DRM_DEBUG("mode_cmd.pitches[0]=%d\n",mode_cmd.pitches[0]);
 	sysram = vmalloc(size);
 	if (!sysram)
 		goto err_sysram;
@@ -454,5 +454,5 @@ void loongson_fbdev_restore_mode(struct loongson_drm_device *ldev)
 
         ret = drm_fb_helper_restore_fbdev_mode_unlocked(fb_helper);
         if (ret)
-		DRM_INFO("failed to restore crtc mode\n");
+		DRM_ERROR("failed to restore crtc mode\n");
 }
