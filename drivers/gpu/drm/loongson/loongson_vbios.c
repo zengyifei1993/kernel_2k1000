@@ -123,8 +123,8 @@ void * loongson_vbios_default(void){
 	connector_vbios[0]->crtc_id = 0;
 	connector_vbios[1]->crtc_id = 1;
 
-	connector_vbios[0]->edid_method = edid_method_i2c;
-	connector_vbios[1]->edid_method = edid_method_i2c;
+	connector_vbios[0]->edid_method = edid_method_null;
+	connector_vbios[1]->edid_method = edid_method_null;
 
 
 	connector_vbios[0]->i2c_id = 6;

@@ -292,24 +292,35 @@ static enum drm_connector_status loongson_vga_detect(struct drm_connector
 						   *connector, bool force)
 {
 	struct drm_device *dev = connector->dev;
+	struct loongson_drm_device *ldev = dev->dev_private;
 	struct loongson_connector *loongson_connector = to_loongson_connector(connector);
         enum drm_connector_status ret = connector_status_disconnected;
+	enum loongson_edid_method ledid_method;
         int r;
 
-	DRM_DEBUG("loongson_vga_detect\n");
-        r = pm_runtime_get_sync(connector->dev->dev);
-        if (r < 0)
-		ret = connector_status_disconnected;
-        r = loongson_vga_get_modes(connector);
-        if (r)
-	{
-		DRM_DEBUG("loongson_vga_detect: connected");
+	ledid_method = ldev->connector_vbios[connector->connector_id]->edid_method;
+
+	DRM_DEBUG("loongson_vga_detect connect_id=%d, ledid_method=%d\n", connector->connector_id, ledid_method);
+
+	if (ledid_method == edid_method_i2c) {
+	        r = pm_runtime_get_sync(connector->dev->dev);
+        	if (r < 0)
+			ret = connector_status_disconnected;
+	        r = loongson_vga_get_modes(connector);
+        	if (r)
+		{
+			DRM_DEBUG("loongson_vga_detect: connected");
+			ret = connector_status_connected;
+		}
+
+		pm_runtime_mark_last_busy(connector->dev->dev);
+		pm_runtime_put_autosuspend(connector->dev->dev);
+	} else if (ledid_method == edid_method_phy) {//TODO: need add more status check in this type
 		ret = connector_status_connected;
-	}
-
-	pm_runtime_mark_last_busy(connector->dev->dev);
-	pm_runtime_put_autosuspend(connector->dev->dev);
-
+	} else if (ledid_method == edid_method_null ||
+			ledid_method == edid_method_vbios) {
+		ret = connector_status_connected;
+	} 		
 	return ret;
 }
 
