@@ -114,7 +114,7 @@ static int loongson_crtc_do_set_base(struct drm_crtc *crtc,
 		ret = loongson_bo_reserve(bo, false);
 		if (ret)
 			return ret;
-		loongson_bo_push_sysram(bo);
+		loongson_bo_unpin(bo);
 		loongson_bo_unreserve(bo);
 	}
 
@@ -250,6 +250,7 @@ static int loongson_crtc_do_set_base(struct drm_crtc *crtc,
 	loongson_set_start_address(crtc, (u32)crtc_address);
 	ldev->cursor_crtc_id = ldev->num_crtc;
 	ldev->cursor_showed = false;
+
 	return 0;
 }
 

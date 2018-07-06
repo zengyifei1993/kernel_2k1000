@@ -430,8 +430,7 @@ static int ioctl_get_bo_vram_base(struct drm_device *dev, void *data,
 	if (obj == NULL)
 		return -ENOENT;
 	bo = gem_to_loongson_bo(obj);
-	ret = loongson_bo_pin(bo, TTM_PL_FLAG_VRAM, &gpu_addr);
-	args->value = gpu_addr;
+	args->value = bo->bo.offset + bo->mc.vram_base;
 	return 0;
 }
 
