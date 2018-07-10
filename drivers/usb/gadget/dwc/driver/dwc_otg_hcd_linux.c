@@ -354,13 +354,7 @@ int hcd_init(
 	/* Set device flags indicating whether the HCD supports DMA. */
 	if (dwc_otg_is_dma_enable(otg_dev->core_if)) {
 #ifdef LM_INTERFACE
-        #if 0
 		_dev->dev.coherent_dma_mask = ~0;
-        printk("coherent_dma_mask=0x%llx\n", _dev->dev.coherent_dma_mask); /*0xFFFFFFFF,FFFFFFFF*/
-        #else
-		_dev->dev.coherent_dma_mask = *_dev->dev.dma_mask;
-        //printk("coherent_dma_mask=0x%llx\n", _dev->dev.coherent_dma_mask); /*0x00000000,FFFFFFFF*/
-        #endif
 #elif  defined(PCI_INTERFACE)
 		pci_set_dma_mask(_dev, DMA_32BIT_MASK);
 		pci_set_consistent_dma_mask(_dev, DMA_32BIT_MASK);
@@ -394,8 +388,7 @@ int hcd_init(
 	}
 
 	hcd->regs = otg_dev->os_dep.base;
-    hcd->rsrc_start = _dev->resource.start;
-    hcd->rsrc_len   = resource_size(&_dev->resource);
+
 	/* Initialize the DWC OTG HCD. */
 	dwc_otg_hcd = dwc_otg_hcd_alloc_hcd();
 	if (!dwc_otg_hcd) {
@@ -624,11 +617,7 @@ static int urb_enqueue(struct usb_hcd *hcd,
 		ep_type = USB_ENDPOINT_XFER_BULK;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,31)
 		if (urb->sg) {
-            #if 0
 			DWC_WARN("SG LIST received - we don't support it\n");
-            #else
-            ;
-            #endif
 		}
 #endif
 		break;

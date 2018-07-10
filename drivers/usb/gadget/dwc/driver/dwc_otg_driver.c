@@ -644,7 +644,7 @@ static int dwc_otg_driver_probe(
 {
 	int retval = 0;
 	dwc_otg_device_t *dwc_otg_device;
-    printk(KERN_INFO "%s:123\r\n", __func__);
+
 	dev_dbg(&_dev->dev, "dwc_otg_driver_probe(%p)\n", _dev);
 #ifdef LM_INTERFACE
 	dev_dbg(&_dev->dev, "start=0x%08x\n", (unsigned)_dev->resource.start);

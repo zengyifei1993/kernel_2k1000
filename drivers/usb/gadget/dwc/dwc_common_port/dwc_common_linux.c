@@ -591,15 +591,7 @@ void DWC_MODIFY_REG64(uint64_t volatile *reg, uint64_t clear_mask, uint64_t set_
 }
 #endif
 
-u32 ls2h_usb_readl(const volatile void __iomem *addr)
-{
-    return readl(addr);
-}
 
-void ls2h_usb_writel(u32 value, volatile void __iomem *addr)
-{
-    writel(value,addr);
-}
 /* Locking */
 
 dwc_spinlock_t *DWC_SPINLOCK_ALLOC(void)

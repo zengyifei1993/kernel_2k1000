@@ -1,5 +1,3 @@
-#include <linux/dma-mapping.h>
-#include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/module.h>
 
@@ -16,18 +14,9 @@ static int dwc_otg_platform_driver_probe( struct platform_device *_dev);
 static int dwc_otg_platform_driver_remove( struct platform_device *_dev);
 
 static const char dwc_driver_name[] = "dwc_otg";
-
-static struct of_device_id dwc_otg_id_table[] = {
-     { .compatible = "loongson,dwc-otg", },
-     { },
-};
-
 static struct platform_driver dwc_otg_platform_driver = {
 	.driver = {
 		.name = (char *)dwc_driver_name,
-        .bus = &platform_bus_type,
-        .of_match_table = of_match_ptr(dwc_otg_id_table),
-
 		},
 	.probe = dwc_otg_platform_driver_probe,
 	.remove = dwc_otg_platform_driver_remove,
@@ -41,44 +30,17 @@ static int dwc_otg_platform_driver_remove(
 	return 0;
 }
 
-static u64 dwc_dma_mask = 0;
 struct lm_device lm_device;
 static int dwc_otg_platform_driver_probe(
 struct platform_device *_dev
 )
 {
 	int irq;
-    __be32 *dma_mask_p = NULL;
-    int retval;
-    struct resource *res;
-
-    if (_dev->dev.of_node) {
-          dma_mask_p = (__be32 *)of_get_property(_dev->dev.of_node, "dma-mask", NULL);
-          if (dma_mask_p != 0){
-              dwc_dma_mask = of_read_number(dma_mask_p,2);
-	          lm_device.dev.dma_mask = &dwc_dma_mask;
-          }
-    }
-
-    irq = platform_get_irq(_dev, 0);
-    if (irq < 0) {
-        retval = irq;
-        return retval;
-    }
-
-    lm_device.irq = irq;
-
-    res = platform_get_resource(_dev, IORESOURCE_MEM, 0);
-    if (!res) {
-        retval = -ENODEV;
-        return retval;
-    }
-
-    lm_device.resource.start = res->start;
-    lm_device.resource.end   = res->end;
-
-    lm_device.id = 0;
-
+	irq = _dev->resource[1].start;
+	lm_device.irq = irq;
+	lm_device.resource = _dev->resource[0];
+	lm_device.id = _dev->id;
+	lm_device.dev.dma_mask = _dev->dev.dma_mask;
 	return lm_device_register(&lm_device);
 }
 
