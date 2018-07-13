@@ -842,7 +842,7 @@ void add_interrupt_randomness(int irq, int irq_flags)
 	 * We check whether nonblocking is initialized, so that nonbolocking pool is
 	 * available as soon as possible.
 	 */
-	if ((fast_pool->count < 64) && !time_after(now, fast_pool->last + HZ) && nonblocking_pool.initialized)
+	if ((fast_pool->count & 1023) && !time_after(now, fast_pool->last + HZ) && nonblocking_pool.initialized)
 		return;
 
 	fast_pool->last = now;
