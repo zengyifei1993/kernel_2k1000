@@ -66,21 +66,18 @@ static struct irqaction cascade_irqaction = {
 
 static inline void mask_loongson_irq(struct irq_data *d)
 {
-	clear_c0_status(0x100 << (d->irq - MIPS_CPU_IRQ_BASE));
-	irq_disable_hazard();
+	struct irq_desc *desc = irq_to_desc(d->irq);
+	if(!desc->action)
+		return;
 
 	/* Workaround: UART IRQ may deliver to any core */
 	if (d->irq == LOONGSON_UART_IRQ) {
 		int cpu = smp_processor_id();
 		int node_id = cpu_logical_map(cpu) / cores_per_node;
-		int core_id = cpu_logical_map(cpu) % cores_per_node;
 		u64 intenclr_addr = smp_group[node_id] |
 			(u64)(&LOONGSON_INT_ROUTER_INTENCLR);
-		u64 introuter_lpc_addr = smp_group[node_id] |
-			(u64)(&LOONGSON_INT_ROUTER_LPC);
 
 		*(volatile u32 *)intenclr_addr = 1 << 10;
-		*(volatile u8 *)introuter_lpc_addr = 0x10 + (1<<core_id);
 	}
 }
 
@@ -90,18 +87,21 @@ static inline void unmask_loongson_irq(struct irq_data *d)
 	if (d->irq == LOONGSON_UART_IRQ) {
 		int cpu = smp_processor_id();
 		int node_id = cpu_logical_map(cpu) / cores_per_node;
-		int core_id = cpu_logical_map(cpu) % cores_per_node;
 		u64 intenset_addr = smp_group[node_id] |
 			(u64)(&LOONGSON_INT_ROUTER_INTENSET);
-		u64 introuter_lpc_addr = smp_group[node_id] |
-			(u64)(&LOONGSON_INT_ROUTER_LPC);
 
 		*(volatile u32 *)intenset_addr = 1 << 10;
-		*(volatile u8 *)introuter_lpc_addr = 0x10 + (1<<core_id);
 	}
+}
 
-	set_c0_status(0x100 << (d->irq - MIPS_CPU_IRQ_BASE));
-	irq_enable_hazard();
+static inline unsigned int startup_loongson_irq(struct irq_data *d)
+{
+	return 0;
+}
+
+static inline void shutdown_loongson_irq(struct irq_data *d)
+{
+
 }
 
  /* For MIPS IRQs which shared by all cores */
@@ -112,10 +112,16 @@ static struct irq_chip loongson_irq_chip = {
 	.irq_mask_ack	= mask_loongson_irq,
 	.irq_unmask	= unmask_loongson_irq,
 	.irq_eoi	= unmask_loongson_irq,
+	.irq_startup	= startup_loongson_irq,
+	.irq_shutdown	= shutdown_loongson_irq,
 };
 
 void __init mach_init_irq(void)
 {
+	int i;
+	u64 intenset_addr;
+	u64 introuter_lpc_addr;
+
 	clear_c0_status(ST0_IM | ST0_BEV);
 
 	mips_cpu_irq_init();
@@ -127,6 +133,17 @@ void __init mach_init_irq(void)
 
 	irq_set_chip_and_handler(LOONGSON_UART_IRQ,
 			&loongson_irq_chip, handle_level_irq);
+
+	for (i = 0; i < nr_nodes_loongson; i++) {
+		intenset_addr = smp_group[i] | (u64)(&LOONGSON_INT_ROUTER_INTENSET);
+		introuter_lpc_addr = smp_group[i] | (u64)(&LOONGSON_INT_ROUTER_LPC);
+		if (i == 0) {
+			*(volatile u8 *)introuter_lpc_addr = LOONGSON_INT_COREx_INTy(loongson_boot_cpu_id, 0);
+                } else {
+			*(volatile u8 *)introuter_lpc_addr = LOONGSON_INT_COREx_INTy(0, 0);
+		}
+		*(volatile u32 *)intenset_addr = 1 << 10;
+	}
 
 	set_c0_status(STATUSF_IP2 | STATUSF_IP6);
 }
