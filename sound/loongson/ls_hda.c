@@ -2406,7 +2406,6 @@ static struct platform_driver driver = {
 
 static DEFINE_PCI_DEVICE_TABLE(azx_id_table) = {
 	{PCI_DEVICE(PCI_VENDOR_ID_HDA, PCI_DEVICE_ID_HDA)},
-	{PCI_DEVICE(0x14, 0x7a03)},
 	{}
 };
 
