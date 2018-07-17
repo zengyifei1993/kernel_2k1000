@@ -297,9 +297,6 @@ void init_7a_irqs(void)
 void ls7a_irq_router_init(void)
 {
 	int i;
-	/* route LPC int to cpu core0 int 0 */
-	LOONGSON_INT_ROUTER_LPC = LOONGSON_INT_COREx_INTy(loongson_boot_cpu_id, 0);
-	LOONGSON_INT_ROUTER_INTENSET = LOONGSON_INT_ROUTER_INTEN | 0x1 << 10;
 
 	if(ls3a_msi_enabled) {
 		*(volatile int *)(LOONGSON_HT1_CFG_BASE+0x58) = 0x400;//strip1, ht_int 8bit
