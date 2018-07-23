@@ -166,7 +166,7 @@ void ls2h_irq_dispatch(void)
 			if (!irq) {
 				pr_info("Unknow INT%d: intstatus %x\n", i, intstatus);
 				spurious_interrupt();
-			} else if ((i == 0) && (intstatus & (1 << 13))) {
+			} else if ((i == 0) && (intstatus & (1 << 13)) && ls2h_lpc_reg_base == LS2H_LPC_REG_BASE) {
 				irqs = ls2h_readl(LS2H_LPC_INT_ENA) & ls2h_readl(LS2H_LPC_INT_STS) & 0xfeff;
 				if (irqs)
 					while ((lpc_irq = ffs(irqs))) {

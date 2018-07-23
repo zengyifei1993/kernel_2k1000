@@ -243,12 +243,14 @@
 #define	LS2H_RTC_MATCH2_REG		(LS2H_RTC_REG_BASE + 0x0074)
 
 /* LPC regs */
+#define LS3_LPC_REG_BASE		0x1fe00200
 #define LS2H_LPC_IO_BASE		(LS2H_PCH_REG_BASE + 0x00f00000)
 #define LS2H_LPC_REG_BASE		(LS2H_PCH_REG_BASE + 0x00f10000)
-#define LS2H_LPC_CFG0_REG		(LS2H_LPC_REG_BASE + 0x0)
-#define LS2H_LPC_CFG1_REG		(LS2H_LPC_REG_BASE + 0x4)
-#define LS2H_LPC_CFG2_REG		(LS2H_LPC_REG_BASE + 0x8)
-#define LS2H_LPC_CFG3_REG		(LS2H_LPC_REG_BASE + 0xc)
+extern u64 ls2h_lpc_reg_base;
+#define LS2H_LPC_CFG0_REG		(ls2h_lpc_reg_base + 0x0)
+#define LS2H_LPC_CFG1_REG		(ls2h_lpc_reg_base + 0x4)
+#define LS2H_LPC_CFG2_REG		(ls2h_lpc_reg_base + 0x8)
+#define LS2H_LPC_CFG3_REG		(ls2h_lpc_reg_base + 0xc)
 #define LS2H_LPC_INT_CTL		LS2H_LPC_CFG0_REG
 #define LS2H_LPC_INT_ENA		LS2H_LPC_CFG1_REG
 #define LS2H_LPC_INT_STS		LS2H_LPC_CFG2_REG

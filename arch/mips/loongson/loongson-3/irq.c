@@ -51,7 +51,23 @@ void mach_irq_dispatch(unsigned int pending)
 	if (pending & CAUSEF_IP3)
 		loongson_pch->irq_dispatch();
 	if (pending & CAUSEF_IP2)
-		do_IRQ(LOONGSON_UART_IRQ);
+	{
+		if(ls2h_lpc_reg_base == LS3_LPC_REG_BASE)
+		{
+			int irqs, irq;
+			irqs = ls2h_readl(LS2H_LPC_INT_ENA) & ls2h_readl(LS2H_LPC_INT_STS) & 0xfeff;
+			if (irqs) {
+				while ((irq = ffs(irqs)) != 0) {
+					do_IRQ(irq - 1);
+					irqs &= ~(1 << (irq-1));
+				}
+			}
+			else
+				do_IRQ(LOONGSON_UART_IRQ);
+		}
+		else
+			do_IRQ(LOONGSON_UART_IRQ);
+	}
 	if (pending & UNUSED_IPS) {
 		printk(KERN_ERR "%s : spurious interrupt\n", __func__);
 		spurious_interrupt();
