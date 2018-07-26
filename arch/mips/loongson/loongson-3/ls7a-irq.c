@@ -324,8 +324,12 @@ void ls7a_irq_router_init(void)
 void __init ls7a_init_irq(void)
 {
 #ifdef CONFIG_LS7A_MSI_SUPPORT
-	if((read_c0_prid() & 0xf) == PRID_REV_LOONGSON3A_R3_1) {
-		pr_info("Loongson 3A3000F supports HT MSI interrupt, enabling LS7A MSI Interrupt.\n");
+	if(((read_c0_prid() & 0xff00) == PRID_REV_LOONGSON3A_R3_1) &&
+		((read_c0_prid() & 0xff) < PRID_REV_LOONGSON3A_R3_1)) {
+		pr_info("Do not supports HT MSI interrupt, disabling LS7A MSI Interrupt.\n");
+		ls3a_msi_enabled = 0;
+	} else {
+		pr_info("Supports HT MSI interrupt, enabling LS7A MSI Interrupt.\n");
 		ls3a_msi_enabled = 1;
 		pch_irq_chip.name = "LS7A-IOAPIC-MSI";
 		loongson_pch->irq_dispatch = ls7a_msi_irq_dispatch;
