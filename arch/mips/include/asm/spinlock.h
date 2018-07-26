@@ -356,7 +356,7 @@ static inline void arch_read_unlock(arch_rwlock_t *rw)
 	if (R10000_LLSC_WAR) {
 		__asm__ __volatile__(
 		"1:	ll	%1, %2		# arch_read_unlock	\n"
-		"	sub	%1, 1					\n"
+		"	addiu	%1, -1					\n"
 		"	sc	%1, %0					\n"
 		"	beqzl	%1, 1b					\n"
 		: "=m" (rw->lock), "=&r" (tmp)
@@ -368,7 +368,7 @@ static inline void arch_read_unlock(arch_rwlock_t *rw)
 			"1:			# arch_read_unlock	\n"
 			__WEAK_LLSC_MB
 			"	ll	%1, %2				\n"
-			"	sub	%1, 1				\n"
+			"	addiu	%1, -1				\n"
 			"	sc	%1, %0				\n"
 			: "=m" (rw->lock), "=&r" (tmp)
 			: "m" (rw->lock)
@@ -380,7 +380,7 @@ static inline void arch_read_unlock(arch_rwlock_t *rw)
 		do {
 			__asm__ __volatile__(
 			"1:	ll	%1, %2	# arch_read_unlock	\n"
-			"	sub	%1, 1				\n"
+			"	addiu	%1, -1				\n"
 			"	sc	%1, %0				\n"
 			: "=m" (rw->lock), "=&r" (tmp)
 			: "m" (rw->lock)
