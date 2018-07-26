@@ -19,66 +19,68 @@
 #define __2K1000_H_
 
 /* we need to read back to ensure the write is accepted by conf bus */
-#if 0
-static inline void ls64_conf_write64(unsigned long val64, unsigned long addr)
+
+static inline void ls64_conf_write64(u64 val64, volatile void __iomem *addr)
 {
 
 	asm volatile (
 	"	.set push			\n"
 	"	.set noreorder			\n"
-	"	sd	%[val], %[off](%[addr])	\n"
-	"	lb	$0, %[off](%[addr])	\n"
+	"	sd	%[v], (%[hw])		\n"
+	"	lb	$0, (%[hw])		\n"
 	"	.set pop			\n"
 	:
-	: [val] = "r" (val64), [off] = "i" (off)
+	: [hw] "r" (addr),  [v] "r" (val64)
 	);
 }
-static inline void ls64_conf_write32(unsigned int val32, unsigned long addr)
-{
 
+static inline void ls64_conf_write32(u32 val, volatile void __iomem *addr)
+{
 	asm volatile (
 	"	.set push			\n"
 	"	.set noreorder			\n"
-	"	sw	%[val], %[off](%[addr])	\n"
-	"	lb	$0, %[off](%[addr])	\n"
+	"	sw	%[v], (%[hw])		\n"
+	"	lb	$0, (%[hw])		\n"
 	"	.set pop			\n"
 	:
-	: [val] = "r" (val32), [off] = "i" (off)
-	:
+	: [hw] "r" (addr), [v] "r" (val)
 	);
+
 }
 
-#else
+static inline void ls64_conf_write16(u16 val, volatile void __iomem *addr)
+{
+	asm volatile (
+	"	.set push			\n"
+	"	.set noreorder			\n"
+	"	sh	%[v], (%[hw])		\n"
+	"	lb	$0, (%[hw])		\n"
+	"	.set pop			\n"
+	:
+	: [hw] "r" (addr), [v] "r" (val)
+	);
+
+}
+
+static inline void ls64_conf_write8(u8 val, volatile void __iomem *addr)
+{
+	asm volatile (
+	"	.set push			\n"
+	"	.set noreorder			\n"
+	"	sb	%[v], (%[hw])		\n"
+	"	lb	$0, (%[hw])		\n"
+	"	.set pop			\n"
+	:
+	:[hw] "r" (addr), [v] "r" (val)
+	);
+
+}
 
 #define ls64_conf_read64(x) 	readq(x)
 #define ls64_conf_read32(x) 	readl(x)
 #define ls64_conf_read16(x) 	readw(x)
 #define ls64_conf_read8(x) 	readb(x)
 
-static inline void ls64_conf_write64(unsigned long val64, void * addr)
-{
-	//pr_info("write64:%p, %lx\n", addr, val64);
-	*(volatile unsigned long *)addr = val64;
-}
-
-static inline void ls64_conf_write32(unsigned int val32, void * addr)
-{
-	//pr_info("write32:%p, %x\n", addr, val32);
-	*(volatile unsigned int *)addr = val32;
-}
-
-static inline void ls64_conf_write16(unsigned short val16, void * addr)
-{
-	//pr_info("write16:%p, %x\n", addr, val16);
-	*(volatile unsigned short *)addr = val16;
-}
-
-static inline void ls64_conf_write8(unsigned char val8, void * addr)
-{
-	//pr_info("write8:%p, %x\n", addr, val8);
-	*(volatile unsigned char *)addr = val8;
-}
-#endif
 #define CONF_BASE 0x1fe10000
 
 #define CPU_WBASE0_OFF 0x0
