@@ -85,7 +85,11 @@ static inline int __maybe_unused r10000_llsc_war(void)
 
 static inline int __maybe_unused loongson_llsc_war(void)
 {
-       return LOONGSON_LLSC_WAR;
+#if defined(CONFIG_CPU_LOONGSON2K)
+	return 1;
+#else
+	return LOONGSON_LLSC_WAR;
+#endif
 }
 
 static int use_bbit_insns(void)
@@ -1666,8 +1670,11 @@ static void __cpuinit
 iPTE_LW(u32 **p, unsigned int pte, unsigned int ptr)
 {
 #ifdef CONFIG_SMP
+	// here just for test, ls2k does not need this
+#if 	!defined(CONFIG_CPU_LOONGSON2K)
 	if (loongson_llsc_war())
 		uasm_i_sync(p);
+#endif
 # ifdef CONFIG_64BIT_PHYS_ADDR
 	if (cpu_has_64bits)
 		uasm_i_lld(p, pte, 0, ptr);

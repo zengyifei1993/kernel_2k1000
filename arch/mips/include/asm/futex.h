@@ -44,17 +44,19 @@
 		: "=r" (ret), "=&r" (oldval), "=R" (*uaddr)		\
 		: "0" (0), "R" (*uaddr), "Jr" (oparg), "i" (-EFAULT)	\
 		: "memory");						\
-	} else if (cpu_has_llsc && LOONGSON_LLSC_WAR) {					\
+	} else if (cpu_has_llsc && LOONGSON_LLSC_WAR) {			\
 		__asm__ __volatile__(					\
 		"	.set	push				\n"	\
 		"	.set	noat				\n"	\
 		"	.set	mips3				\n"	\
+	/* we need sync/synci here */					\
 		"1:	ll	%1, %4	# __futex_atomic_op	\n"	\
 		"	.set	mips0				\n"	\
 		"	" insn	"				\n"	\
 		"	.set	mips3				\n"	\
 		"2:	sc	$1, %2				\n"	\
 		"	beqz	$1, 1b				\n"	\
+	/* for 3A3000 synci here is oK ? */				\
 		__WEAK_LLSC_MB						\
 		"3:						\n"	\
 		"	.set	pop				\n"	\
@@ -200,13 +202,13 @@ futex_atomic_cmpxchg_inatomic(u32 *uval, u32 __user *uaddr,
 		"	.set	push					\n"
 		"	.set	noat					\n"
 		"	.set	mips3					\n"
-		"1:	ll	%1, %3					\n"
+		"1:	ll	%1, %3					\n"	/* we need sync/synci here */
 		"	bne	%1, %z4, 3f				\n"
 		"	.set	mips0					\n"
 		"	move	$1, %z5					\n"
 		"	.set	mips3					\n"
 		"2:	sc	$1, %2					\n"
-		"	beqz	$1, 1b					\n"
+		"	beqz	$1, 1b					\n"	/* is synci here OK ? */
 		__WEAK_LLSC_MB
 		"3:							\n"
 		"	.set	pop					\n"
@@ -234,9 +236,9 @@ futex_atomic_cmpxchg_inatomic(u32 *uval, u32 __user *uaddr,
 		"	move	$1, %z5					\n"
 		"	.set	mips3					\n"
 		"2:	sc	$1, %2					\n"
-		"	beqz	$1, 1b					\n"
-		__WEAK_LLSC_MB
+		"	beqz	$1, 1b					\n"  /* gas would fill delay slot with nop, sync here provide both release semantics and block the speculative access from bne */
 		"3:							\n"
+		"	sync						\n"
 		"	.set	pop					\n"
 		"	.section .fixup,\"ax\"				\n"
 		"4:	li	%0, %6					\n"

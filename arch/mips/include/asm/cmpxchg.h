@@ -229,6 +229,7 @@ static inline unsigned long __xchg(unsigned long x, volatile void * ptr, int siz
 		"	beqz	$1, 1b				\n"	\
 		"	.set	pop				\n"	\
 		"2:						\n"	\
+		"	sync					\n"	\
 		: "=&r" (__ret), "=R" (*m)				\
 		: "R" (*m), "Jr" (old), "Jr" (new)			\
 		: "memory");						\

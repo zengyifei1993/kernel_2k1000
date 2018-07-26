@@ -236,7 +236,7 @@ static inline unsigned int arch_spin_trylock(arch_spinlock_t *lock)
 		"	 li	%[ticket], 1				\n"
 		"2:							\n"
 		"	.subsection 2					\n"
-		"3:	b	2b					\n"
+		"3:	b	2b					\n"	// ?? oops, missing a sync
 		"	 li	%[ticket], 0				\n"
 		"	.previous					\n"
 		"	.set pop					\n"
@@ -258,9 +258,10 @@ static inline unsigned int arch_spin_trylock(arch_spinlock_t *lock)
 		"	sc	%[ticket], %[ticket_ptr]		\n"
 		"	beqz	%[ticket], 1b				\n"
 		"	 li	%[ticket], 1				\n"
-		"2:	sync						\n"
+		"2:							\n"	// this does not need a sync, smp_llsc_mb follows
 		"	.subsection 2					\n"
-		"3:	sync					\n"
+		"3:							\n"
+		"	sync						\n"	// ls2k need this
 		"	b	2b					\n"
 		"	 li	%[ticket], 0				\n"
 		"	.previous					\n"
@@ -375,7 +376,7 @@ static inline void arch_read_unlock(arch_rwlock_t *rw)
 			: "memory");
 		} while (unlikely(!tmp));
 
-		smp_llsc_mb();
+		smp_llsc_mb();							// arch_read_unlock has release semantics, does not need this
 	} else {
 		do {
 			__asm__ __volatile__(
@@ -483,27 +484,26 @@ static inline int arch_read_trylock(arch_rwlock_t *rw)
 		"	sc	%1, %0					\n"
 		"	beqz	%1, 1b					\n"
 		"	 nop						\n"
-		"	.set	reorder					\n"
+		"	.set	reorder					\n"	/* should we use synci here for 3a3000? maybe use sync */
 		__WEAK_LLSC_MB
 		"	li	%2, 1					\n"
-		"2:							\n"
+		"2:							\n"	// ?? oops, missing sync here
 		: "=m" (rw->lock), "=&r" (tmp), "=&r" (ret)
 		: "m" (rw->lock)
 		: "memory");
 	} else {
 		__asm__ __volatile__(
 		"	.set	noreorder	# arch_read_trylock	\n"
-		"	li	%2, 0					\n"
 		"1:	ll	%1, %3					\n"
+		"	li	%2, 0					\n"
 		"	bltz	%1, 2f					\n"
 		"	 addu	%1, 1					\n"
 		"	sc	%1, %0					\n"
 		"	beqz	%1, 1b					\n"
-		"	 nop						\n"
-		"	.set	reorder					\n"
-		__WEAK_LLSC_MB
 		"	li	%2, 1					\n"
-		"2:	sync						\n"
+		"2:							\n"
+		"	sync						\n"
+		"	.set	reorder					\n"
 		: "=m" (rw->lock), "=&r" (tmp), "=&r" (ret)
 		: "m" (rw->lock)
 		: "memory");
@@ -552,21 +552,24 @@ static inline int arch_write_trylock(arch_rwlock_t *rw)
 
 		smp_llsc_mb();
 	} else {
-		do {
-			__asm__ __volatile__(
-			"	ll	%1, %3	# arch_write_trylock	\n"
-			"	li	%2, 0				\n"
-			"	bnez	%1, 2f				\n"
-			"	lui	%1, 0x8000			\n"
-			"	sc	%1, %0				\n"
-			"	li	%2, 1				\n"
-			"2:	sync					\n"
-			: "=m" (rw->lock), "=&r" (tmp), "=&r" (ret)
-			: "m" (rw->lock)
-			: "memory");
-		} while (unlikely(!tmp));
+		__asm__ __volatile__(
+		"	.set	push				\n"
+		"	.set	noreorder			\n"
+		"1:						\n"
+		"	ll	%1, %3	# arch_write_trylock	\n"
+		"	li	%2, 0				\n"
+		"	bnez	%1, 2f				\n"
+		"	 lui	%1, 0x8000			\n"
+		"	sc	%1, %0				\n"
+		"	beqz	%1, 1b				\n"
+		"	 li	%2, 1				\n"
+		"2:						\n"
+		"	sync					\n"
+		"	.set	pop				\n"
+		: "=m" (rw->lock), "=&r" (tmp), "=&r" (ret)
+		: "m" (rw->lock)
+		: "memory");
 
-		smp_llsc_mb();
 	}
 
 	return ret;
