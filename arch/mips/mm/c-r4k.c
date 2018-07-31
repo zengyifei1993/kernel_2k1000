@@ -67,8 +67,10 @@ static inline void r4k_on_each_cpu(void (*func) (void *info), void *info)
  */
 static unsigned long icache_size __read_mostly;
 static unsigned long dcache_size __read_mostly;
-static unsigned long vcache_size __read_mostly;
 static unsigned long scache_size __read_mostly;
+#ifdef CONFIG_CPU_LOONGSON3
+static unsigned long vcache_size __read_mostly;
+#endif
 
 /*
  * Dummy cache handling routines for machines without boardcaches
@@ -1185,6 +1187,7 @@ static void __cpuinit probe_pcache(void)
 		       c->dcache.linesz);
 }
 
+#ifdef CONFIG_CPU_LOONGSON3
 static void __cpuinit probe_vcache(void)
 {
 	struct cpuinfo_mips *c = &current_cpu_data;
@@ -1211,6 +1214,7 @@ static void __cpuinit probe_vcache(void)
 		pr_info("Unified victim cache %ldkB %s, linesize %d bytes.\n",
 			vcache_size >> 10, way_string[c->vcache.ways], c->vcache.linesz);
 }
+#endif
 
 /*
  * If you even _breathe_ on this function, look at the gcc output and make sure
@@ -1545,7 +1549,9 @@ void __cpuinit r4k_cache_init(void)
 	struct cpuinfo_mips *c = &current_cpu_data;
 
 	probe_pcache();
+#ifdef CONFIG_CPU_LOONGSON3
 	probe_vcache();
+#endif
 	setup_scache();
 
 	r4k_blast_dcache_page_setup();

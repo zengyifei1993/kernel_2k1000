@@ -39,33 +39,46 @@ struct cache_desc {
 #define MIPS_CACHE_PINDEX	0x00000020	/* Physically indexed cache */
 
 struct cpuinfo_mips {
+	unsigned long		asid_cache;
 	unsigned int		udelay_val;
-	unsigned int		asid_cache;
-
 	/*
 	 * Capability and feature descriptor structure for MIPS CPU
 	 */
-	unsigned long		ases;
+	unsigned int		cputype;
 	unsigned long long	options;
+	unsigned short		tlbsize;
+	unsigned short		tlbsizevtlb;
+	unsigned short		tlbsizeftlbsets;
+	unsigned char		tlbsizeftlbways;
+	unsigned char		srsets; /* Shadow register sets */
+
+	unsigned long		ases;
 	unsigned int		processor_id;
 	unsigned int		fpu_id;
 	unsigned int		msa_id;
-	unsigned int		cputype;
 	int			isa_level;
-	int			tlbsize;
-	int			tlbsizevtlb;
-	int			tlbsizeftlbsets;
-	int			tlbsizeftlbways;
+
 	struct cache_desc	icache; /* Primary I-cache */
+	unsigned short		watch_reg_count;   /* Number that exist */
 	struct cache_desc	dcache; /* Primary D or combined I/D cache */
-	struct cache_desc	vcache; /* Victim cache, between pcache and scache */
-	struct cache_desc	scache; /* Secondary cache */
+	unsigned short		watch_reg_use_cnt; /* Usable by ptrace */
+
 	struct cache_desc	tcache; /* Tertiary/split secondary cache */
-	int			srsets; /* Shadow register sets */
+	short			dummy1;
+	struct cache_desc	scache; /* Secondary cache */
+	short			dummy2;
+
+#define NUM_WATCH_REGS 4
+	void			*data;	/* Additional data */
+	u16			watch_reg_masks[NUM_WATCH_REGS];
+	unsigned int		kscratch_mask; /* Usable KScratch mask. */
 	int			package;/* physical package number */
 	int			core;	/* physical core number */
+#ifdef CONFIG_CPU_LOONGSON3
+	struct cache_desc	vcache; /* Victim cache, between pcache and scache */
+#endif
 #ifdef CONFIG_64BIT
-	int			vmbits; /* Virtual memory size in bits */
+	short			vmbits; /* Virtual memory size in bits */
 #endif
 #if defined(CONFIG_MIPS_MT_SMP) || defined(CONFIG_MIPS_MT_SMTC)
 	/*
@@ -79,12 +92,6 @@ struct cpuinfo_mips {
 #ifdef CONFIG_MIPS_MT_SMTC
 	int			tc_id;	 /* Thread Context number */
 #endif
-	void			*data;	/* Additional data */
-	unsigned int		watch_reg_count;   /* Number that exist */
-	unsigned int		watch_reg_use_cnt; /* Usable by ptrace */
-#define NUM_WATCH_REGS 4
-	u16			watch_reg_masks[NUM_WATCH_REGS];
-	unsigned int		kscratch_mask; /* Usable KScratch mask. */
 } __attribute__((aligned(SMP_CACHE_BYTES)));
 
 extern struct cpuinfo_mips cpu_data[];
