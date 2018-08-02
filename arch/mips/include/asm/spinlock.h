@@ -192,7 +192,7 @@ static inline void arch_spin_unlock(arch_spinlock_t *lock)
 
 static inline unsigned int arch_spin_trylock(arch_spinlock_t *lock)
 {
-	int tmp, tmp2, tmp3;
+	int tmp, tmp1, tmp2, tmp3;
 	int inc = 0x10000;
 
 	if (R10000_LLSC_WAR) {
@@ -200,22 +200,20 @@ static inline unsigned int arch_spin_trylock(arch_spinlock_t *lock)
 		"	.set push		# arch_spin_trylock	\n"
 		"	.set noreorder					\n"
 		"							\n"
-		"1:	ll	%[ticket], %[ticket_ptr]		\n"
-		"	srl	%[my_ticket], %[ticket], 16		\n"
-		"	andi	%[now_serving], %[ticket], 0xffff	\n"
-		"	bne	%[my_ticket], %[now_serving], 3f	\n"
-		"	 addu	%[ticket], %[ticket], %[inc]		\n"
+		"1:	ll	%[ticket1], %[ticket_ptr]		\n"
+		"	srl	%[my_ticket], %[ticket1], 16		\n"
+		"	andi	%[now_serving], %[ticket1], 0xffff	\n"
+		"	bne	%[my_ticket], %[now_serving], 2f	\n"
+		"	 li	%[ticket], 0				\n"
+		"	addu	%[ticket], %[ticket1], %[inc]		\n"
 		"	sc	%[ticket], %[ticket_ptr]		\n"
 		"	beqzl	%[ticket], 1b				\n"
-		"	 li	%[ticket], 1				\n"
+		"	 nop						\n"
 		"2:							\n"
-		"	.subsection 2					\n"
-		"3:	b	2b					\n"
-		"	 li	%[ticket], 0				\n"
-		"	.previous					\n"
 		"	.set pop					\n"
 		: [ticket_ptr] "+m" (lock->lock),
 		  [ticket] "=&r" (tmp),
+		  [ticket1] "=&r" (tmp1),
 		  [my_ticket] "=&r" (tmp2),
 		  [now_serving] "=&r" (tmp3)
 		: [inc] "r" (inc));
@@ -226,24 +224,21 @@ static inline unsigned int arch_spin_trylock(arch_spinlock_t *lock)
 		"							\n"
 		__LS3A_WAR_LLSC
 		"1:							\n"
-		"	ll	%[ticket], %[ticket_ptr]		\n"
-		"	srl	%[my_ticket], %[ticket], 16		\n"
-		"	andi	%[now_serving], %[ticket], 0xffff	\n"
-		"	bne	%[my_ticket], %[now_serving], 3f	\n"
-		"	 addu	%[ticket], %[ticket], %[inc]		\n"
+		"	ll	%[ticket1], %[ticket_ptr]		\n"
+		"	srl	%[my_ticket], %[ticket1], 16		\n"
+		"	andi	%[now_serving], %[ticket1], 0xffff	\n"
+		"	bne	%[my_ticket], %[now_serving], 2f	\n"
+		"	 li	%[ticket], 0				\n"
+		"	addu	%[ticket], %[ticket1], %[inc]		\n"
 		"	sc	%[ticket], %[ticket_ptr]		\n"
 		"	beqz	%[ticket], 1b				\n"
-		"	 li	%[ticket], 1				\n"
+		"	 nop						\n"
 		"2:							\n"
-		"	.subsection 2					\n"
-		"3:							\n"
 		__LS_WAR_LLSC
-		"	b	2b					\n"
-		"	 li	%[ticket], 0				\n"
-		"	.previous					\n"
 		"	.set pop					\n"
 		: [ticket_ptr] "+m" (lock->lock),
 		  [ticket] "=&r" (tmp),
+		  [ticket1] "=&r" (tmp1),
 		  [my_ticket] "=&r" (tmp2),
 		  [now_serving] "=&r" (tmp3)
 		: [inc] "r" (inc));
@@ -252,24 +247,21 @@ static inline unsigned int arch_spin_trylock(arch_spinlock_t *lock)
 		"	.set push		# arch_spin_trylock	\n"
 		"	.set noreorder					\n"
 		"							\n"
-		"1:	ll	%[ticket], %[ticket_ptr]		\n"
-		"	srl	%[my_ticket], %[ticket], 16		\n"
-		"	andi	%[now_serving], %[ticket], 0xffff	\n"
-		"	bne	%[my_ticket], %[now_serving], 3f	\n"
-		"	 addu	%[ticket], %[ticket], %[inc]		\n"
+		"1:	ll	%[ticket1], %[ticket_ptr]		\n"
+		"	srl	%[my_ticket], %[ticket1], 16		\n"
+		"	andi	%[now_serving], %[ticket1], 0xffff	\n"
+		"	bne	%[my_ticket], %[now_serving], 2f	\n"
+		"	 li	%[ticket], 0				\n"
+		"	addu	%[ticket], %[ticket1], %[inc]		\n"
 		"	sc	%[ticket], %[ticket_ptr]		\n"
 		"	beqz	%[ticket], 1b				\n"
-		"	 li	%[ticket], 1				\n"
-		"2:							\n"	// this does not need a sync, smp_llsc_mb follows
-		"	.subsection 2					\n"
-		"3:							\n"
+		"	 nop						\n"
+		"2:							\n"
 		"	sync						\n"	// ls2k need this
-		"	b	2b					\n"
-		"	 li	%[ticket], 0				\n"
-		"	.previous					\n"
 		"	.set pop					\n"
 		: [ticket_ptr] "+m" (lock->lock),
 		  [ticket] "=&r" (tmp),
+		  [ticket1] "=&r" (tmp1),
 		  [my_ticket] "=&r" (tmp2),
 		  [now_serving] "=&r" (tmp3)
 		: [inc] "r" (inc));
