@@ -2459,7 +2459,6 @@ static int azx_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		ls_hda_resources[1].end = v8;
 
 		platform_device_register(&ls_hda_device);
-		platform_driver_register(&driver);
 
 	}
 
