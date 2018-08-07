@@ -312,11 +312,13 @@ static inline void arch_read_lock(arch_rwlock_t *rw)
 		__ls3a_war_llsc();
 		do {
 			__asm__ __volatile__(
+			"	.set	noreorder			\n"
 			"1:			# arch_read_lock	\n"
 			"	ll	%1, %2				\n"
 			"	bltz	%1, 1b				\n"
 			"	 addu	%1, 1				\n"
 			"2:	sc	%1, %0				\n"
+			"	.set	reorder				\n"
 			: "=m" (rw->lock), "=&r" (tmp)
 			: "m" (rw->lock)
 			: "memory");
@@ -324,10 +326,12 @@ static inline void arch_read_lock(arch_rwlock_t *rw)
 	} else {
 		do {
 			__asm__ __volatile__(
+			"	.set	noreorder			\n"
 			"1:	ll	%1, %2	# arch_read_lock	\n"
 			"	bltz	%1, 1b				\n"
 			"	 addu	%1, 1				\n"
 			"2:	sc	%1, %0				\n"
+			"	.set	reorder				\n"
 			: "=m" (rw->lock), "=&r" (tmp)
 			: "m" (rw->lock)
 			: "memory");
@@ -402,11 +406,13 @@ static inline void arch_write_lock(arch_rwlock_t *rw)
 		__ls3a_war_llsc();
 		do {
 			__asm__ __volatile__(
+			"	.set	noreorder			\n"
 			"1:			# arch_write_lock	\n"
 			"	ll	%1, %2				\n"
 			"	bnez	%1, 1b				\n"
 			"	 lui	%1, 0x8000			\n"
 			"2:	sc	%1, %0				\n"
+			"	.set	reorder				\n"
 			: "=m" (rw->lock), "=&r" (tmp)
 			: "m" (rw->lock)
 			: "memory");
@@ -414,10 +420,13 @@ static inline void arch_write_lock(arch_rwlock_t *rw)
 	} else {
 		do {
 			__asm__ __volatile__(
-			"1:	ll	%1, %2	# arch_write_lock	\n"
+			"	.set	noreorder			\n"
+			"1:						\n"
+			"	ll	%1, %2	# arch_write_lock	\n"
 			"	bnez	%1, 1b				\n"
 			"	 lui	%1, 0x8000			\n"
 			"2:	sc	%1, %0				\n"
+			"	.set	reorder				\n"
 			: "=m" (rw->lock), "=&r" (tmp)
 			: "m" (rw->lock)
 			: "memory");
