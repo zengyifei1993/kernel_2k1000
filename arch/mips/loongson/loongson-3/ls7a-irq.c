@@ -229,7 +229,7 @@ void ls7a_msi_irq_dispatch(void)
 	unsigned long long  irqs;
 	int cpu = smp_processor_id();
 
-	unsigned int ls3a_irq_cpu = LOONGSON_INT_ROUTER_ISR(cpu);
+	unsigned int ls3a_irq_cpu = LOONGSON_INT_ROUTER_ISR(cpu_logical_map(cpu));
 
 	for(i=0; i<2;i++) {
 		if(ls3a_irq_cpu & 0x3<<(24+i*2)) {
