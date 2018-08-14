@@ -60,7 +60,6 @@ static __inline__ long local_add_return(long i, local_t * l)
 		: "Ir" (i), "m" (l->a.counter)
 		: "memory");
 
-		smp_llsc_mb();
 	} else if (kernel_uses_llsc) {
 		unsigned long temp;
 

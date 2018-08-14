@@ -311,6 +311,12 @@ void uasm_i_sync(u32 **buf)
 	(*buf)++;
 }
 
+void uasm_i_synci(u32 **buf)
+{
+	**buf = 0x043f0000; // synci  0(zero)
+	(*buf)++;
+}
+
 /* The worst case length of the handler is around 18 instructions for
  * R3000-style TLBs and up to 63 instructions for R4000-style TLBs.
  * Maximum space available is 32 instructions for R3000 and 64
@@ -1672,8 +1678,11 @@ iPTE_LW(u32 **p, unsigned int pte, unsigned int ptr)
 #ifdef CONFIG_SMP
 	// here just for test, ls2k does not need this
 #if 	!defined(CONFIG_CPU_LOONGSON2K)
-	if (loongson_llsc_war())
+	if (read_c0_prid() == 0x146305) //for 3A1000/2H/2j3
 		uasm_i_sync(p);
+	else if (read_c0_prid() == 0x146308 || read_c0_prid() == 0x146309)  //for 3A2000ABC/3A3000CD
+		uasm_i_synci(p);
+
 #endif
 # ifdef CONFIG_64BIT_PHYS_ADDR
 	if (cpu_has_64bits)

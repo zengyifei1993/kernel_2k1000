@@ -221,6 +221,7 @@ static inline void set_pte(pte_t *ptep, pte_t pteval)
 			"	beqz	%[tmp], 1b			\n"
 			"	nop					\n"
 			"2:						\n"
+			"	sync					\n"
 			"	.set	pop				\n"
 			"	.set	mips0				\n"
 			: [buddy] "+m" (buddy->pte), [tmp] "=&r" (tmp)

@@ -84,7 +84,6 @@ static inline void set_bit(unsigned long nr, volatile unsigned long *addr)
 				: "=&r" (temp), "+m" (*m)
 				: "ir" (bit), "r" (~0));
 			} while (unlikely(!temp));
-			smp_llsc_mb();
 		} else {
 			do {
 				__asm__ __volatile__(
@@ -109,7 +108,6 @@ static inline void set_bit(unsigned long nr, volatile unsigned long *addr)
 				: "=&r" (temp), "+m" (*m)
 				: "ir" (1UL << bit));
 			} while (unlikely(!temp));
-			smp_llsc_mb();
 		} else {
 			do {
 				__asm__ __volatile__(
@@ -164,7 +162,6 @@ static inline void clear_bit(unsigned long nr, volatile unsigned long *addr)
 				: "=&r" (temp), "+m" (*m)
 				: "ir" (bit));
 			} while (unlikely(!temp));
-			smp_llsc_mb();
 		} else {
 			do {
 				__asm__ __volatile__(
@@ -189,7 +186,6 @@ static inline void clear_bit(unsigned long nr, volatile unsigned long *addr)
 				: "=&r" (temp), "+m" (*m)
 				: "ir" (~(1UL << bit)));
 			} while (unlikely(!temp));
-			smp_llsc_mb();
 		} else {
 			do {
 				__asm__ __volatile__(
@@ -262,7 +258,6 @@ static inline void change_bit(unsigned long nr, volatile unsigned long *addr)
 			: "ir" (1UL << bit));
 		} while (unlikely(!temp));
 
-		smp_llsc_mb();
 	} else if (kernel_uses_llsc) {
 		unsigned long *m = ((unsigned long *) addr) + (nr >> SZLONG_LOG);
 		unsigned long temp;

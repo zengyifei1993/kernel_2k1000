@@ -91,7 +91,6 @@ static __inline__ void atomic_add(int i, atomic_t * v)
 			: "Ir" (i));
 		} while (unlikely(!temp));
 
-		smp_llsc_mb();
 	} else if (kernel_uses_llsc) {
 		int temp;
 
@@ -150,7 +149,6 @@ static __inline__ void atomic_sub(int i, atomic_t * v)
 			: "Ir" (i));
 		} while (unlikely(!temp));
 
-		smp_llsc_mb();
 	} else if (kernel_uses_llsc) {
 		int temp;
 
@@ -355,7 +353,7 @@ static __inline__ int atomic_sub_if_positive(int i, atomic_t * v)
 		"	beqz	%0, 1b					\n"
 		"	 subu	%0, %1, %3				\n"
 		"	.set	reorder					\n"
-		"1:							\n"
+		"1:							\n" /* we have smp_llsc_mb at the end */
 		"	.set	mips0					\n"
 		: "=&r" (result), "=&r" (temp), "+m" (v->counter)
 		: "Ir" (i));
@@ -372,7 +370,7 @@ static __inline__ int atomic_sub_if_positive(int i, atomic_t * v)
 		"	beqz	%0, 1b					\n"
 		"	 subu	%0, %1, %3				\n"
 		"	.set	reorder					\n"
-		"1:							\n" /* we hand smp_llsc_mb at the end */
+		"1:							\n" /* we have smp_llsc_mb at the end */
 		"	.set	mips0					\n"
 		: "=&r" (result), "=&r" (temp), "+m" (v->counter)
 		: "Ir" (i));
@@ -556,7 +554,6 @@ static __inline__ void atomic64_add(long i, atomic64_t * v)
 			: "Ir" (i));
 		} while (unlikely(!temp));
 
-		smp_llsc_mb();
 	} else if (kernel_uses_llsc) {
 		long temp;
 
@@ -615,7 +612,6 @@ static __inline__ void atomic64_sub(long i, atomic64_t * v)
 			: "Ir" (i));
 		} while (unlikely(!temp));
 
-		smp_llsc_mb();
 	} else if (kernel_uses_llsc) {
 		long temp;
 
@@ -831,7 +827,7 @@ static __inline__ long atomic64_sub_if_positive(long i, atomic64_t * v)
 		"	beqz	%0, 1b					\n"
 		"	 dsubu	%0, %1, %3				\n"
 		"	.set	reorder					\n"
-		"1:							\n"
+		"1:							\n" /* we have smp_llsc_mb at the end */
 		"	.set	mips0					\n"
 		: "=&r" (result), "=&r" (temp), "+m" (v->counter)
 		: "Ir" (i));
@@ -848,7 +844,7 @@ static __inline__ long atomic64_sub_if_positive(long i, atomic64_t * v)
 		"	beqz	%0, 1b					\n"
 		"	 dsubu	%0, %1, %3				\n"
 		"	.set	reorder					\n"
-		"1:							\n"	 /* see smp_llsc_mb */
+		"1:							\n" /* we have smp_llsc_mb at the end */
 		"	.set	mips0					\n"
 		: "=&r" (result), "=&r" (temp), "+m" (v->counter)
 		: "Ir" (i));
