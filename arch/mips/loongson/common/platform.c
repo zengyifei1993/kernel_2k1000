@@ -11,6 +11,8 @@
 #include <linux/err.h>
 #include <linux/smp.h>
 #include <linux/platform_device.h>
+#include <loongson.h>
+#include <loongson-pch.h>
 
 static struct platform_device loongson2_cpufreq_device = {
 	.name = "loongson2_cpufreq",
@@ -34,6 +36,35 @@ static struct platform_device loongson3_cpufreq_device = {
 	.id = -1,
 };
 
+/*
+ * GPIO
+ */
+
+static struct resource loongson_gpio_resources[] = {
+	[0] = {
+		.start  = LOONGSON_REG_GPIO_BASE,
+		.end    = LOONGSON_REG_GPIO_BASE + 0xff,
+		.flags  = IORESOURCE_MEM,
+	},
+};
+
+static struct platform_gpio_data loongson3_gpio_data = {
+	.gpio_conf = 0x20,
+	.gpio_out  = 0x1c,
+	.gpio_in   = 0x1c,
+	.gpio_base = 0,
+	.ngpio     = 16,
+};
+static struct platform_device loongson_gpio_device = {
+	.name   = "loongson-gpio",
+	.id     = 0,
+	.num_resources  = ARRAY_SIZE(loongson_gpio_resources),
+	.resource       = loongson_gpio_resources,
+	.dev	= {
+			.platform_data = &loongson3_gpio_data,
+	},
+};
+
 static int __init loongson_cpufreq_init(void)
 {
 	struct cpuinfo_mips *c = &current_cpu_data;
@@ -55,6 +86,7 @@ static int __init loongson3_platform_init(void)
 #if defined(CONFIG_LOONGSON_EA_PM_HOTKEY)
 	platform_device_register(&loongson_ea_sci_event_device);
 #endif
+	platform_device_register(&loongson_gpio_device);
 	return 0;
 }
 arch_initcall(loongson3_platform_init);

@@ -5,7 +5,6 @@
 obj-y += setup.o init.o cmdline.o env.o time.o reset.o irq.o \
     pci.o bonito-irq.o mem.o machtype.o platform.o efi.o \
     boardinfo.o
-obj-$(CONFIG_GPIOLIB) += gpio.o
 
 #
 # Serial port support
