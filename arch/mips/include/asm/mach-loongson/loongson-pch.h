@@ -310,32 +310,34 @@ enum {
 /* LS7A PCH Registers (Misc, Confreg) */
 
 #define LS7A_HT1_BASE 0x90000e0000000000
+#define LS7A_PCH_REG_BASE			0x10000000
+/* CHIPCFG regs */
+#define LS7A_CHIPCFG_REG_BASE 	(LS7A_PCH_REG_BASE + 0x0a000000)
 /* MISC reg base */
-//#define LS7A_PCH_REG_BASE		ls7a_misc_addr
-#define LS7A_PCH_REG_BASE		0x10080000
+#define LS7A_MISC_REG_BASE		(LS7A_PCH_REG_BASE + 0x00080000)
 
 /* UART regs */
-#define LS7A_UART0_REG_BASE		(LS7A_PCH_REG_BASE + 0x00000000)
-#define LS7A_UART1_REG_BASE		(LS7A_PCH_REG_BASE + 0x00000100)
-#define LS7A_UART2_REG_BASE		(LS7A_PCH_REG_BASE + 0x00000200)
-#define LS7A_UART3_REG_BASE		(LS7A_PCH_REG_BASE + 0x00000300)
+#define LS7A_UART0_REG_BASE		(LS7A_MISC_REG_BASE + 0x00000000)
+#define LS7A_UART1_REG_BASE		(LS7A_MISC_REG_BASE + 0x00000100)
+#define LS7A_UART2_REG_BASE		(LS7A_MISC_REG_BASE + 0x00000200)
+#define LS7A_UART3_REG_BASE		(LS7A_MISC_REG_BASE + 0x00000300)
 
 /* I2C regs */
-#define LS7A_I2C0_REG_BASE		(LS7A_PCH_REG_BASE + 0x00010000)
-#define LS7A_I2C1_REG_BASE		(LS7A_PCH_REG_BASE + 0x00010100)
-#define LS7A_I2C2_REG_BASE		(LS7A_PCH_REG_BASE + 0x00010200)
-#define LS7A_I2C3_REG_BASE		(LS7A_PCH_REG_BASE + 0x00010300)
-#define LS7A_I2C4_REG_BASE		(LS7A_PCH_REG_BASE + 0x00010400)
-#define LS7A_I2C5_REG_BASE		(LS7A_PCH_REG_BASE + 0x00010500)
+#define LS7A_I2C0_REG_BASE		(LS7A_MISC_REG_BASE + 0x00010000)
+#define LS7A_I2C1_REG_BASE		(LS7A_MISC_REG_BASE + 0x00010100)
+#define LS7A_I2C2_REG_BASE		(LS7A_MISC_REG_BASE + 0x00010200)
+#define LS7A_I2C3_REG_BASE		(LS7A_MISC_REG_BASE + 0x00010300)
+#define LS7A_I2C4_REG_BASE		(LS7A_MISC_REG_BASE + 0x00010400)
+#define LS7A_I2C5_REG_BASE		(LS7A_MISC_REG_BASE + 0x00010500)
 
 /* HPET */
-#define LS7A_HPET_REG_BASE    (LS7A_PCH_REG_BASE + 0x00040000)
+#define LS7A_HPET_REG_BASE    (LS7A_MISC_REG_BASE + 0x00040000)
 
 /* RTC regs */
-#define LS7A_RTC_REG_BASE		(LS7A_PCH_REG_BASE + 0x00050100)
+#define LS7A_RTC_REG_BASE		(LS7A_MISC_REG_BASE + 0x00050100)
 
 /* DC regs */
-#define LS7A_DC_REG_BASE		(LS7A_PCH_REG_BASE + 0x00050000)
+#define LS7A_DC_REG_BASE		(LS7A_MISC_REG_BASE + 0x00050000)
 
 #define LS7A_FB_CFG_DVO0_REG		(0x1240)
 #define LS7A_FB_CFG_DVO1_REG		(0x1250)
@@ -384,6 +386,12 @@ enum {
 #define LS7A_FB_DAC_CTRL_REG		(0x1600)
 #define LS7A_FB_DVO_OUTPUT_REG		(0x1630)
 
+#define LS7A_PCIE_BAR_BASE(bus, dev, func) \
+	readl((void *)TO_UNCAC(LS7A_CHIPCFG_REG_BASE | (bus << 16) | (dev << 11) | (func << 8) | 0x10))
+
+/* 7A bridge has a gpio controller in DC space */
+#define LS7A_DC_CNT_REG_BASE	(LS7A_PCIE_BAR_BASE(0x0, 0x6, 0x1) & 0xfffffff0)
+
 /* REG ACCESS*/
 #define ls7a_readb(addr)			  (*(volatile unsigned char  *)TO_UNCAC(addr))
 #define ls7a_readw(addr)			  (*(volatile unsigned short *)TO_UNCAC(addr))
@@ -425,4 +433,12 @@ struct platform_controller_hub {
 
 extern struct platform_controller_hub *loongson_pch;
 
+/* gpio data */
+struct platform_gpio_data {
+	u32 gpio_conf;
+	u32 gpio_out;
+	u32 gpio_in;
+	int gpio_base;
+	int ngpio;
+};
 #endif

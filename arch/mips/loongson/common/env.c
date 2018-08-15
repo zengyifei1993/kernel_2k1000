@@ -52,6 +52,7 @@ u64 loongson_chiptemp[MAX_PACKAGES];
 u64 loongson_freqctrl[MAX_PACKAGES];
 
 unsigned long long smp_group[4];
+void *loongson_fdt_blob;
 
 enum loongson_cpu_type cputype;
 u16 loongson_boot_cpu_id;
@@ -253,11 +254,14 @@ void __init prom_init_env(void)
 	else if (strstr(eboard->name,"7A")) {
 		loongson_pch = &ls7a_pch;
 		loongson_ec_sci_irq = 0x07;
+		loongson_fdt_blob = __dtb_loongson3_ls7a_begin;
 		if (strstr(eboard->name,"2way")) {
 			eirq_source->dma_noncoherent = 0;
 			hw_coherentio = 1;
 			pr_info("Board [%s] detected, **coherent dma** is unconditionally used!\n", eboard->name);
 		}
+		if (esys->vers >= 2 && esys->of_dtb_addr)
+			loongson_fdt_blob = (void *)(esys->of_dtb_addr);
 		loongson_max_dma32_pfn = 0x100000000ULL>> PAGE_SHIFT;
 	}
 	else {
