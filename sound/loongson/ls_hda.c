@@ -73,7 +73,7 @@
 static int index[SNDRV_CARDS] = SNDRV_DEFAULT_IDX;
 static char *id[SNDRV_CARDS] = SNDRV_DEFAULT_STR;
 static int enable[SNDRV_CARDS] = SNDRV_DEFAULT_ENABLE_PNP;
-static char *model[SNDRV_CARDS];
+static char *model[SNDRV_CARDS] = {"loongson-3a7a"};
 static int position_fix[SNDRV_CARDS];
 static int bdl_pos_adj[SNDRV_CARDS] = {[0 ... (SNDRV_CARDS - 1)] = -1 };
 static int probe_mask[SNDRV_CARDS] = {[0 ... (SNDRV_CARDS - 1)] = -1 };
@@ -1373,9 +1373,16 @@ static int azx_codec_create(struct azx *chip, const char *model)
 	for (c = 0; c < max_slots; c++) {
 		if ((chip->codec_mask & (1 << c)) & chip->codec_probe_mask) {
 			struct hda_codec *codec;
+#ifdef MODULE
+			char modalias[32];
+#endif
 			err = ls_hda_codec_new(chip->bus, c, &codec);
 			if (err < 0)
 				continue;
+#ifdef MODULE
+			snprintf(modalias, sizeof(modalias), "hdaudio:v%08Xr%08Xa%02X\n",codec->vendor_id, codec->revision_id, 1);
+			request_module(modalias);
+#endif
 			codec->beep_mode = chip->beep_mode;
 			codecs++;
 		}

@@ -26,6 +26,7 @@
 #include <linux/init.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
+#include <linux/module.h>
 #include <linux/pci.h>
 #include <sound/core.h>
 #include <sound/jack.h>
@@ -197,6 +198,7 @@ enum {
 	ALC272_DELL,
 	ALC272_DELL_ZM1,
 	ALC272_SAMSUNG_NC10,
+	ALC662_LS_3A7A,
 	ALC662_AUTO,
 	ALC662_MODEL_LAST,
 };
@@ -17255,6 +17257,16 @@ static struct hda_input_mux alc662_capture_source = {
 	},
 };
 
+static struct hda_input_mux alc662_ls_3a7a_capture_source = {
+	.num_items = 3,
+	.items = {
+		{ "Mic", 0x0 },
+		{ "Front Mic", 0x1 },
+		{ "Line", 0x2 },
+	},
+};
+
+
 static struct hda_input_mux alc662_lenovo_101e_capture_source = {
 	.num_items = 2,
 	.items = {
@@ -17396,6 +17408,22 @@ static struct snd_kcontrol_new alc662_3ST_6ch_mixer[] = {
 	HDA_CODEC_MUTE("Front Mic Playback Switch", 0x0b, 0x1, HDA_INPUT),
 	{ } /* end */
 };
+static struct snd_kcontrol_new alc662_ls_3a7a_mixer[] = {
+	HDA_CODEC_VOLUME("Front Playback Volume", 0x02, 0x0, HDA_OUTPUT),
+	HDA_CODEC_MUTE("Front Playback Switch", 0x0c, 0x0, HDA_INPUT),
+	HDA_CODEC_VOLUME("Speaker Playback Volume", 0x03, 0x0, HDA_OUTPUT),
+	HDA_CODEC_MUTE("Speaker Playback Switch", 0x0d, 0x0, HDA_INPUT),
+	HDA_CODEC_VOLUME("Line Playback Volume", 0x0b, 0x02, HDA_INPUT),
+	HDA_CODEC_MUTE("Line Playback Switch", 0x0b, 0x02, HDA_INPUT),
+	HDA_CODEC_VOLUME("Mic Playback Volume", 0x0b, 0x1, HDA_INPUT),
+	HDA_CODEC_MUTE("Mic Playback Switch", 0x0b, 0x1, HDA_INPUT),
+	HDA_CODEC_VOLUME("F-Mic Playback Volume", 0x0b, 0x0, HDA_INPUT),
+	HDA_CODEC_MUTE("F-Mic Playback Switch", 0x0b, 0x0, HDA_INPUT),
+	HDA_CODEC_VOLUME("R-Mic Boost", 0x18, 0x0, HDA_INPUT),
+	HDA_CODEC_VOLUME("F-Mic Boost", 0x19, 0x0, HDA_INPUT),
+	{ } /* end */
+};
+
 
 static struct snd_kcontrol_new alc662_lenovo_101e_mixer[] = {
 	HDA_CODEC_VOLUME("Front Playback Volume", 0x02, 0x0, HDA_OUTPUT),
@@ -17713,6 +17741,12 @@ static struct hda_verb alc272_init_verbs[] = {
 	{0x0f, AC_VERB_SET_AMP_GAIN_MUTE, AMP_IN_UNMUTE(1)},
 	{ }
 };
+static struct hda_verb alc662_ls_3a7a_init_verbs[] = {
+	{0x18, AC_VERB_SET_UNSOLICITED_ENABLE, AC_USRSP_EN|ALC880_MIC_EVENT},
+	{0x1b, AC_VERB_SET_UNSOLICITED_ENABLE, AC_USRSP_EN|ALC880_HP_EVENT},
+	{}
+};
+
 
 static struct hda_verb alc662_sue_init_verbs[] = {
 	{0x14, AC_VERB_SET_UNSOLICITED_ENABLE, AC_USRSP_EN|ALC880_FRONT_EVENT},
@@ -17961,6 +17995,28 @@ static void alc662_lenovo_101e_unsol_event(struct hda_codec *codec,
 		alc662_lenovo_101e_ispeaker_automute(codec);
 }
 
+static void alc662_ls_3a7a_automute(struct hda_codec *codec)
+{
+	unsigned int present;
+	unsigned char bits;
+
+	present = ls_hda_jack_detect(codec, 0x1b);
+	bits = present ? HDA_AMP_MUTE : 0;
+
+	ls_hda_codec_amp_stereo(codec, 0x14, HDA_OUTPUT, 0,
+				 HDA_AMP_MUTE, bits);
+}
+
+static void alc662_ls_3a7a_unsol_event(struct hda_codec *codec,
+					   unsigned int res)
+{
+	if ((res >> 26) == ALC880_HP_EVENT)
+		alc662_ls_3a7a_automute(codec);
+	if ((res >> 26) == ALC880_MIC_EVENT)
+		alc_mic_automute(codec);
+}
+
+
 /* unsolicited event for HP jack sensing */
 static void alc662_eeepc_unsol_event(struct hda_codec *codec,
 				     unsigned int res)
@@ -18172,6 +18228,17 @@ static void alc663_m51va_inithook(struct hda_codec *codec)
 
 /* ***************** Mode1 ******************************/
 #define alc663_mode1_unsol_event	alc663_m51va_unsol_event
+
+static void alc662_ls_3a7a_setup(struct hda_codec *codec)
+{
+	struct alc_spec *spec = codec->spec;
+	spec->ext_mic.pin = 0x18;
+	spec->ext_mic.mux_idx = 0;
+	spec->int_mic.pin = 0x19;
+	spec->int_mic.mux_idx = 1;
+	spec->auto_mic = 1;
+}
+
 
 static void alc663_mode1_setup(struct hda_codec *codec)
 {
@@ -18473,6 +18540,7 @@ static const char *alc662_models[ALC662_MODEL_LAST] = {
 	[ALC272_DELL]		= "dell",
 	[ALC272_DELL_ZM1]	= "dell-zm1",
 	[ALC272_SAMSUNG_NC10]	= "samsung-nc10",
+	[ALC662_LS_3A7A]	= "loongson-3a7a",
 	[ALC662_AUTO]		= "auto",
 };
 
@@ -18556,6 +18624,12 @@ static struct snd_pci_quirk alc662_cfg_tbl[] = {
 			   ALC663_ASUS_H13),
 	{}
 };
+
+static void alc662_ls_3a7a_inithook(struct hda_codec *codec)
+{
+	alc662_ls_3a7a_automute(codec);
+	alc_mic_automute(codec);
+}
 
 static struct alc_config_preset alc662_presets[] = {
 	[ALC662_3ST_2ch_DIG] = {
@@ -18859,6 +18933,20 @@ static struct alc_config_preset alc662_presets[] = {
 		.unsol_event = alc663_mode4_unsol_event,
 		.setup = alc663_mode4_setup,
 		.init_hook = alc663_mode4_inithook,
+	},
+	[ALC662_LS_3A7A] = {
+		.mixers = { alc662_ls_3a7a_mixer },
+		.init_verbs = { alc662_init_verbs, alc662_ls_3a7a_init_verbs },
+		.num_dacs = ARRAY_SIZE(alc662_dac_nids),
+		.dac_nids = alc662_dac_nids,
+		.cap_mixer = alc662_auto_capture_mixer,
+		.capsrc_nids = alc662_capsrc_nids,
+		.num_channel_mode = ARRAY_SIZE(alc662_3ST_2ch_modes),
+		.channel_mode = alc662_3ST_2ch_modes,
+		.input_mux = &alc662_ls_3a7a_capture_source,
+		.unsol_event = alc662_ls_3a7a_unsol_event,
+		.setup = alc662_ls_3a7a_setup,
+		.init_hook = alc662_ls_3a7a_inithook,
 	},
 };
 
@@ -19849,6 +19937,52 @@ static struct hda_codec_preset_list realtek_list = {
 	.owner = THIS_MODULE,
 };
 
+#define HDA_CODEC_REV_ENTRY(_vid, _rev, _name, _patch) \
+	{ .vendor_id = (_vid), .rev_id = (_rev), .name = (_name), \
+	  .api_version = 1, \
+	  .driver_data = (unsigned long)(_patch) }
+#define HDA_CODEC_ENTRY(_vid, _name, _patch) \
+	HDA_CODEC_REV_ENTRY(_vid, 0, _name, _patch)
+
+/*
+ * patch entries
+ */
+static const struct hda_device_id snd_hda_id_realtek[] = {
+	HDA_CODEC_ENTRY(0x10ec0260, "ALC260", patch_alc260),
+	HDA_CODEC_ENTRY(0x10ec0262, "ALC262", patch_alc262),
+	HDA_CODEC_ENTRY(0x10ec0267, "ALC267", patch_alc268),
+	HDA_CODEC_ENTRY(0x10ec0268, "ALC268", patch_alc268),
+	HDA_CODEC_ENTRY(0x10ec0269, "ALC269", patch_alc269),
+	HDA_CODEC_ENTRY(0x10ec0270, "ALC270", patch_alc269),
+	HDA_CODEC_ENTRY(0x10ec0272, "ALC272", patch_alc662),
+	HDA_CODEC_ENTRY(0x10ec0275, "ALC275", patch_alc269),
+	HDA_CODEC_REV_ENTRY(0x10ec0861, 0x100340, "ALC660", patch_alc861),
+	HDA_CODEC_ENTRY(0x10ec0660, "ALC660-VD", patch_alc861vd),
+	HDA_CODEC_ENTRY(0x10ec0861, "ALC861", patch_alc861),
+	HDA_CODEC_ENTRY(0x10ec0862, "ALC861-VD", patch_alc861vd),
+	HDA_CODEC_REV_ENTRY(0x10ec0662, 0x100002, "ALC662 rev2", patch_alc882),
+	HDA_CODEC_REV_ENTRY(0x10ec0662, 0x100101, "ALC662 rev1", patch_alc662),
+	HDA_CODEC_REV_ENTRY(0x10ec0662, 0x100300, "ALC662 rev3", patch_alc662),
+	HDA_CODEC_ENTRY(0x10ec0663, "ALC663", patch_alc662),
+	HDA_CODEC_ENTRY(0x10ec0665, "ALC665", patch_alc662),
+	HDA_CODEC_ENTRY(0x10ec0670, "ALC670", patch_alc662),
+	HDA_CODEC_ENTRY(0x10ec0680, "ALC680", patch_alc680),
+	HDA_CODEC_ENTRY(0x10ec0880, "ALC880", patch_alc880),
+	HDA_CODEC_ENTRY(0x10ec0882, "ALC882", patch_alc882),
+	HDA_CODEC_ENTRY(0x10ec0883, "ALC883", patch_alc882),
+	HDA_CODEC_REV_ENTRY(0x10ec0885, 0x100101, "ALC889A", patch_alc882),
+	HDA_CODEC_REV_ENTRY(0x10ec0885, 0x100103, "ALC889A", patch_alc882),
+	HDA_CODEC_ENTRY(0x10ec0885, "ALC885", patch_alc882),
+	HDA_CODEC_ENTRY(0x10ec0887, "ALC887", patch_alc882),
+	HDA_CODEC_REV_ENTRY(0x10ec0888, 0x100101, "ALC1200", patch_alc882),
+	HDA_CODEC_ENTRY(0x10ec0888, "ALC888", patch_alc882),
+	HDA_CODEC_ENTRY(0x10ec0889, "ALC889", patch_alc882),
+	HDA_CODEC_ENTRY(0x10ec0892, "ALC892", patch_alc662),
+	{} /* terminator */
+};
+
+MODULE_DEVICE_TABLE(hdaudio, snd_hda_id_realtek);
+
 static int __init patch_realtek_init(void)
 {
 	return ls_hda_add_codec_preset(&realtek_list);
@@ -19858,6 +19992,9 @@ static void __exit patch_realtek_exit(void)
 {
 	ls_hda_delete_codec_preset(&realtek_list);
 }
+
+MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("Realtek HD-audio codec");
 
 module_init(patch_realtek_init)
 module_exit(patch_realtek_exit)

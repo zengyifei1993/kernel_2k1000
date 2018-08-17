@@ -1,5 +1,5 @@
 menuconfig LS_SND_HDA
-	bool "Loongson HD Audio"
+	tristate "Loongson HD Audio"
 	select SND_PCM
 	select SND_VMASTER
 	help
