@@ -140,6 +140,7 @@ enum {
 	ALC269_FUJITSU,
 	ALC269_LIFEBOOK,
 	ALC271_ACER,
+	ALC269_LS_3A7A,
 	ALC269_AUTO,
 	ALC269_MODEL_LAST /* last tag */
 };
@@ -13989,6 +13990,17 @@ static struct snd_kcontrol_new alc269_base_mixer[] = {
 	{ } /* end */
 };
 
+static struct snd_kcontrol_new alc269_ls_3a7a_mixer[] = {
+	HDA_CODEC_VOLUME("Front Playback Volume", 0x02, 0x0, HDA_OUTPUT),
+	HDA_CODEC_VOLUME("Speaker Playback Volume", 0x03, 0x0, HDA_OUTPUT),
+	HDA_CODEC_VOLUME("Line Playback Volume", 0x0b, 0x02, HDA_INPUT),
+	HDA_CODEC_VOLUME("Mic Playback Volume", 0x0b, 0x1, HDA_INPUT),
+	HDA_CODEC_VOLUME("F-Mic Playback Volume", 0x0b, 0x0, HDA_INPUT),
+	HDA_CODEC_VOLUME("R-Mic Boost", 0x18, 0x0, HDA_INPUT),
+	HDA_CODEC_VOLUME("F-Mic Boost", 0x19, 0x0, HDA_INPUT),
+	{ } /* end */
+};
+
 static struct snd_kcontrol_new alc269_quanta_fl1_mixer[] = {
 	/* output mixer control */
 	HDA_BIND_VOL("Master Playback Volume", &alc268_acer_bind_master_vol),
@@ -14113,6 +14125,17 @@ static struct hda_verb alc269_lifebook_verbs[] = {
 	{0x1d, AC_VERB_SET_PIN_WIDGET_CONTROL, PIN_IN},
 	{ }
 };
+
+static void alc269_ls_3a7a_automute(struct hda_codec *codec)
+{
+	unsigned int present;
+	unsigned char bits;
+	present = ls_hda_jack_detect(codec, 0x1b);
+	bits = present ? HDA_AMP_MUTE : 0;
+
+	ls_hda_codec_amp_stereo(codec, 0x15, HDA_OUTPUT, 0,
+				 HDA_AMP_MUTE, bits);
+}
 
 /* toggle speaker-output according to the hp-jack state */
 static void alc269_quanta_fl1_speaker_automute(struct hda_codec *codec)
@@ -14776,6 +14799,7 @@ static const char *alc269_models[ALC269_MODEL_LAST] = {
 	[ALC269_DMIC]			= "laptop-dmic",
 	[ALC269_FUJITSU]		= "fujitsu",
 	[ALC269_LIFEBOOK]		= "lifebook",
+	[ALC269_LS_3A7A]		= "loongson-3a7a",
 	[ALC269_AUTO]			= "auto",
 };
 
@@ -14836,6 +14860,46 @@ static struct snd_pci_quirk alc269_cfg_tbl[] = {
 	SND_PCI_QUIRK(0x17ff, 0x059b, "Quanta JR1", ALC269_DMIC),
 	{}
 };
+
+static void alc269_ls_3a7a_inithook(struct hda_codec *codec)
+{
+	alc269_ls_3a7a_automute(codec);
+	alc_mic_automute(codec);
+}
+
+static struct hda_verb alc269_ls_3a7a_init_verbs[] = {
+	{0x18, AC_VERB_SET_UNSOLICITED_ENABLE, AC_USRSP_EN|ALC880_MIC_EVENT},
+	{0x1b, AC_VERB_SET_UNSOLICITED_ENABLE, AC_USRSP_EN|ALC880_HP_EVENT},
+	{}
+};
+
+static struct hda_input_mux alc269_ls_3a7a_capture_source = {
+	.num_items = 3,
+	.items = {
+		{ "Mic", 0x0 },
+		{ "Front Mic", 0x1 },
+		{ "Line", 0x2 },
+	},
+};
+
+static void alc269_ls_3a7a_unsol_event(struct hda_codec *codec,
+					   unsigned int res)
+{
+	if ((res >> 26) == ALC880_HP_EVENT)
+		alc269_ls_3a7a_automute(codec);
+	if ((res >> 26) == ALC880_MIC_EVENT)
+		alc_mic_automute(codec);
+}
+
+static void alc269_ls_3a7a_setup(struct hda_codec *codec)
+{
+	struct alc_spec *spec = codec->spec;
+	spec->ext_mic.pin = 0x18;
+	spec->ext_mic.mux_idx = 0;
+	spec->int_mic.pin = 0x19;
+	spec->int_mic.mux_idx = 1;
+	spec->auto_mic = 1;
+}
 
 static struct alc_config_preset alc269_presets[] = {
 	[ALC269_BASIC] = {
@@ -14959,6 +15023,19 @@ static struct alc_config_preset alc269_presets[] = {
 		.unsol_event = alc_sku_unsol_event,
 		.setup = alc269vb_laptop_dmic_setup,
 		.init_hook = alc_inithook,
+	},
+	[ALC269_LS_3A7A] = {
+		.mixers = { alc269_ls_3a7a_mixer },
+		.init_verbs = { alc269_init_verbs, alc269_ls_3a7a_init_verbs },
+		.num_dacs = ARRAY_SIZE(alc269_dac_nids),
+		.dac_nids = alc269_dac_nids,
+		.capsrc_nids = alc269_capsrc_nids,
+		.num_channel_mode = ARRAY_SIZE(alc269_modes),
+		.channel_mode = alc269_modes,
+		.input_mux = &alc269_ls_3a7a_capture_source,
+		.unsol_event = alc269_ls_3a7a_unsol_event,
+		.setup = alc269_ls_3a7a_setup,
+		.init_hook = alc269_ls_3a7a_inithook,
 	},
 };
 
