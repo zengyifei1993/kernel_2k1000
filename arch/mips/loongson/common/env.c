@@ -38,6 +38,7 @@ u64 ht_control_base;
 u64 pci_mem_start_addr, pci_mem_end_addr;
 u64 loongson_pciio_base;
 u64 ls2h_lpc_reg_base = LS2H_LPC_REG_BASE;
+int loongson_lpc_irq_base;
 u64 vgabios_addr;
 u64 poweroff_addr, restart_addr, suspend_addr;
 u64 low_physmem_start, high_physmem_start;
@@ -96,6 +97,7 @@ u32 cpu_clock_freq;
 EXPORT_SYMBOL(cpu_clock_freq);
 EXPORT_SYMBOL(loongson_ec_sci_irq);
 EXPORT_SYMBOL(loongson_pch);
+EXPORT_SYMBOL(loongson_lpc_irq_base);
 
 #define parse_even_earlier(res, option, p)				\
 do {									\
@@ -269,6 +271,8 @@ void __init prom_init_env(void)
 		if (esys->vers >= 2 && esys->of_dtb_addr)
 			loongson_fdt_blob = (void *)(esys->of_dtb_addr);
 		loongson_max_dma32_pfn = 0x100000000ULL>> PAGE_SHIFT;
+		ls2h_lpc_reg_base = 0x10002000;
+		loongson_lpc_irq_base = 128;
 	}
 	else {
 		loongson_pch = &rs780_pch;

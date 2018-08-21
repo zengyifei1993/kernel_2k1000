@@ -32,6 +32,10 @@ extern int of_i8042_kbd_irq;
 extern int of_i8042_aux_irq;
 # define I8042_KBD_IRQ  of_i8042_kbd_irq
 # define I8042_AUX_IRQ  of_i8042_aux_irq
+#elif defined(CONFIG_CPU_LOONGSON3)
+extern int loongson_lpc_irq_base;
+# define I8042_KBD_IRQ  (loongson_lpc_irq_base + 1)
+# define I8042_AUX_IRQ  (loongson_lpc_irq_base + 12)
 #else
 # define I8042_KBD_IRQ	1
 # define I8042_AUX_IRQ	12
