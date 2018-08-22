@@ -44,7 +44,7 @@
 #define cpu_has_vtag_icache	0
 #define cpu_has_watch		1
 #define cpu_has_local_ebase	0
-#define cpu_has_perf_cntr_intr_bit	0
+#define cpu_has_perf_cntr_intr_bit	loongson3_perf_irq_mask
 #define cpu_has_dsp		0
 
 #ifdef CONFIG_CPU_LOONGSON3
@@ -52,4 +52,5 @@
 #define cpu_hwrena_impl_bits	0xc0000000
 #endif
 
+extern int loongson3_perf_irq_mask;
 #endif /* __ASM_MACH_LOONGSON_CPU_FEATURE_OVERRIDES_H */

@@ -73,6 +73,7 @@ struct uart_device loongson_uarts[MAX_UARTS];
 u32 loongson_nr_sensors;
 struct sensor_device loongson_sensors[MAX_SENSORS];
 u32 loongson_hwmon;
+int loongson3_perf_irq_mask = 1;
 
 struct platform_controller_hub *loongson_pch;
 extern struct platform_controller_hub ls2h_pch;
@@ -223,6 +224,7 @@ void __init prom_init_env(void)
 	if (((read_c0_prid() & 0xf) == PRID_REV_LOONGSON3A_R2)
 		|| ((read_c0_prid() & 0xf) == PRID_REV_LOONGSON3A_R3_0)) {
 		eirq_source->dma_noncoherent = 1;
+		loongson3_perf_irq_mask = 0;
 	}
 	if (strstr(arcs_cmdline, "cached"))
 		eirq_source->dma_noncoherent = 0;
