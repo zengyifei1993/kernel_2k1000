@@ -288,6 +288,9 @@ static int loongsonfb_create(struct drm_fb_helper *helper,
 	info->screen_size = size;
 	info->pixmap.flags = FB_PIXMAP_SYSTEM;
 
+	info->fix.smem_start = ldev->mc.vram_base;
+	info->fix.smem_len = size;
+
 	DRM_DEBUG_KMS("allocated %dx%d\n",
 		      fb->width, fb->height);
 
