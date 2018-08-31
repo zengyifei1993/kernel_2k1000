@@ -343,7 +343,7 @@ int loongson_modeset_init(struct loongson_drm_device *ldev)
 	loongson_crtc_init(ldev);
 	ldev->num_crtc = ldev->vbios->crtc_num;
 
-	for(i=0;i<2;i++){
+	for(i=0;i<ldev->num_crtc;i++){
 		DRM_DEBUG("loongson drm encoder init\n");
 		encoder = loongson_encoder_init(ldev->dev,i);
 		if (!encoder) {
