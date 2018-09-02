@@ -275,6 +275,9 @@ void __init setup_irq_default(void)
 		irq_set_chip_and_handler(i, &ls64_irq_chip, handle_level_irq);
 		set_irq_attr(i, 1 << (STATUSB_IP4 - 10), 1 << core_id, 0);
 	}
+
+	ls64_conf_write32(ls_msi_irq_mask, (void *)(CKSEG1ADDR(CONF_BASE) + INT_LO_OFF + INT_EDG_OFF ));
+	ls64_conf_write32((ls_msi_irq_mask >> 32)|(0x1f << 12), (void *)(CKSEG1ADDR(CONF_BASE) + INT_LO_OFF + INT_EDG_OFF + 0x40));
 }
 
 void  __init arch_init_irq(void)
