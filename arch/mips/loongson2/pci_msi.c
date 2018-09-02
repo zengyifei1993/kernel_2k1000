@@ -113,7 +113,7 @@ static struct irq_chip ls2k_msi_chip = {
 	.irq_ack	= ls_mask_icu_irq,
 	.irq_mask	= disable_ls2k_msi_irq,
 	.irq_unmask	= enable_ls2k_msi_irq,
-	.irq_eoi	= enable_ls2k_msi_irq,
+	//.irq_eoi	= enable_ls2k_msi_irq,
 	.irq_set_affinity	= ls_set_affinity_icu_irq,
 };
 
