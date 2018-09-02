@@ -95,6 +95,10 @@ config LOONGSON_MACH3X
 		of Loongson processor and RS780/SBX00 chipset.
 endchoice
 
+config PCI_MSI_IRQ_BALANCE
+	bool "ht irq stipe4 for pci msi irq balance"
+	depends on LOONGSON_MACH3X && PCI_MSI
+
 config CS5536
 	bool
 

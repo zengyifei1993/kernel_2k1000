@@ -192,8 +192,9 @@ static void loongson3_send_ipi_mask(const struct cpumask *mask, unsigned int act
 		loongson3_ipi_write32((u32)action, ipi_set0_regs[cpu_logical_map(i)]);
 }
 
-#define IPI_IRQ_OFFSET 6
 extern unsigned char ls7a_ipi_pos2irq[];
+extern unsigned int ls2h_pos2irq[];
+extern unsigned int rs780e_pos2irq[];
 
 void loongson3_send_irq_by_ipi(int cpu, int irqs)
 {
@@ -234,12 +235,19 @@ void loongson3_ipi_interrupt(struct pt_regs *regs)
 		switch (loongson_pch->board_type) {
 		case RS780E:
 			while ((irq = ffs(irqs))) {
-				do_IRQ(irq-1);
-				irqs &= ~(1<<(irq-1));
+				irq = irq -1;
+				irqs &= ~(1<<irq);
+				if(irq < 16)
+					do_IRQ(irq);
+				else
+					do_IRQ(rs780e_pos2irq[irq-16]-1);
 			}
 		break;
 		case LS2H:
-			do_IRQ(irqs);
+			while ((irq = ffs(irqs))) {
+				do_IRQ(ls2h_pos2irq[irq-1]-1);
+				irqs &= ~(1<<(irq-1));
+			}
 		break;
 		case LS7A:
 			while ((irq = ffs(irqs))) {

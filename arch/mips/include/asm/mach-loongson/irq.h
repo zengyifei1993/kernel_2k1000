@@ -5,7 +5,7 @@
 
 #ifdef CONFIG_CPU_LOONGSON3
 
-#define NR_IRQS	256
+#define NR_IRQS	320
 /* cpu core interrupt numbers */
 #define MIPS_CPU_IRQ_BASE 56
 
@@ -279,5 +279,8 @@ struct ls2h_intctl_regs {
 #define LS7A_IOAPIC_GPIO_3_IRQ              (LS7A_IOAPIC_IRQ_BASE + LS7A_IOAPIC_GPIO_3_OFFSET       )
 #endif
 
+#define IPI_IRQ_OFFSET 6
+#define IRQ_LS3A_MSI_0 64
+#define LS3A_NUM_MSI_IRQS 256
 #include_next <irq.h>
 #endif /* __ASM_MACH_LOONGSON_IRQ_H_ */

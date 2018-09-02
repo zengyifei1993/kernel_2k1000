@@ -45,6 +45,8 @@ extern void ls2h_init_irq(void);
 extern void ls2h_irq_dispatch(void);
 extern int ls2h_platform_init(void);
 extern int ls2h_pcibios_map_irq(struct pci_dev *dev, u8 slot, u8 pin);
+extern int ls2h_setup_msi_irq(struct pci_dev *pdev, struct msi_desc *desc);
+extern void ls2h_teardown_msi_irq(unsigned int irq);
 
 extern u32 loongson_dma_mask_bits;
 static u64 platform_dma_mask = DMA_BIT_MASK(32);
@@ -752,4 +754,8 @@ const struct platform_controller_hub ls2h_pch = {
 	.pcibios_map_irq	= ls2h_pcibios_map_irq,
 	.pch_arch_initcall	= ls2h_arch_initcall,
 	.pch_device_initcall	= ls2h_device_initcall,
+#ifdef CONFIG_PCI_MSI
+	.pch_setup_msi_irq	= ls2h_setup_msi_irq,
+	.pch_teardown_msi_irq	= ls2h_teardown_msi_irq,
+#endif
 };

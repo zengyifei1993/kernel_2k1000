@@ -30,7 +30,69 @@ static struct ls2h_intctl_regs volatile *int_ctrl_regs
 
 static DEFINE_SPINLOCK(pch_irq_lock);
 
-static void ack_pch_irq(struct irq_data *d)
+#define LS2H_IRQS	(LS2H_PCH_LAST_IRQ - LS2H_PCH_IRQ_BASE)
+#define LS2H_DIRQS 	(32-IPI_IRQ_OFFSET)
+unsigned int ls2h_irq2pos[LS2H_IRQS];
+unsigned int ls2h_pos2irq[LS2H_DIRQS];
+static DECLARE_BITMAP(ls2h_irq_in_use, LS2H_DIRQS);
+static unsigned char irq_cpu[LS2H_IRQS] =  {[0 ... LS2H_IRQS-1] = -1};;
+
+void unmask_ls2h_irq(struct irq_data *d);
+void mask_ls2h_irq(struct irq_data *d);
+extern void loongson3_send_irq_by_ipi(int cpu, int irqs);
+
+static int ls2h_create_dirq(unsigned int irq)
+{
+	unsigned long flags;
+	int pos;
+	spin_lock_irqsave(&pch_irq_lock, flags);
+again:
+	pos = find_first_zero_bit(ls2h_irq_in_use, LS2H_DIRQS);
+	if(pos == LS2H_DIRQS)
+	{
+		spin_unlock_irqrestore(&pch_irq_lock, flags);
+		return -ENOSPC;
+	}
+	if (test_and_set_bit(pos, ls2h_irq_in_use))
+		goto again;
+	ls2h_pos2irq[pos] = irq+1;
+	ls2h_irq2pos[irq-LS2H_PCH_IRQ_BASE] = pos+1;
+	spin_unlock_irqrestore(&pch_irq_lock, flags);
+	return 0;
+}
+
+static void ls2h_destroy_dirq(unsigned int irq)
+{
+	unsigned long flags;
+	int pos;
+	spin_lock_irqsave(&pch_irq_lock, flags);
+	pos = ls2h_irq2pos[irq-LS2H_PCH_IRQ_BASE];
+
+	if(pos)
+	{
+		clear_bit(pos-1, ls2h_irq_in_use);
+		ls2h_irq2pos[irq-LS2H_PCH_IRQ_BASE] = 0;
+		ls2h_pos2irq[pos-1] = 0;
+	}
+	spin_unlock_irqrestore(&pch_irq_lock, flags);
+}
+
+unsigned int startup_ls2h_board_irq(struct irq_data *d)
+{
+	unsigned long irq_nr = d->irq;
+	ls2h_create_dirq(irq_nr);
+	unmask_ls2h_irq(d);
+	return 0;
+}
+
+void shutdown_ls2h_board_irq(struct irq_data *d)
+{
+	unsigned long irq_nr = d->irq;
+	mask_ls2h_irq(d);
+	ls2h_destroy_dirq(irq_nr);
+}
+
+void ack_ls2h_irq(struct irq_data *d)
 {
 	int irq_nr;
 	unsigned long flags;
@@ -43,7 +105,7 @@ static void ack_pch_irq(struct irq_data *d)
 	spin_unlock_irqrestore(&pch_irq_lock, flags);
 }
 
-static void mask_pch_irq(struct irq_data *d)
+void mask_ls2h_irq(struct irq_data *d)
 {
 	int irq_nr;
 	unsigned long flags;
@@ -56,7 +118,7 @@ static void mask_pch_irq(struct irq_data *d)
 	spin_unlock_irqrestore(&pch_irq_lock, flags);
 }
 
-static void mask_ack_pch_irq(struct irq_data *d)
+void mask_ack_ls2h_irq(struct irq_data *d)
 {
 	int irq_nr;
 	unsigned long flags;
@@ -70,7 +132,7 @@ static void mask_ack_pch_irq(struct irq_data *d)
 	spin_unlock_irqrestore(&pch_irq_lock, flags);
 }
 
-static void unmask_pch_irq(struct irq_data *d)
+void unmask_ls2h_irq(struct irq_data *d)
 {
 	int irq_nr;
 	unsigned long flags;
@@ -83,15 +145,18 @@ static void unmask_pch_irq(struct irq_data *d)
 	spin_unlock_irqrestore(&pch_irq_lock, flags);
 }
 
-#define eoi_pch_irq unmask_pch_irq
+#define eoi_pch_irq unmask_ls2h_irq
 
 static struct irq_chip pch_irq_chip = {
 	.name		= "Loongson",
-	.irq_ack	= ack_pch_irq,
-	.irq_mask	= mask_pch_irq,
-	.irq_mask_ack	= mask_ack_pch_irq,
-	.irq_unmask	= unmask_pch_irq,
+	.irq_ack	= ack_ls2h_irq,
+	.irq_mask	= mask_ls2h_irq,
+	.irq_mask_ack	= mask_ack_ls2h_irq,
+	.irq_unmask	= unmask_ls2h_irq,
 	.irq_eoi	= eoi_pch_irq,
+	.irq_startup	= startup_ls2h_board_irq,
+	.irq_shutdown	= shutdown_ls2h_board_irq,
+	.irq_set_affinity	= plat_set_irq_affinity,
 };
 
 extern void loongson3_ipi_interrupt(struct pt_regs *regs);
@@ -154,19 +219,48 @@ static struct irq_chip lpc_irq_chip = {
 	.irq_eoi	= eoi_lpc_irq,
 };
 
+
+static void __ls2h_irq_dispatch(int n, int intstatus)
+{
+	int irq, irq1;
+	static unsigned int core_num = 0;
+	struct irq_data *irqd;
+	int cpu = smp_processor_id();
+
+	irq = ffs(intstatus);
+	if (!irq) {
+		pr_info("Unknow n: %d intstatus %x \n", n, intstatus);
+		spurious_interrupt();
+	} else {
+		core_num = (core_num + 1) % cores_per_package;
+		irq = n * 32 + LS2H_PCH_IRQ_BASE + irq - 1;
+		irq1 = irq - LS2H_PCH_IRQ_BASE;
+		irqd = irq_get_irq_data(irq);
+		irq_cpu[irq1] = cpumask_next(irq_cpu[irq1], irqd->affinity);
+
+		if (irq_cpu[irq1] >= nr_cpu_ids)
+			irq_cpu[irq1] = cpumask_first(irqd->affinity);
+		core_num = irq_cpu[irq1];
+		if (!ls2h_irq2pos[irq-LS2H_PCH_IRQ_BASE] || core_num == cpu || !cpu_online(core_num))
+			do_IRQ(irq);
+		else
+		{
+			mask_ls2h_irq(irqd);
+			loongson3_send_irq_by_ipi(core_num, 1<<(ls2h_irq2pos[irq1]-1));
+		}
+	}
+}
+
+
 void ls2h_irq_dispatch(void)
 {
-	int i, intstatus, irq, irqs, lpc_irq;
+	int i, intstatus, irqs, lpc_irq;
 
 	for (i = 0; i < 5; i++) {
 		if ((intstatus = (int_ctrl_regs + i)->int_isr) == 0)
 			continue;
 
-		while ((irq = ffs(intstatus))) {
-			if (!irq) {
-				pr_info("Unknow INT%d: intstatus %x\n", i, intstatus);
-				spurious_interrupt();
-			} else if ((i == 0) && (intstatus & (1 << 13)) && ls2h_lpc_reg_base == LS2H_LPC_REG_BASE) {
+			if ((i == 0) && (intstatus & (1 << 13)) && ls2h_lpc_reg_base == LS2H_LPC_REG_BASE) {
 				irqs = ls2h_readl(LS2H_LPC_INT_ENA) & ls2h_readl(LS2H_LPC_INT_STS) & 0xfeff;
 				if (irqs)
 					while ((lpc_irq = ffs(irqs))) {
@@ -174,12 +268,12 @@ void ls2h_irq_dispatch(void)
 						irqs &= ~(1 << (lpc_irq-1));
 					}
 			} else
-				do_IRQ(LS2H_PCH_IRQ_BASE + i * 32 + irq - 1);
+				__ls2h_irq_dispatch(i, intstatus);
 
-			intstatus &= ~(1 << (irq-1));
-		}
 	}
 }
+
+
 
 void ls2h_irq_router_init(void)
 {
@@ -208,6 +302,11 @@ void ls2h_irq_router_init(void)
 	(int_ctrl_regs + 2)->int_clr	= 0x00000000;
 	(int_ctrl_regs + 2)->int_en	= 0x00000001;
 
+	(int_ctrl_regs + 3)->int_edge = 0xffffffff;
+	(int_ctrl_regs + 3)->int_pol = 0xffffffff;
+	(int_ctrl_regs + 3)->int_clr = 0x00000000;
+	(int_ctrl_regs + 3)->int_en = 0x00000000;
+
 	/* Enable the LPC interrupt */
 	ls2h_writel(0x80000000, LS2H_LPC_INT_CTL);
 
@@ -226,8 +325,11 @@ void __init ls2h_init_irq(void)
 	ls2h_irq_router_init();
 
 	for (i = LS2H_PCH_IRQ_BASE; i <= LS2H_PCH_LAST_IRQ; i++)
+	{
+		if((i-LS2H_PCH_IRQ_BASE)/32==3) continue;
 		irq_set_chip_and_handler(i, &pch_irq_chip,
 					 handle_level_irq);
+	}
 
 	/* added for KBC attached on LPC controler */
 	irq_set_chip_and_handler(1, &lpc_irq_chip, handle_level_irq);

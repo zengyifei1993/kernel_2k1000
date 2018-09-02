@@ -8,6 +8,9 @@
 #include <asm/mipsregs.h>
 
 #include <loongson-pch.h>
+extern struct platform_controller_hub ls2h_pch;
+extern struct platform_controller_hub ls7a_pch;
+extern struct platform_controller_hub rs780_pch;
 
 extern unsigned long long smp_group[4];
 extern void loongson3_ipi_interrupt(struct pt_regs *regs);
@@ -15,6 +18,7 @@ extern void loongson3_ipi_interrupt(struct pt_regs *regs);
 int ls3a_msi_enabled = 0;
 EXPORT_SYMBOL(ls3a_msi_enabled);
 extern unsigned char ls7a_ipi_irq2pos[];
+extern unsigned int ls2h_irq2pos[];
 
 int plat_set_irq_affinity(struct irq_data *d, const struct cpumask *affinity,
 			  bool force)
@@ -22,7 +26,7 @@ int plat_set_irq_affinity(struct irq_data *d, const struct cpumask *affinity,
 	unsigned int cpu;
 	struct cpumask new_affinity;
 
-	if (ls7a_ipi_irq2pos[d->irq] < 0)
+	if ((loongson_pch == &ls7a_pch && ls7a_ipi_irq2pos[d->irq] < 0) || (loongson_pch == &ls2h_pch && ls2h_irq2pos[d->irq - LS2H_PCH_IRQ_BASE] < 0))
 		return -EINVAL;
 	/* I/O devices are connected on package-0 */
 	cpumask_copy(&new_affinity, affinity);

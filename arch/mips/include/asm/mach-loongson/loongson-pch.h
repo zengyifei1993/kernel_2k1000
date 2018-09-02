@@ -17,6 +17,7 @@
 #include <linux/types.h>
 #include <linux/pci.h>
 #include <asm/addrspace.h>
+#include <linux/msi.h>
 
 #define LS2H_PCH_REG_BASE		0x1b000000
 
@@ -431,6 +432,10 @@ struct platform_controller_hub {
 	int	(*pcibios_dev_init)(struct pci_dev *dev);
 	void	(*pch_arch_initcall)(void);
 	void	(*pch_device_initcall)(void);
+#ifdef CONFIG_PCI_MSI
+	int	(*pch_setup_msi_irq)(struct pci_dev *pdev, struct msi_desc *desc);
+	void	(*pch_teardown_msi_irq)(unsigned int irq);
+#endif
 };
 
 extern struct platform_controller_hub *loongson_pch;

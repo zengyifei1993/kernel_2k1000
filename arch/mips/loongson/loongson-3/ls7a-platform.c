@@ -22,6 +22,8 @@ extern void ls7a_irq_dispatch(void);
 
 extern int ls7a_pcibios_map_irq(struct pci_dev *dev, u8 slot, u8 pin);
 extern int ls7a_pcibios_dev_init(struct pci_dev *dev);
+extern int ls7a_setup_msi_irq(struct pci_dev *pdev, struct msi_desc *desc);
+extern void ls7a_teardown_msi_irq(unsigned int irq);
 
 static void ls7a_early_config(void)
 {
@@ -45,6 +47,10 @@ const struct platform_controller_hub ls7a_pch = {
 	.pcibios_dev_init	= ls7a_pcibios_dev_init,
 	.pch_arch_initcall	= ls7a_arch_initcall,
 	.pch_device_initcall	= ls7a_device_initcall,
+#ifdef CONFIG_PCI_MSI
+	.pch_setup_msi_irq	= ls7a_setup_msi_irq,
+	.pch_teardown_msi_irq	= ls7a_teardown_msi_irq,
+#endif
 };
 
 static struct of_device_id __initdata ls7a_ids[] = {

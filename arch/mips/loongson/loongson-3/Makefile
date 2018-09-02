@@ -18,6 +18,6 @@ obj-$(CONFIG_LOONGSON3_HPET_SUPPORT) += hpet.o
 
 obj-$(CONFIG_LOONGSON3_CPUAUTOPLUG) += loongson3_cpuautoplug.o
 
-obj-$(CONFIG_PCI_MSI)  += pci_msi.o
+obj-$(CONFIG_PCI_MSI)  += pci_msi.o ls7a-pci_msi.o rs780-pci_msi.o ls2h-pci_msi.o
 
 obj-$(CONFIG_USE_OF)  += dts/

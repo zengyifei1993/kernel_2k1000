@@ -19,6 +19,8 @@
 extern void rs780_init_irq(void);
 extern void rs780_irq_dispatch(void);
 extern int ls2h_platform_init(void);
+extern int rs780_setup_msi_irq(struct pci_dev *pdev, struct msi_desc *desc);
+extern void rs780_teardown_msi_irq(unsigned int irq);
 
 extern int rs780_pcibios_map_irq(struct pci_dev *dev, u8 slot, u8 pin);
 
@@ -43,4 +45,8 @@ const struct platform_controller_hub rs780_pch = {
 	.pcibios_map_irq	= rs780_pcibios_map_irq,
 	.pch_arch_initcall	= rs780_arch_initcall,
 	.pch_device_initcall	= rs780_device_initcall,
+#ifdef CONFIG_PCI_MSI
+	.pch_setup_msi_irq	= rs780_setup_msi_irq,
+	.pch_teardown_msi_irq	= rs780_teardown_msi_irq,
+#endif
 };
