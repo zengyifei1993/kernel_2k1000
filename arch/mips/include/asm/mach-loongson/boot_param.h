@@ -13,7 +13,9 @@
 #define SMBIOS_TABLE		10
 #define UMA_VIDEO_RAM		11
 #define VUMA_VIDEO_RAM		12
-#define MAX_MEMORY_TYPE		13
+#define SYSTEM_RAM_LOW_DMA		13
+#define SYSTEM_RAM_HIGH_DMA		14
+#define MAX_MEMORY_TYPE		15
 
 #define VRAM_TYPE_SP	0
 #define VRAM_TYPE_UMA	1
@@ -25,6 +27,7 @@
 #define VRAM_TYPE_SP_HIGH	5	/*GPU use high address syetem memory with special address space*/
 
 #define LOONGSON3_BOOT_MEM_MAP_MAX 128
+#define LOONGSON3_BOOT_MEM_MAP 64
 struct efi_memory_map_loongson{
 	u16 vers;	/* version of efi_memory_map */
 	u32 nr_map;	/* number of memory_maps */
@@ -35,6 +38,12 @@ struct efi_memory_map_loongson{
 		u64 mem_start;	/* memory map start address */
 		u32 mem_size;	/* each memory_map size, not the total size */
 	}map[LOONGSON3_BOOT_MEM_MAP_MAX];
+}__attribute__((packed));
+
+struct dma_mem_map{
+	u32 mem_type;
+	u64 mem_start;
+	u64 mem_size;
 }__attribute__((packed));
 
 enum loongson_cpu_type
@@ -234,4 +243,6 @@ extern u32 loongson_nr_sensors;
 extern struct sensor_device loongson_sensors[MAX_SENSORS];
 extern void *loongson_fdt_blob;
 extern u32 __dtb_loongson3_ls7a_begin[];
+extern struct dma_mem_map ls_dma_map[LOONGSON3_BOOT_MEM_MAP];
+extern struct dma_mem_map ls_phy_map[LOONGSON3_BOOT_MEM_MAP];
 #endif
