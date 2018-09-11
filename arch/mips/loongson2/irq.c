@@ -24,7 +24,7 @@
 #include <linux/of.h>
 #include <linux/module.h>
 
-static int irqbalance;
+static int irqbalance = 1;
 module_param(irqbalance, int, 0664);
 static unsigned int int_auto[2], int_bounce[2];
 
@@ -191,20 +191,11 @@ asmlinkage void plat_irq_dispatch(void)
 	unsigned long lo;
 	unsigned long irq_status;
 	unsigned long irq_masked;
-	int i = (read_c0_ebase() & 0x3ff);
-	unsigned long addr = CKSEG1ADDR(CONF_BASE);
-
-	hi = ls64_conf_read32((void*)(addr + INTSR1_OFF + (i << 8)));
-	lo = ls64_conf_read32((void*)(addr + INTSR0_OFF + (i << 8)));
-	irq_status = ((hi << 32) | lo);
-
-	hi = ls64_conf_read32((void*)(addr + INT_HI_OFF + INT_EN_OFF));
-	lo = ls64_conf_read32((void*)(addr + INT_LO_OFF + INT_EN_OFF));
-	irq_masked = ((hi << 32) | lo);
 
 	cp0_cause_saved = read_c0_cause() & ST0_IM ;
 	cp0_status = read_c0_status();
 	cp0_cause = cp0_cause_saved & cp0_status;
+
 
 	if (cp0_cause & STATUSF_IP7) {
 		do_IRQ(MIPS_CPU_IRQ_BASE+7);
@@ -214,25 +205,34 @@ asmlinkage void plat_irq_dispatch(void)
 		ls64_ipi_interrupt(NULL);
 	}
 #endif
-	else if (cp0_cause & STATUSF_IP5) {
+	else if (cp0_cause & (STATUSF_IP4 | STATUSF_IP5)) {
+	int i = (read_c0_ebase() & 0x3ff);
+	unsigned long addr = CKSEG1ADDR(CONF_BASE);
+	hi = ls64_conf_read32((void*)(addr + INTSR1_OFF + (i << 8)));
+	lo = ls64_conf_read32((void*)(addr + INTSR0_OFF + (i << 8)));
+	irq_status = ((hi << 32) | lo);
+
+	if (cp0_cause & STATUSF_IP5) {
 		hi = (irq_status & ls_msi_irq_mask);
-		while ((i = __fls(hi)) != -1) {
+		if ((i = __fls(hi)) != -1) {
 			do_IRQ(i + LS64_MSI_IRQ_BASE);
 			hi = (hi ^ (1UL << i));
 		}
+		else spurious_interrupt();
 	}
 	else if (cp0_cause & STATUSF_IP4) {
+		hi = ls64_conf_read32((void*)(addr + INT_HI_OFF + INT_EN_OFF));
+		lo = ls64_conf_read32((void*)(addr + INT_LO_OFF + INT_EN_OFF));
+		irq_masked = ((hi << 32) | lo);
 		lo = (irq_status & irq_masked & ~ls_msi_irq_mask);
-		while ((i = __fls(lo)) != -1) {
+		if ((i = __fls(lo)) != -1) {
 			do_IRQ(i + LS2K_IRQ_BASE);
 			lo = (lo ^ (1UL << i));
 		}
+		else spurious_interrupt();
 
 	}
-	/*else if (irq_status) {*/
-		/*pr_info("irq not handled i:%lx, c:%x, s:%x\n", irq_status, cp0_cause_saved,*/
-				/*cp0_status);*/
-	/*}*/
+	}
 }
 
 void set_irq_attr(int irq, unsigned int imask, unsigned int core_mask, int mode)
@@ -271,7 +271,7 @@ void __init setup_irq_default(void)
 	unsigned int i;
 	int core_id = (read_c0_ebase() & 0x3ff);
 
-	for (i = LS2K_IRQ_BASE; i < LS2K_IRQ_BASE + 60; i++) {
+	for (i = LS2K_IRQ_BASE; i < LS2K_IRQ_BASE + 64; i++) {
 		irq_set_chip_and_handler(i, &ls64_irq_chip, handle_level_irq);
 		set_irq_attr(i, 1 << (STATUSB_IP4 - 10), 1 << core_id, 0);
 	}
