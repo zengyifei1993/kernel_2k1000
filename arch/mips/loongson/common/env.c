@@ -37,6 +37,7 @@ struct irq_source_routing_table *eirq_source;
 u64 ht_control_base;
 u64 pci_mem_start_addr, pci_mem_end_addr;
 u64 loongson_pciio_base;
+u64 ls2h_lpc_reg_base = LS2H_LPC_REG_BASE;
 u64 vgabios_addr;
 u64 poweroff_addr, restart_addr, suspend_addr;
 u64 low_physmem_start, high_physmem_start;
@@ -244,10 +245,13 @@ void __init prom_init_env(void)
                 ls2h_board_ver = ls2h_readl(LS2H_GPIO_IN_REG);
                 ls2h_board_ver = (ls2h_board_ver >> 8) & 0xf;
 
-                if (ls2h_board_ver == LS3A2H_BOARD_VER_2_2)
+                if (ls2h_board_ver == LS3A2H_BOARD_VER_2_2) {
                         loongson_pciio_base = 0x1bf00000;
-                else
+			ls2h_lpc_reg_base = LS2H_LPC_REG_BASE;
+              	 } else {
                         loongson_pciio_base = 0x1ff00000;
+			ls2h_lpc_reg_base = LS3_LPC_REG_BASE;
+		}
 
 		loongson_pch = &ls2h_pch;
 		loongson_ec_sci_irq = 0x80;
