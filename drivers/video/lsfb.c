@@ -949,7 +949,8 @@ static const struct i2c_device_id vga_eep_ids[] = {
 	{ "eeprom-edid", 2 },
 	{ /* END OF LIST */ }
 };
-MODULE_DEVICE_TABLE(i2c, eep_ids);
+MODULE_DEVICE_TABLE(i2c, dvi_eep_ids);
+MODULE_DEVICE_TABLE(i2c, vga_eep_ids);
 
 static int eep_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
