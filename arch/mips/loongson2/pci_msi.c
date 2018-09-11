@@ -213,7 +213,7 @@ static int ls_pci_msi_probe(struct platform_device *dev)
 
 	base = CKSEG1ADDR(CONF_BASE) + INT_LO_OFF;
 	ls64_conf_write32(ls_msi_irq_mask, (void *)(base + INT_EDG_OFF ));
-	ls64_conf_write32(ls_msi_irq_mask >> 32, (void *)(base + INT_EDG_OFF + 0x40));
+	ls64_conf_write32((ls_msi_irq_mask >> 32)|(0x1f << 12), (void *)(base + INT_EDG_OFF + 0x40));
 
 	for (i = LS64_MSI_IRQ_BASE ; i < LS64_MSI_IRQ_BASE + 64; i++) {
 			if((1UL << (i - LS64_MSI_IRQ_BASE)) & ls_msi_irq_mask){
