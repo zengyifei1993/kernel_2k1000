@@ -222,7 +222,7 @@ asmlinkage void plat_irq_dispatch(void)
 		}
 	}
 	else if (cp0_cause & STATUSF_IP4) {
-		lo = (irq_status & irq_masked);
+		lo = (irq_status & irq_masked & ~ls_msi_irq_mask);
 		while ((i = __fls(lo)) != -1) {
 			do_IRQ(i + LS2K_IRQ_BASE);
 			lo = (lo ^ (1UL << i));
