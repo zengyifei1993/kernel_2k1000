@@ -125,6 +125,17 @@ static unsigned long nid_to_addroffset(unsigned int nid)
 extern unsigned int has_systab;
 extern unsigned long systab_addr;
 
+int phy_index = 0;
+int dma_index = 0;
+struct dma_mem_map ls_phy_map[LOONGSON3_BOOT_MEM_MAP], ls_dma_map[LOONGSON3_BOOT_MEM_MAP];
+void __init add_memory_region_dma(struct dma_mem_map *loongson_map, phys_t start, phys_t size, long type, int *index)
+{
+	loongson_map[*index].mem_start = start;
+	loongson_map[*index].mem_size = size;
+	loongson_map[*index].mem_type = type;
+	*index += 1;
+}
+
 static void __init szmem(unsigned int node)
 {
 	u32 i, mem_type;
@@ -151,6 +162,8 @@ static void __init szmem(unsigned int node)
 					start_pfn, end_pfn, num_physpages);
 				add_memory_region((node_id << 44) + emap->map[i].mem_start,
 					(u64)emap->map[i].mem_size << 20, BOOT_MEM_RAM);
+				add_memory_region_dma(ls_phy_map, (node_id << 44) + emap->map[i].mem_start,
+					(u64)emap->map[i].mem_size << 20, SYSTEM_RAM_LOW, &phy_index);
 				memblock_add_node(PFN_PHYS(start_pfn), PFN_PHYS(end_pfn - start_pfn), node);
 				break;
 			case SYSTEM_RAM_HIGH:
@@ -166,6 +179,8 @@ static void __init szmem(unsigned int node)
 					start_pfn, end_pfn, num_physpages);
 				add_memory_region((node_id << 44) + emap->map[i].mem_start,
 					(u64)emap->map[i].mem_size << 20, BOOT_MEM_RAM);
+				add_memory_region_dma(ls_phy_map, (node_id << 44) + emap->map[i].mem_start,
+					(u64)emap->map[i].mem_size << 20, SYSTEM_RAM_HIGH, &phy_index);
 				memblock_add_node(PFN_PHYS(start_pfn), PFN_PHYS(end_pfn - start_pfn), node);
 				break;
 			case MEM_RESERVED:
@@ -197,6 +212,17 @@ static void __init szmem(unsigned int node)
 				vuma_vram_addr = emap->map[i].mem_start;
 				vuma_vram_size = emap->map[i].mem_size << 20;
 				break;
+			case SYSTEM_RAM_LOW_DMA:
+				printk("Debug: node_id:%d, mem_type:%d, mem_start:0x%llx, mem_size:0x%llx MB\n",
+					(u32)node_id, mem_type, (node_id << 44) + emap->map[i].mem_start, mem_size);
+				add_memory_region_dma(ls_dma_map, (node_id << 44) + emap->map[i].mem_start,
+					(u64)emap->map[i].mem_size << 20, SYSTEM_RAM_LOW_DMA, &dma_index);
+				break;
+			case SYSTEM_RAM_HIGH_DMA:
+				printk("Debug: node_id:%d, mem_type:%d, mem_start:0x%llx, mem_size:0x%llx MB\n",
+					(u32)node_id, mem_type, (node_id << 44) + emap->map[i].mem_start, mem_size);
+				add_memory_region_dma(ls_dma_map, (node_id << 44) + emap->map[i].mem_start,
+					(u64)emap->map[i].mem_size << 20, SYSTEM_RAM_HIGH_DMA, &dma_index);
 			}
 		}
 	}

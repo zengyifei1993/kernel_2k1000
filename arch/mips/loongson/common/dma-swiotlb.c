@@ -233,6 +233,40 @@ static phys_addr_t loongson_ls7a_dma_to_phys(struct device *dev, dma_addr_t dadd
 	return daddr;
 }
 
+static dma_addr_t loongson_phys_to_dma(struct device *dev, phys_addr_t paddr)
+{
+	int i;
+	dma_addr_t daddr = 0UL;
+
+	for (i = 0; i < LOONGSON3_BOOT_MEM_MAP; i++){
+		if(( paddr >= ls_phy_map[i].mem_start) && (paddr < (ls_phy_map[i].mem_start + ls_phy_map[i].mem_size))){
+			daddr = ls_dma_map[i].mem_start + (paddr - ls_phy_map[i].mem_start);
+			break;
+		}
+	}
+
+	if (!daddr)
+		printk("phys_to_dma error, daddr is 0x%llx\n", daddr);
+	return daddr;
+}
+
+static phys_addr_t loongson_dma_to_phys(struct device *dev, dma_addr_t daddr)
+{
+	int i;
+	phys_addr_t paddr = 0UL;
+
+	for (i = 0; i < LOONGSON3_BOOT_MEM_MAP; i++){
+		if(( daddr >= ls_dma_map[i].mem_start) && (daddr < (ls_dma_map[i].mem_start + ls_dma_map[i].mem_size))){
+			paddr = ls_phy_map[i].mem_start + (daddr - ls_dma_map[i].mem_start);
+			break;
+		}
+	}
+	if (!daddr)
+		printk("dma_to_phys error, paddr is 0x%llx\n", paddr);
+	return paddr;
+
+}
+
 struct loongson_dma_map_ops {
 	struct dma_map_ops dma_map_ops;
 	dma_addr_t (*phys_to_dma)(struct device *dev, phys_addr_t paddr);
@@ -294,11 +328,16 @@ void __init plat_swiotlb_setup(void)
 	swiotlb_init(1);
 	mips_dma_map_ops = &loongson_linear_dma_map_ops.dma_map_ops;
 
-	if (loongson_pch && loongson_pch->board_type == LS2H) {
-		loongson_linear_dma_map_ops.phys_to_dma = loongson_ls2h_phys_to_dma;
-		loongson_linear_dma_map_ops.dma_to_phys = loongson_ls2h_dma_to_phys;
-	} else if (loongson_pch && loongson_pch->board_type == LS7A) {
-		loongson_linear_dma_map_ops.phys_to_dma = loongson_ls7a_phys_to_dma;
-		loongson_linear_dma_map_ops.dma_to_phys = loongson_ls7a_dma_to_phys;
+	if(emap->vers >= 2){
+		loongson_linear_dma_map_ops.phys_to_dma = loongson_phys_to_dma;
+		loongson_linear_dma_map_ops.dma_to_phys = loongson_dma_to_phys;
+	}else{
+		if (loongson_pch && loongson_pch->board_type == LS2H) {
+			loongson_linear_dma_map_ops.phys_to_dma = loongson_ls2h_phys_to_dma;
+			loongson_linear_dma_map_ops.dma_to_phys = loongson_ls2h_dma_to_phys;
+		} else if (loongson_pch && loongson_pch->board_type == LS7A) {
+			loongson_linear_dma_map_ops.phys_to_dma = loongson_ls7a_phys_to_dma;
+			loongson_linear_dma_map_ops.dma_to_phys = loongson_ls7a_dma_to_phys;
+		}
 	}
 }
