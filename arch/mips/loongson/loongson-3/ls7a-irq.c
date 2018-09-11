@@ -257,7 +257,8 @@ static void init_7a_irq(int dev, int irq) {
 
 void init_7a_irqs(void)
 {
-	*irq_edge   = 0ULL;
+	/*lpc irq is edeg trigged*/
+	*irq_edge   = 0x80000ULL;
 	*irq_clear  = 0ULL;
 	*irq_status = 0ULL;
 	*irq_mask   = 0xffffffffffffffffULL;
@@ -292,6 +293,7 @@ void init_7a_irqs(void)
 	init_7a_irq(LS7A_IOAPIC_ACPI_INT_OFFSET     , LS7A_IOAPIC_ACPI_INT_IRQ     );
 	init_7a_irq(LS7A_IOAPIC_HPET_INT_OFFSET     , LS7A_IOAPIC_HPET_INT_IRQ     );
 	init_7a_irq(LS7A_IOAPIC_AC97_HDA_OFFSET     , LS7A_IOAPIC_AC97_HDA_IRQ     );
+	init_7a_irq(LS7A_IOAPIC_LPC_OFFSET     , LS7A_IOAPIC_LPC_IRQ     );
 }
 
 void ls7a_irq_router_init(void)
@@ -321,6 +323,127 @@ void ls7a_irq_router_init(void)
 	}
 }
 
+static DEFINE_SPINLOCK(lpc_irq_lock);
+
+static void ack_lpc_irq(struct irq_data *d)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&lpc_irq_lock, flags);
+
+	ls2h_writel(0x1 << (d->irq), LS2H_LPC_INT_CLR);
+
+	spin_unlock_irqrestore(&lpc_irq_lock, flags);
+}
+
+static void mask_lpc_irq(struct irq_data *d)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&lpc_irq_lock, flags);
+
+	ls2h_writel(ls2h_readl(LS2H_LPC_INT_ENA) & ~(0x1 << (d->irq)), LS2H_LPC_INT_ENA);
+
+	spin_unlock_irqrestore(&lpc_irq_lock, flags);
+}
+
+static void mask_ack_lpc_irq(struct irq_data *d)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&lpc_irq_lock, flags);
+
+	ls2h_writel(0x1 << (d->irq), LS2H_LPC_INT_CLR);
+	ls2h_writel(ls2h_readl(LS2H_LPC_INT_ENA) & ~(0x1 << (d->irq)), LS2H_LPC_INT_ENA);
+
+	spin_unlock_irqrestore(&lpc_irq_lock, flags);
+}
+
+static void unmask_lpc_irq(struct irq_data *d)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&lpc_irq_lock, flags);
+
+	ls2h_writel(ls2h_readl(LS2H_LPC_INT_ENA) | (0x1 << (d->irq)), LS2H_LPC_INT_ENA);
+
+	spin_unlock_irqrestore(&lpc_irq_lock, flags);
+}
+
+#define eoi_lpc_irq unmask_lpc_irq
+
+static struct irq_chip lpc_irq_chip = {
+	.name		= "Loongson",
+	.irq_ack	= ack_lpc_irq,
+	.irq_mask	= mask_lpc_irq,
+	.irq_mask_ack	= mask_ack_lpc_irq,
+	.irq_unmask	= unmask_lpc_irq,
+	.irq_eoi	= eoi_lpc_irq,
+};
+
+extern int loongson_lpc_irq_base;
+static irqreturn_t lpc_irq_handler(int irq, void *data)
+{
+	int irqs;
+	int lpc_irq;
+
+	irqs = ls2h_readl(LS2H_LPC_INT_ENA) & ls2h_readl(LS2H_LPC_INT_STS) & 0xfeff;
+	if (irqs)
+		while ((lpc_irq = ffs(irqs))) {
+			do_IRQ(lpc_irq - 1 + loongson_lpc_irq_base);
+			irqs &= ~(1 << (lpc_irq - 1));
+		}
+	return IRQ_HANDLED;
+}
+
+static struct irqaction lpc_irq = {
+	.handler = lpc_irq_handler,
+	.flags = IRQF_NO_THREAD,
+	.name = "lpc",
+};
+
+static int find_lpc(void)
+{
+	static int has_lpc = -1;
+	struct device_node *np;
+	if(has_lpc == -1)
+	{
+		has_lpc = 0;
+		np = of_find_compatible_node(NULL, NULL, "simple-bus");
+		if (np) {
+
+			if (of_property_read_bool(np, "lpc")) {
+				has_lpc = 1;
+			}
+
+			of_node_put(np);
+		}
+	}
+	return has_lpc;
+}
+
+static int ls7a_lpc_init(void)
+{
+	int i;
+
+	if(!find_lpc())
+		return 0;
+
+	setup_irq(LS7A_IOAPIC_LPC_IRQ, &lpc_irq);
+	/* added for KBC attached on LPC controler */
+	for(i = loongson_lpc_irq_base; i < loongson_lpc_irq_base + 16; i++)
+		irq_set_chip_and_handler(i, &lpc_irq_chip, handle_level_irq);
+	/* Enable the LPC interrupt */
+	ls2h_writel(0x80000000, LS2H_LPC_INT_CTL);
+
+	/* set the 18-bit interrpt enable bit for keyboard and mouse */
+	ls2h_writel(0x1 << 0x1 | 0x1 << 12, LS2H_LPC_INT_ENA);
+
+	/* clear all 18-bit interrpt bit */
+	ls2h_writel(0x3ffff, LS2H_LPC_INT_CLR);
+	return 0;
+}
+
 void __init ls7a_init_irq(void)
 {
 #ifdef CONFIG_LS7A_MSI_SUPPORT
@@ -337,4 +460,5 @@ void __init ls7a_init_irq(void)
 #endif
 	init_7a_irqs();
 	ls7a_irq_router_init();
+	ls7a_lpc_init();
 }
