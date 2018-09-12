@@ -331,7 +331,7 @@ static void ack_lpc_irq(struct irq_data *d)
 
 	spin_lock_irqsave(&lpc_irq_lock, flags);
 
-	ls2h_writel(0x1 << (d->irq), LS2H_LPC_INT_CLR);
+	ls2h_writel(0x1 << (d->irq), LS_LPC_INT_CLR);
 
 	spin_unlock_irqrestore(&lpc_irq_lock, flags);
 }
@@ -342,7 +342,7 @@ static void mask_lpc_irq(struct irq_data *d)
 
 	spin_lock_irqsave(&lpc_irq_lock, flags);
 
-	ls2h_writel(ls2h_readl(LS2H_LPC_INT_ENA) & ~(0x1 << (d->irq)), LS2H_LPC_INT_ENA);
+	ls2h_writel(ls2h_readl(LS_LPC_INT_ENA) & ~(0x1 << (d->irq)), LS_LPC_INT_ENA);
 
 	spin_unlock_irqrestore(&lpc_irq_lock, flags);
 }
@@ -353,8 +353,8 @@ static void mask_ack_lpc_irq(struct irq_data *d)
 
 	spin_lock_irqsave(&lpc_irq_lock, flags);
 
-	ls2h_writel(0x1 << (d->irq), LS2H_LPC_INT_CLR);
-	ls2h_writel(ls2h_readl(LS2H_LPC_INT_ENA) & ~(0x1 << (d->irq)), LS2H_LPC_INT_ENA);
+	ls2h_writel(0x1 << (d->irq), LS_LPC_INT_CLR);
+	ls2h_writel(ls2h_readl(LS_LPC_INT_ENA) & ~(0x1 << (d->irq)), LS_LPC_INT_ENA);
 
 	spin_unlock_irqrestore(&lpc_irq_lock, flags);
 }
@@ -365,7 +365,7 @@ static void unmask_lpc_irq(struct irq_data *d)
 
 	spin_lock_irqsave(&lpc_irq_lock, flags);
 
-	ls2h_writel(ls2h_readl(LS2H_LPC_INT_ENA) | (0x1 << (d->irq)), LS2H_LPC_INT_ENA);
+	ls2h_writel(ls2h_readl(LS_LPC_INT_ENA) | (0x1 << (d->irq)), LS_LPC_INT_ENA);
 
 	spin_unlock_irqrestore(&lpc_irq_lock, flags);
 }
@@ -381,16 +381,15 @@ static struct irq_chip lpc_irq_chip = {
 	.irq_eoi	= eoi_lpc_irq,
 };
 
-extern int loongson_lpc_irq_base;
 static irqreturn_t lpc_irq_handler(int irq, void *data)
 {
 	int irqs;
 	int lpc_irq;
 
-	irqs = ls2h_readl(LS2H_LPC_INT_ENA) & ls2h_readl(LS2H_LPC_INT_STS) & 0xfeff;
+	irqs = ls2h_readl(LS_LPC_INT_ENA) & ls2h_readl(LS_LPC_INT_STS) & 0xfeff;
 	if (irqs)
 		while ((lpc_irq = ffs(irqs))) {
-			do_IRQ(lpc_irq - 1 + loongson_lpc_irq_base);
+			do_IRQ(lpc_irq - 1);
 			irqs &= ~(1 << (lpc_irq - 1));
 		}
 	return IRQ_HANDLED;
@@ -431,16 +430,16 @@ static int ls7a_lpc_init(void)
 
 	setup_irq(LS7A_IOAPIC_LPC_IRQ, &lpc_irq);
 	/* added for KBC attached on LPC controler */
-	for(i = loongson_lpc_irq_base; i < loongson_lpc_irq_base + 16; i++)
+	for(i = 0; i < 16; i++)
 		irq_set_chip_and_handler(i, &lpc_irq_chip, handle_level_irq);
 	/* Enable the LPC interrupt */
-	ls2h_writel(0x80000000, LS2H_LPC_INT_CTL);
+	ls2h_writel(0x80000000, LS_LPC_INT_CTL);
 
 	/* set the 18-bit interrpt enable bit for keyboard and mouse */
-	ls2h_writel(0x1 << 0x1 | 0x1 << 12, LS2H_LPC_INT_ENA);
+	ls2h_writel(0x1 << 0x1 | 0x1 << 12, LS_LPC_INT_ENA);
 
 	/* clear all 18-bit interrpt bit */
-	ls2h_writel(0x3ffff, LS2H_LPC_INT_CLR);
+	ls2h_writel(0x3ffff, LS_LPC_INT_CLR);
 	return 0;
 }
 

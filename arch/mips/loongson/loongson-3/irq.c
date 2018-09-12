@@ -56,10 +56,10 @@ void mach_irq_dispatch(unsigned int pending)
 		loongson_pch->irq_dispatch();
 	if (pending & CAUSEF_IP2)
 	{
-		if(ls2h_lpc_reg_base == LS3_LPC_REG_BASE)
+		if(ls_lpc_reg_base == LS3_LPC_REG_BASE)
 		{
 			int irqs, irq;
-			irqs = ls2h_readl(LS2H_LPC_INT_ENA) & ls2h_readl(LS2H_LPC_INT_STS) & 0xfeff;
+			irqs = ls2h_readl(LS_LPC_INT_ENA) & ls2h_readl(LS_LPC_INT_STS) & 0xfeff;
 			if (irqs) {
 				while ((irq = ffs(irqs)) != 0) {
 					do_IRQ(irq - 1);

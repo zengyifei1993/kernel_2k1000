@@ -10,7 +10,7 @@
 #define LS7A_NUM_MSI_IRQS 64
 
 /*msi use irq, other device not used*/
-static DECLARE_BITMAP(msi_irq_in_use, LS7A_NUM_MSI_IRQS)={0xff00000000000000ULL};
+static DECLARE_BITMAP(msi_irq_in_use, LS7A_NUM_MSI_IRQS)={0xff0000000000ffffULL};
 
 static DEFINE_SPINLOCK(lock);
 extern int ls3a_msi_enabled;
