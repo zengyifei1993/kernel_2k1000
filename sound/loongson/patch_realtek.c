@@ -357,6 +357,7 @@ struct alc_spec {
 	unsigned int cur_mux[3];
 	struct alc_mic_route ext_mic;
 	struct alc_mic_route int_mic;
+	struct alc_mic_route line_in;
 
 	/* channel model */
 	const struct hda_channel_mode *channel_mode;
@@ -1198,13 +1199,13 @@ static void alc_dual_mic_adc_auto_switch(struct hda_codec *codec)
 static void alc_mic_automute(struct hda_codec *codec)
 {
 	struct alc_spec *spec = codec->spec;
-	struct alc_mic_route *dead, *alive;
+	struct alc_mic_route *dead, *dead1, *alive;
 	unsigned int present, type;
 	hda_nid_t cap_nid;
 
 	if (!spec->auto_mic)
 		return;
-	if (!spec->int_mic.pin || !spec->ext_mic.pin)
+	if (!spec->int_mic.pin || !spec->ext_mic.pin || !spec->line_in.pin)
 		return;
 	if (snd_BUG_ON(!spec->adc_nids))
 		return;
@@ -1216,13 +1217,22 @@ static void alc_mic_automute(struct hda_codec *codec)
 
 	cap_nid = spec->capsrc_nids ? spec->capsrc_nids[0] : spec->adc_nids[0];
 
-	present = ls_hda_jack_detect(codec, spec->ext_mic.pin);
-	if (present) {
+	if(present = ls_hda_jack_detect(codec, spec->ext_mic.pin)) {
 		alive = &spec->ext_mic;
 		dead = &spec->int_mic;
-	} else {
-		alive = &spec->int_mic;
+		dead1 = &spec->line_in;		
+	} else if (present = ls_hda_jack_detect(codec, spec->int_mic.pin)) {
 		dead = &spec->ext_mic;
+		alive = &spec->int_mic;
+		dead1 = &spec->line_in;
+	} else if (present = ls_hda_jack_detect(codec, spec->line_in.pin)) {
+		dead = &spec->ext_mic;
+		dead1 = &spec->int_mic;
+		alive = &spec->line_in;
+	} else {
+		dead = &spec->ext_mic;
+		alive = &spec->int_mic;
+		dead1 = &spec->line_in;
 	}
 
 	type = get_wcaps_type(get_wcaps(codec, cap_nid));
@@ -1233,6 +1243,9 @@ static void alc_mic_automute(struct hda_codec *codec)
 					 HDA_AMP_MUTE, 0);
 		ls_hda_codec_amp_stereo(codec, cap_nid, HDA_INPUT,
 					 dead->mux_idx,
+					 HDA_AMP_MUTE, HDA_AMP_MUTE);
+		ls_hda_codec_amp_stereo(codec, cap_nid, HDA_INPUT,
+					 dead1->mux_idx,
 					 HDA_AMP_MUTE, HDA_AMP_MUTE);
 	} else {
 		/* MUX style (e.g. ALC880) */
@@ -13992,7 +14005,11 @@ static struct snd_kcontrol_new alc269_base_mixer[] = {
 
 static struct snd_kcontrol_new alc269_ls_3a7a_mixer[] = {
 	HDA_CODEC_VOLUME("Front Playback Volume", 0x02, 0x0, HDA_OUTPUT),
+	HDA_BIND_MUTE("Front Playback Switch", 0x02, 2, HDA_INPUT),
 	HDA_CODEC_VOLUME("Speaker Playback Volume", 0x03, 0x0, HDA_OUTPUT),
+	HDA_BIND_MUTE("Speaker Playback Switch", 0x03, 2, HDA_INPUT),
+	HDA_CODEC_MUTE("Headphone Playback Switch", 0x1b, 0x0, HDA_OUTPUT),
+	HDA_CODEC_MUTE("Surround Playback Switch", 0x15, 0x0, HDA_OUTPUT),
 	HDA_CODEC_VOLUME("Line Playback Volume", 0x0b, 0x02, HDA_INPUT),
 	HDA_CODEC_VOLUME("Mic Playback Volume", 0x0b, 0x1, HDA_INPUT),
 	HDA_CODEC_VOLUME("F-Mic Playback Volume", 0x0b, 0x0, HDA_INPUT),
@@ -14869,6 +14886,7 @@ static void alc269_ls_3a7a_inithook(struct hda_codec *codec)
 
 static struct hda_verb alc269_ls_3a7a_init_verbs[] = {
 	{0x18, AC_VERB_SET_UNSOLICITED_ENABLE, AC_USRSP_EN|ALC880_MIC_EVENT},
+	{0x1a, AC_VERB_SET_UNSOLICITED_ENABLE, AC_USRSP_EN|ALC880_MIC_EVENT},
 	{0x1b, AC_VERB_SET_UNSOLICITED_ENABLE, AC_USRSP_EN|ALC880_HP_EVENT},
 	{}
 };
@@ -14876,7 +14894,7 @@ static struct hda_verb alc269_ls_3a7a_init_verbs[] = {
 static struct hda_input_mux alc269_ls_3a7a_capture_source = {
 	.num_items = 3,
 	.items = {
-		{ "Mic", 0x0 },
+		{ "Rear Mic", 0x0 },
 		{ "Front Mic", 0x1 },
 		{ "Line", 0x2 },
 	},
@@ -14898,6 +14916,8 @@ static void alc269_ls_3a7a_setup(struct hda_codec *codec)
 	spec->ext_mic.mux_idx = 0;
 	spec->int_mic.pin = 0x19;
 	spec->int_mic.mux_idx = 1;
+	spec->line_in.pin = 0x1a;
+	spec->line_in.mux_idx = 2;
 	spec->auto_mic = 1;
 }
 
@@ -15029,6 +15049,7 @@ static struct alc_config_preset alc269_presets[] = {
 		.init_verbs = { alc269_init_verbs, alc269_ls_3a7a_init_verbs },
 		.num_dacs = ARRAY_SIZE(alc269_dac_nids),
 		.dac_nids = alc269_dac_nids,
+		.cap_mixer = alc_capture_mixer1,
 		.capsrc_nids = alc269_capsrc_nids,
 		.num_channel_mode = ARRAY_SIZE(alc269_modes),
 		.channel_mode = alc269_modes,
@@ -17337,7 +17358,7 @@ static struct hda_input_mux alc662_capture_source = {
 static struct hda_input_mux alc662_ls_3a7a_capture_source = {
 	.num_items = 3,
 	.items = {
-		{ "Mic", 0x0 },
+		{ "Rear Mic", 0x0 },
 		{ "Front Mic", 0x1 },
 		{ "Line", 0x2 },
 	},
@@ -17487,9 +17508,11 @@ static struct snd_kcontrol_new alc662_3ST_6ch_mixer[] = {
 };
 static struct snd_kcontrol_new alc662_ls_3a7a_mixer[] = {
 	HDA_CODEC_VOLUME("Front Playback Volume", 0x02, 0x0, HDA_OUTPUT),
-	HDA_CODEC_MUTE("Front Playback Switch", 0x0c, 0x0, HDA_INPUT),
+	HDA_BIND_MUTE("Front Playback Switch", 0x02, 2, HDA_INPUT),
 	HDA_CODEC_VOLUME("Speaker Playback Volume", 0x03, 0x0, HDA_OUTPUT),
-	HDA_CODEC_MUTE("Speaker Playback Switch", 0x0d, 0x0, HDA_INPUT),
+	HDA_BIND_MUTE("Speaker Playback Switch", 0x03, 2, HDA_INPUT),
+	HDA_CODEC_MUTE("Headphone Playback Switch", 0x1b, 0x0, HDA_OUTPUT),
+	HDA_CODEC_MUTE("Surround Playback Switch", 0x14, 0x0, HDA_OUTPUT),
 	HDA_CODEC_VOLUME("Line Playback Volume", 0x0b, 0x02, HDA_INPUT),
 	HDA_CODEC_MUTE("Line Playback Switch", 0x0b, 0x02, HDA_INPUT),
 	HDA_CODEC_VOLUME("Mic Playback Volume", 0x0b, 0x1, HDA_INPUT),
@@ -17820,6 +17843,7 @@ static struct hda_verb alc272_init_verbs[] = {
 };
 static struct hda_verb alc662_ls_3a7a_init_verbs[] = {
 	{0x18, AC_VERB_SET_UNSOLICITED_ENABLE, AC_USRSP_EN|ALC880_MIC_EVENT},
+	{0x1a, AC_VERB_SET_UNSOLICITED_ENABLE, AC_USRSP_EN|ALC880_MIC_EVENT},
 	{0x1b, AC_VERB_SET_UNSOLICITED_ENABLE, AC_USRSP_EN|ALC880_HP_EVENT},
 	{}
 };
@@ -18313,6 +18337,8 @@ static void alc662_ls_3a7a_setup(struct hda_codec *codec)
 	spec->ext_mic.mux_idx = 0;
 	spec->int_mic.pin = 0x19;
 	spec->int_mic.mux_idx = 1;
+	spec->line_in.pin = 0x1a;
+	spec->line_in.mux_idx = 2;
 	spec->auto_mic = 1;
 }
 
@@ -19016,7 +19042,7 @@ static struct alc_config_preset alc662_presets[] = {
 		.init_verbs = { alc662_init_verbs, alc662_ls_3a7a_init_verbs },
 		.num_dacs = ARRAY_SIZE(alc662_dac_nids),
 		.dac_nids = alc662_dac_nids,
-		.cap_mixer = alc662_auto_capture_mixer,
+		.cap_mixer = alc_capture_mixer1,
 		.capsrc_nids = alc662_capsrc_nids,
 		.num_channel_mode = ARRAY_SIZE(alc662_3ST_2ch_modes),
 		.channel_mode = alc662_3ST_2ch_modes,
