@@ -57,7 +57,7 @@ __set_direction(struct loongson_gpio_chip *lgpio, unsigned pin, int input)
 		u |= 1UL << pin;
 	else
 		u &= ~(1UL << pin);
-	writeq(u, GPIO_IO_CONF(lgpio));
+	ls7a_dc_write(u, (unsigned long)GPIO_IO_CONF(lgpio));
 }
 
 static void __set_level(struct loongson_gpio_chip *lgpio, unsigned pin, int high)
@@ -69,7 +69,7 @@ static void __set_level(struct loongson_gpio_chip *lgpio, unsigned pin, int high
 		u |= 1UL << pin;
 	else
 		u &= ~(1UL << pin);
-	writeq(u, GPIO_OUT(lgpio));
+	ls7a_dc_write(u, (unsigned long)GPIO_OUT(lgpio));
 }
 
 static int loongson_gpio_direction_input(struct gpio_chip *chip, unsigned pin)

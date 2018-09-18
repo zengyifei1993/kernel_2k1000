@@ -24,6 +24,8 @@ extern int ls7a_pcibios_map_irq(struct pci_dev *dev, u8 slot, u8 pin);
 extern int ls7a_pcibios_dev_init(struct pci_dev *dev);
 extern int ls7a_setup_msi_irq(struct pci_dev *pdev, struct msi_desc *desc);
 extern void ls7a_teardown_msi_irq(unsigned int irq);
+unsigned long ls7a_dc_writeflags;
+DEFINE_SPINLOCK(ls7a_dc_writelock);
 
 static void ls7a_early_config(void)
 {

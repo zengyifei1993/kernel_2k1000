@@ -410,8 +410,18 @@ enum {
 #define ls7a_readq(addr)			  (*(volatile unsigned long  *)TO_UNCAC(addr))
 #define ls7a_writeb(val, addr)		*(volatile unsigned char  *)TO_UNCAC(addr) = (val)
 #define ls7a_writew(val, addr)		*(volatile unsigned short *)TO_UNCAC(addr) = (val)
-#define ls7a_writel(val, addr)		*(volatile unsigned int   *)TO_UNCAC(addr) = (val)
-#define ls7a_writeq(val, addr)		*(volatile unsigned long  *)TO_UNCAC(addr) = (val)
+#define ls7a_writel(val, addr)		ls7a_dc_write(val, addr)
+#define ls7a_writeq(val, addr)		ls7a_dc_write(val, addr)
+
+extern unsigned long ls7a_dc_writeflags;
+extern spinlock_t ls7a_dc_writelock;
+
+#define ls7a_dc_write(val, addr)          \
+    do {                                \
+        spin_lock_irqsave(&ls7a_dc_writelock,ls7a_dc_writeflags);          \
+        *(volatile unsigned long __force *)TO_UNCAC(addr) = (val);          \
+        spin_unlock_irqrestore(&ls7a_dc_writelock,ls7a_dc_writeflags);        \
+    }while(0)
 
 static inline int pcie_get_portnum(void *sysdata)
 {
