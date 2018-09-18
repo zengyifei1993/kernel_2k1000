@@ -43,15 +43,15 @@ static struct platform_device loongson3_cpufreq_device = {
 static struct resource loongson_gpio_resources[] = {
 	[0] = {
 		.start  = LOONGSON_REG_GPIO_BASE,
-		.end    = LOONGSON_REG_GPIO_BASE + 0xff,
+		.end    = LOONGSON_REG_GPIO_BASE + 4,
 		.flags  = IORESOURCE_MEM,
 	},
 };
 
 static struct platform_gpio_data loongson3_gpio_data = {
-	.gpio_conf = 0x20,
-	.gpio_out  = 0x1c,
-	.gpio_in   = 0x1c,
+	.gpio_conf = 4,
+	.gpio_out  = 0,
+	.gpio_in   = 0,
 	.gpio_base = 0,
 	.ngpio     = 16,
 };
