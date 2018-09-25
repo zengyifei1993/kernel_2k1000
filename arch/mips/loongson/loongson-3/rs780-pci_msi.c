@@ -96,7 +96,7 @@ again:
 	pos = find_first_zero_bit(&msi_irq_in_use[balance], 64);
 	if(pos==64)
 	{
-		balance = (balance+1)&3;
+		balance = (balance+1)&1;
 		goto again;
 	}
 	pos = pos + balance*64;
@@ -110,7 +110,7 @@ again:
 	if (test_and_set_bit(pos, msi_irq_in_use))
 		goto again;
 #ifndef CONFIG_PCI_MSI_IRQ_BALANCE
-	 balance = (balance+1)&3;
+	 balance = (balance+1)&1;
 #endif
 
 	pos1 = find_first_zero_bit(ipi_irq_in_use, RS780_DIRQS);
@@ -146,6 +146,9 @@ static void rs780_destroy_irq(unsigned int irq)
 		rs780e_irq2pos[pos] = 0;
 	}
 	clear_bit(pos, msi_irq_in_use);
+#ifndef CONFIG_PCI_MSI_IRQ_BALANCE
+	 balance = (balance-1)&1;
+#endif
 	spin_unlock_irqrestore(&lock, flags);
 }
 
