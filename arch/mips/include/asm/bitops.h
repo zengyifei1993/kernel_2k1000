@@ -25,8 +25,8 @@
 /*
  * clear_bit() doesn't provide any barrier for the compiler.
  */
-#define smp_mb__before_clear_bit()	smp_mb__before_llsc()
-#define smp_mb__after_clear_bit()	smp_llsc_mb()
+#define smp_mb__before_clear_bit()	__asm__ __volatile__(__WEAK_LLSC_MB : : :"memory")
+#define smp_mb__after_clear_bit()	__asm__ __volatile__(__WEAK_LLSC_MB : : :"memory")
 
 
 /*
