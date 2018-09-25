@@ -68,7 +68,7 @@ extern int ls3a_msi_enabled;
 #define LS3A_HT_MSI_VECTOR_MAX 	255
 
 
-static DECLARE_BITMAP(msi_irq_in_use, LS3A_NUM_MSI_IRQS) = {0xffffffffULL,0,};
+static DECLARE_BITMAP(msi_irq_in_use, LS3A_NUM_MSI_IRQS) = {0xff0000000000ffffULL,};
 #define RS780_DIRQS 	(16-IPI_IRQ_OFFSET)
 static DECLARE_BITMAP(ipi_irq_in_use, RS780_DIRQS);
 unsigned int rs780e_irq2pos[LS3A_NUM_MSI_IRQS];
@@ -92,26 +92,15 @@ static int rs780e_create_irq(void)
 	unsigned long flags;
 
 	spin_lock_irqsave(&lock, flags);
-again:
-	pos = find_first_zero_bit(&msi_irq_in_use[balance], 64);
-	if(pos==64)
+	pos = find_first_zero_bit(&msi_irq_in_use[balance], LS3A_NUM_MSI_IRQS);
+	if(pos == LS3A_NUM_MSI_IRQS)
 	{
-		balance = (balance+1)&1;
-		goto again;
-	}
-	pos = pos + balance*64;
-	irq = bit2irq(pos);
-	if (irq > NR_IRQS)
-	{	
-	spin_unlock_irqrestore(&lock, flags);
+		spin_unlock_irqrestore(&lock, flags);
 		return -ENOSPC;
 	}
-	/* test_and_set_bit operates on 32-bits at a time */
-	if (test_and_set_bit(pos, msi_irq_in_use))
-		goto again;
-#ifndef CONFIG_PCI_MSI_IRQ_BALANCE
-	 balance = (balance+1)&1;
-#endif
+
+	irq = bit2irq(pos);
+	set_bit(pos, msi_irq_in_use);
 
 	pos1 = find_first_zero_bit(ipi_irq_in_use, RS780_DIRQS);
 	if(pos1 < RS780_DIRQS)
@@ -134,7 +123,6 @@ static void rs780_destroy_irq(unsigned int irq)
 	unsigned long flags;
 	spin_lock_irqsave(&lock, flags);
 
-	LOONGSON_HT1_INTN_EN((pos/32))  &= ~(1<<(pos%32));
 	dynamic_irq_cleanup(irq);
 
 	if(rs780e_irq2pos[pos])
@@ -146,9 +134,6 @@ static void rs780_destroy_irq(unsigned int irq)
 		rs780e_irq2pos[pos] = 0;
 	}
 	clear_bit(pos, msi_irq_in_use);
-#ifndef CONFIG_PCI_MSI_IRQ_BALANCE
-	 balance = (balance-1)&1;
-#endif
 	spin_unlock_irqrestore(&lock, flags);
 }
 
@@ -188,22 +173,12 @@ int rs780_setup_msi_irq(struct pci_dev *pdev, struct msi_desc *desc)
 
 	pos = irq2ht(irq);
 	irq_set_msi_desc(irq, desc);
-#if 1
 	msg.address_hi = MSI_ADDR_BASE_HI;
 	msg.address_lo = MSI_ADDR_BASE_LO;
 
 	/*irq dispatch to ht vector 1,2.., 0 for leagacy devices*/
 	msg.data = MSI_DATA_VECTOR(pos);
 
-#else
-	msg.address_hi = 0;
-	msg.address_lo = 0xfee00000;
-
-/*irq dispatch to ht vector 1,2.., 0 for leagacy devices*/
-	//msg.data = 0x8000|(pos+32);
-	msg.data = 0x8000|pos;
-#endif
-        LOONGSON_HT1_INTN_EN((pos/32)) |= 1<<(pos%32);
 
 	printk("irq=%d\n", irq);
 	write_msi_msg(irq, &msg);

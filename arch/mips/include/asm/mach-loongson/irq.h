@@ -280,7 +280,7 @@ struct ls2h_intctl_regs {
 #endif
 
 #define IPI_IRQ_OFFSET 6
-#define IRQ_LS3A_MSI_0 64
-#define LS3A_NUM_MSI_IRQS 128
+#define IRQ_LS3A_MSI_0 0
+#define LS3A_NUM_MSI_IRQS 64
 #include_next <irq.h>
 #endif /* __ASM_MACH_LOONGSON_IRQ_H_ */
