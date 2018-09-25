@@ -19,6 +19,8 @@
 #include <linux/screen_info.h>
 #endif
 
+#include <linux/libfdt.h>
+
 static void wbflush_loongson(void)
 {
 	asm(".set\tpush\n\t"
@@ -60,6 +62,8 @@ void __init plat_mem_setup(void)
 void __init device_tree_init(void)
 {
 	unsigned long base, size;
+    void *dt;
+
 	if (!initial_boot_params) {
 		pr_warn("No valid device tree found, continuing without\n");
 		return;
@@ -68,10 +72,12 @@ void __init device_tree_init(void)
 	size = be32_to_cpu(initial_boot_params->totalsize);
 
 	/* Before we do anything, lets reserve the dt blob */
-	reserve_bootmem(base, size, BOOTMEM_DEFAULT);
+    dt = memblock_virt_alloc(size,roundup_pow_of_two(FDT_V17_SIZE));
+    if (dt) {
+         memcpy(dt, initial_boot_params, size);
+         initial_boot_params = dt;
+    }
 
 	unflatten_device_tree();
-	/* free the space reserved for the dt blob */
-	free_bootmem(base, size);
 
 }
