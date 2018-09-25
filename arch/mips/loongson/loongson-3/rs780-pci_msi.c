@@ -207,7 +207,7 @@ int rs780_setup_msi_irq(struct pci_dev *pdev, struct msi_desc *desc)
 
 	printk("irq=%d\n", irq);
 	write_msi_msg(irq, &msg);
-	irq_set_chip_and_handler(irq, &ls3a_msi_chip, handle_simple_irq);
+	irq_set_chip_and_handler(irq, &ls3a_msi_chip, handle_edge_irq);
 
 	return 0;
 }
