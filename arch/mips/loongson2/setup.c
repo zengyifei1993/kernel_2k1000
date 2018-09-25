@@ -23,6 +23,7 @@
 #include <linux/bootmem.h>
 #include <asm/prom.h>
 #include <asm/dma-coherence.h>
+#include <linux/libfdt.h>
 
 #include <ls2k.h>
 #include <linux/spinlock.h>
@@ -38,6 +39,7 @@ void __init mips_reboot_setup(void);
 void __init device_tree_init(void)
 {
 	unsigned long base, size;
+    void *dt;
 
 	if (!initial_boot_params)
 		return;
@@ -46,12 +48,13 @@ void __init device_tree_init(void)
 	size = be32_to_cpu(initial_boot_params->totalsize);
 
 	/* Before we do anything, lets reserve the dt blob */
-	reserve_bootmem(base, size, BOOTMEM_DEFAULT);
+    dt = memblock_virt_alloc(size,roundup_pow_of_two(FDT_V17_SIZE));
+    if (dt) {
+        memcpy(dt, initial_boot_params, size);
+        initial_boot_params = dt;
+    }
 
 	unflatten_device_tree();
-
-	/* free the space reserved for the dt blob */
-	free_bootmem(base, size);
 
 }
 
