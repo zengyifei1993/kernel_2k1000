@@ -40,10 +40,10 @@ static inline unsigned long __xchg_u32(volatile int * m, unsigned int val)
 	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR) {
 		unsigned long dummy;
 
+		__ls3a_war_llsc();
 		do {
 			__asm__ __volatile__(
 			"	.set	mips3				\n"
-			__WEAK_LLSC_MB
 			"	ll	%0, %3		# xchg_u32	\n"
 			"	.set	mips0				\n"
 			"	move	%2, %z4				\n"
@@ -107,10 +107,10 @@ static inline __u64 __xchg_u64(volatile __u64 * m, __u64 val)
 	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR) {
 		unsigned long dummy;
 
+		__ls3a_war_llsc();
 		do {
 			__asm__ __volatile__(
 			"	.set	mips3				\n"
-			__WEAK_LLSC_MB
 			"	lld	%0, %3		# xchg_u64	\n"
 			"	move	%2, %z4				\n"
 			"	scd	%2, %1				\n"
@@ -200,8 +200,8 @@ static inline unsigned long __xchg(unsigned long x, volatile void * ptr, int siz
 		"	.set	push				\n"	\
 		"	.set	noat				\n"	\
 		"	.set	mips3				\n"	\
+		__LS3A_WAR_LLSC						\
 		"1:				# __cmpxchg_asm \n"	\
-		__WEAK_LLSC_MB						\
 		"	" ld "	%0, %2				\n"	\
 		"	bne	%0, %z3, 2f			\n"	\
 		"	.set	mips0				\n"	\
@@ -211,7 +211,7 @@ static inline unsigned long __xchg(unsigned long x, volatile void * ptr, int siz
 		"	beqz	$1, 1b				\n"	\
 		"	.set	pop				\n"	\
 		"2:						\n"	\
-		"	sync					\n"	\
+		__LS_WAR_LLSC						\
 		: "=&r" (__ret), "=R" (*m)				\
 		: "R" (*m), "Jr" (old), "Jr" (new)			\
 		: "memory");						\
@@ -229,7 +229,7 @@ static inline unsigned long __xchg(unsigned long x, volatile void * ptr, int siz
 		"	beqz	$1, 1b				\n"	\
 		"	.set	pop				\n"	\
 		"2:						\n"	\
-		"	sync					\n"	\
+		__LS_WAR_LLSC						\
 		: "=&r" (__ret), "=R" (*m)				\
 		: "R" (*m), "Jr" (old), "Jr" (new)			\
 		: "memory");						\
@@ -275,8 +275,8 @@ static inline unsigned long __xchg(unsigned long x, volatile void * ptr, int siz
 		"	.set	push				\n"	\
 		"	.set	noat				\n"	\
 		"	.set	mips3				\n"	\
+		__LS3A_WAR_LLSC						\
 		"1:				# __cmpxchg_asm \n"	\
-		__WEAK_LLSC_MB						\
 		"	" ld "	%0, %2				\n"	\
 		"	bne	%0, %z3, 2f			\n"	\
 		"	.set	mips0				\n"	\
@@ -286,7 +286,7 @@ static inline unsigned long __xchg(unsigned long x, volatile void * ptr, int siz
 		"	beqz	$1, 1b				\n"	\
 		"	.set	pop				\n"	\
 		"2:						\n"	\
-		"	sync					\n"	\
+		__LS_WAR_LLSC						\
 		: "=&r" (__ret), "=R" (*m)				\
 		: "R" (*m), "Jr" (old), "Jr" (new)			\
 		: "memory");						\

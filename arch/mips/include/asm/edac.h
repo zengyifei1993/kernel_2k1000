@@ -19,8 +19,8 @@ static inline void atomic_scrub(void *va, u32 size)
 		if (LOONGSON_LLSC_WAR) {
 			__asm__ __volatile__ (
 			"	.set	mips2					\n"
+			__LS3A_WAR_LLSC
 			"1:				# atomic_scrub		\n"
-			__WEAK_LLSC_MB
 			"	ll	%0, %1					\n"
 			"	addu	%0, $0					\n"
 			"	sc	%0, %1					\n"
