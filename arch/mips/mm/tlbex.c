@@ -85,11 +85,7 @@ static inline int __maybe_unused r10000_llsc_war(void)
 
 static inline int __maybe_unused loongson_llsc_war(void)
 {
-#if defined(CONFIG_CPU_LOONGSON2K)
-	return 1;
-#else
 	return LOONGSON_LLSC_WAR;
-#endif
 }
 
 static int use_bbit_insns(void)
