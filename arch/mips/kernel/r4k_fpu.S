@@ -172,9 +172,9 @@ LEAF(_restore_fp_context)
 #ifdef CONFIG_CPU_MIPS32_R2
 	.set	mips32r2
 	.set	fp=64
-	mfc0	t0, CP0_STATUS
-	sll	t0, t0, 5
-	bgez	t0, 1f			# skip loading odd if FR=0
+	mfc0	t1, CP0_STATUS
+	sll	t1, t1, 5
+	bgez	t1, 1f			# skip loading odd if FR=0
 	 nop
 #endif
 	EX	ldc1 $f1, SC_FPREGS+8(a0)
@@ -226,9 +226,9 @@ LEAF(_restore_fp_context32)
 	SET_HARDFLOAT
 	EX	lw t0, SC32_FPC_CSR(a0)
 
-	mfc0	t0, CP0_STATUS
-	sll	t0, t0, 5
-	bgez	t0, 1f			# skip loading odd if FR=0
+	mfc0	t1, CP0_STATUS
+	sll	t1, t1, 5
+	bgez	t1, 1f			# skip loading odd if FR=0
 	 nop
 
 	EX      ldc1 $f1, SC32_FPREGS+8(a0)
