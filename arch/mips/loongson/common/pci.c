@@ -79,7 +79,7 @@ static void __init setup_pcimap(void)
 #endif
 }
 
-extern int sbx00_acpi_init(void);
+extern int loongson_acpi_init(void);
 
 static int __init pcibios_init(void)
 {
@@ -105,8 +105,7 @@ static int __init pcibios_init(void)
 	register_pci_controller(&loongson_pci_controller);
 
 #ifdef CONFIG_CPU_LOONGSON3
-	if (loongson_pch && loongson_pch->board_type == RS780E)
-		sbx00_acpi_init();
+    loongson_acpi_init();
 #endif
 
 	return 0;

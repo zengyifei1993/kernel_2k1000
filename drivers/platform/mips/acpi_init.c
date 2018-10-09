@@ -1,27 +1,16 @@
 #include <linux/io.h>
 #include <linux/ioport.h>
-#include <linux/pci.h>
 #include <linux/input.h>
 #include <linux/init.h>
 #include <linux/export.h>
 #include <linux/interrupt.h>
-
-#define SBX00_ACPI_IO_BASE 0x800
-#define SBX00_ACPI_IO_SIZE 0x100
-
-#define ACPI_PM_EVT_BLK         (SBX00_ACPI_IO_BASE + 0x00) /* 4 bytes */
-#define ACPI_PM_CNT_BLK         (SBX00_ACPI_IO_BASE + 0x04) /* 2 bytes */
-#define ACPI_PMA_CNT_BLK        (SBX00_ACPI_IO_BASE + 0x0F) /* 1 byte */
-#define ACPI_PM_TMR_BLK         (SBX00_ACPI_IO_BASE + 0x18) /* 4 bytes */
-#define ACPI_GPE0_BLK           (SBX00_ACPI_IO_BASE + 0x10) /* 8 bytes */
-#define ACPI_END                (SBX00_ACPI_IO_BASE + 0x80)
-
-#define PM_INDEX        0xCD6
-#define PM_DATA         0xCD7
-#define PM2_INDEX       0xCD0
-#define PM2_DATA        0xCD1
+#include <loongson-pch.h>
 
 static int acpi_irq;
+static void *gpe0_status_reg;
+static void *acpi_status_reg;
+static void *acpi_enable_reg;
+static void *acpi_control_reg;
 static struct input_dev *button;
 
 /*
@@ -112,9 +101,9 @@ static irqreturn_t acpi_int_routine(int irq, void *dev_id)
 	u16 value;
 
 	/* PMStatus: Check PwrBtnStatus */
-	value = inw(ACPI_PM_EVT_BLK);
+	value = readw(acpi_status_reg);
 	if (value & (1 << 8)) {
-		outw(1 << 8, ACPI_PM_EVT_BLK);
+		writew(1 << 8, acpi_status_reg);
 		pr_info("Power Button pressed...\n");
 		input_report_key(button, KEY_POWER, 1);
 		input_sync(button);
@@ -131,15 +120,8 @@ static int __init power_button_init(void)
 	int ret;
 	struct pci_dev *dev;
 
-	dev = pci_get_bus_and_slot(0, 0);
-	switch (dev->vendor) {
-	case PCI_VENDOR_ID_AMD:
-	case PCI_VENDOR_ID_ATI:
-		acpi_irq = 7;
-		break;
-	default:
-		return -ENODEV;
-	}
+    if (!acpi_irq)
+        return -ENODEV;
 
 	button = input_allocate_device();
 	if (!button)
@@ -173,6 +155,9 @@ void acpi_registers_setup(void)
 {
 	u32 value;
 
+    if (loongson_pch->board_type != RS780E)
+            goto enable_power_button;
+
 	/* PM Status Base */
 	pm_iowrite(0x20, ACPI_PM_EVT_BLK & 0xff);
 	pm_iowrite(0x21, ACPI_PM_EVT_BLK >> 8);
@@ -194,9 +179,6 @@ void acpi_registers_setup(void)
 				   * the contents of the PM registers at
 				   * index 20-2B to decode ACPI I/O address.
 				   * AcpiSmiEn & SmiCmdEn */
-
-	/* SCI_EN set P225 */
-	outw(1, ACPI_PM_CNT_BLK);
 
 	/* Enable to generate SCI P180 */
 	pm_iowrite(0x10, pm_ioread(0x10) | 1);
@@ -233,17 +215,49 @@ void acpi_registers_setup(void)
 	value |= ((1 << 5) | (1 << 1));
 	pm2_iowrite(0xf8, value);
 
-	/* PMEnable: Enable PwrBtn */
-	value = inw(ACPI_PM_EVT_BLK + 2);
-	value |= 1 << 8;
-	outw(value, ACPI_PM_EVT_BLK + 2);
+enable_power_button:
+    /* SCI_EN set */
+    value = readw(acpi_control_reg);                                                                                                                                        
+    value |= 1;
+    writew(value, acpi_control_reg);
+
+    /* PMEnable: Enable PwrBtn */
+    value = readw(acpi_enable_reg);
+    value |= 1 << 8;
+    writew(value, acpi_enable_reg);
 }
 
-int __init sbx00_acpi_init(void)
+int __init loongson_acpi_init(void)
 {
-	register_acpi_resource();
-	acpi_registers_setup();
-	acpi_hw_clear_status();
+    switch (loongson_pch->board_type) {
+        case LS2H:
+            acpi_irq = LS2H_PCH_ACPI_IRQ;
+            acpi_control_reg = LS2H_PM1_CNT_REG;
+            acpi_status_reg  = LS2H_PM1_STS_REG;
+            acpi_enable_reg  = LS2H_PM1_EN_REG;
+            gpe0_status_reg  = LS2H_GPE0_STS_REG;
+            break;
+        case LS7A:
+            acpi_irq = LS7A_IOAPIC_ACPI_INT_IRQ;
+            acpi_control_reg = LS7A_PM1_CNT_REG;
+            acpi_status_reg  = LS7A_PM1_EVT_REG;
+            acpi_enable_reg  = LS7A_PM1_ENA_REG;
+            gpe0_status_reg  = LS7A_GPE0_STS_REG;
+            break;
+        case RS780E:
+            acpi_irq = RS780_PCH_ACPI_IRQ;
+            acpi_control_reg = (void *)(mips_io_port_base + SBX00_PM_CNT_BLK + 0);
+            acpi_status_reg  = (void *)(mips_io_port_base + SBX00_PM_EVT_BLK + 0);
+            acpi_enable_reg  = (void *)(mips_io_port_base + SBX00_PM_EVT_BLK + 2);
+            gpe0_status_reg  = (void *)(mips_io_port_base + SBX00_GPE0_BLK   + 0);
+            register_acpi_resource();
+            break;
+        default:
+            return 0;
+    }
+
+    acpi_registers_setup();
+    acpi_hw_clear_status();
 
 	return 0;
 }
