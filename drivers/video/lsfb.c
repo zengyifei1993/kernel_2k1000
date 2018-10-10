@@ -1107,7 +1107,16 @@ static int ls_find_init_mode(struct fb_info *info)
 	specs->modedb = NULL;
 	return 0;
 def:
-	info->var = ls_fb_default;
+	if (mode_option) {
+		printk("mode_option: %s\n", mode_option);
+		fb_find_mode(&var, info, mode_option, specs->modedb,
+				specs->modedb_len, (found) ? &mode : NULL,info->var.bits_per_pixel);
+		info->var = var;
+	} else {
+	
+		info->var = ls_fb_default;
+	}
+
 	return 0;
 }
 
