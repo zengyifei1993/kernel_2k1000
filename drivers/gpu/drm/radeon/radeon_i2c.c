@@ -78,6 +78,13 @@ bool radeon_ddc_probe(struct radeon_connector *radeon_connector, bool use_aux)
 	 * Only the first 6 bytes must be valid as
 	 * drm_edid_block_valid() can fix the last 2 bytes */
 	if (drm_edid_header_is_valid(buf) < 6) {
+		/* The projector calls the display settings during
+ 		 * the connection process, the obtained EDID is incorrect.
+ 		 * Eventually projector is no signal output during the connection process.
+ 		 * And the first 8 bytes validity checks are all wrong */
+		if(drm_edid_header_is_valid(buf) == 0)
+                        return true;
+ 
 		/* Couldn't find an accessible EDID on this
 		 * connector */
 		return false;
