@@ -64,12 +64,12 @@ static void acpi_hw_clear_status(void)
 	u16 value;
 
 	/* PMStatus: Clear WakeStatus/PwrBtnStatus */
-	value = inw(ACPI_PM_EVT_BLK);
+    value = readw(acpi_status_reg);
 	value |= (1 << 8 | 1 << 15);
-	outw(value, ACPI_PM_EVT_BLK);
+    writew(value, acpi_status_reg);
 
 	/* GPEStatus: Clear all generated events */
-	outl(inl(ACPI_GPE0_BLK), ACPI_GPE0_BLK);
+    writel(readl(gpe0_status_reg), gpe0_status_reg);
 }
 
 void acpi_sleep_prepare(void)
@@ -79,9 +79,11 @@ void acpi_sleep_prepare(void)
 	acpi_hw_clear_status();
 
 	/* Turn ON LED blink */
-	value = pm_ioread(0x7c);
-	value = (value & ~0xc) | 0x8;
-	pm_iowrite(0x7c, value);
+    if (loongson_pch->board_type == RS780E) {
+	    value = pm_ioread(0x7c);
+	    value = (value & ~0xc) | 0x8;
+	    pm_iowrite(0x7c, value);
+    }
 }
 
 void acpi_sleep_complete(void)
@@ -91,9 +93,11 @@ void acpi_sleep_complete(void)
 	acpi_hw_clear_status();
 
 	/* Turn OFF LED blink */
-	value = pm_ioread(0x7c);
-	value |= 0xc;
-	pm_iowrite(0x7c, value);
+    if (loongson_pch->board_type == RS780E) {
+	    value = pm_ioread(0x7c);
+	    value |= 0xc;
+	    pm_iowrite(0x7c, value);
+    }
 }
 
 static irqreturn_t acpi_int_routine(int irq, void *dev_id)
@@ -118,7 +122,6 @@ static irqreturn_t acpi_int_routine(int irq, void *dev_id)
 static int __init power_button_init(void)
 {
 	int ret;
-	struct pci_dev *dev;
 
     if (!acpi_irq)
         return -ENODEV;
@@ -159,20 +162,20 @@ void acpi_registers_setup(void)
             goto enable_power_button;
 
 	/* PM Status Base */
-	pm_iowrite(0x20, ACPI_PM_EVT_BLK & 0xff);
-	pm_iowrite(0x21, ACPI_PM_EVT_BLK >> 8);
+	pm_iowrite(0x20, SBX00_PM_EVT_BLK & 0xff);
+	pm_iowrite(0x21, SBX00_PM_EVT_BLK >> 8);
 
 	/* PM Control Base */
-	pm_iowrite(0x22, ACPI_PM_CNT_BLK & 0xff);
-	pm_iowrite(0x23, ACPI_PM_CNT_BLK >> 8);
+	pm_iowrite(0x22, SBX00_PM_CNT_BLK & 0xff);
+	pm_iowrite(0x23, SBX00_PM_CNT_BLK >> 8);
 
 	/* GPM Base */
-	pm_iowrite(0x28, ACPI_GPE0_BLK & 0xff);
-	pm_iowrite(0x29, ACPI_GPE0_BLK >> 8);
+	pm_iowrite(0x28, SBX00_GPE0_BLK & 0xff);
+	pm_iowrite(0x29, SBX00_GPE0_BLK >> 8);
 
 	/* ACPI End */
-	pm_iowrite(0x2e, ACPI_END & 0xff);
-	pm_iowrite(0x2f, ACPI_END >> 8);
+	pm_iowrite(0x2e, SBX00_PM_END & 0xff);
+	pm_iowrite(0x2f, SBX00_PM_END >> 8);
 
 	/* IO Decode */
 	pm_iowrite(0x0e, 1 << 3); /* AcpiDecodeEnable, When set, SB uses
@@ -184,8 +187,8 @@ void acpi_registers_setup(void)
 	pm_iowrite(0x10, pm_ioread(0x10) | 1);
 
 	/* GPM3/GPM9 enable P227 */
-	value = inl(ACPI_GPE0_BLK + 4);
-	outl(value | (1 << 14) | (1 << 22), ACPI_GPE0_BLK + 4);
+	value = inl(SBX00_GPE0_BLK + 4);
+	outl(value | (1 << 14) | (1 << 22), SBX00_GPE0_BLK + 4);
 
 	/* Set GPM9 as input P205 */
 	pm_iowrite(0x8d, pm_ioread(0x8d) & (~(1 << 1)));
