@@ -162,10 +162,7 @@ void rs780_irq_router_init(void)
 void __init rs780_init_irq(void)
 {
 	int prid = read_c0_prid();
-	if(((prid & 0xff00) == PRID_IMP_LOONGSON2) && \
-		(((prid & 0xff) <= PRID_REV_LOONGSON3A_R1) || \
-		 (((prid & 0xff) < PRID_REV_LOONGSON3A_R3_1) && \
-		  (((LOONGSON3_REG32(LOONGSON_HT1_CFG_BASE, 0x5c)>>16)&0xf) != 0x1)))) {
+	if(((prid & 0xff00) == PRID_IMP_LOONGSON2) && ((prid & 0xff) <= PRID_REV_LOONGSON3A_R3_1)) {
 		pr_info("Do not supports HT MSI interrupt, disabling RS780E MSI Interrupt.\n");
 		ls3a_msi_enabled = 0;
 	} else {
