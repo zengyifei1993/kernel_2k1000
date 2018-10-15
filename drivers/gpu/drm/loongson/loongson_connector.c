@@ -59,11 +59,11 @@ static struct drm_encoder *loongson_connector_best_encoder(struct drm_connector
  *
  * Try to fetch EDID information by calling I2C driver functions
  */
-static unsigned char *loongson_do_probe_ddc_edid(struct i2c_adapter *adapter,unsigned int id)
+static bool loongson_do_probe_ddc_edid(struct i2c_adapter *adapter, unsigned int id, unsigned char *buf)
 {
 	unsigned char start = 0x0;
-	unsigned char *buf = kmalloc(EDID_LENGTH * 2, GFP_KERNEL);
-	unsigned int che_tmp = 0,i;
+	unsigned int che_tmp = 0;
+	unsigned int i;
 	struct i2c_msg msgs[] = {
 		{
 			.addr = 0x50,
@@ -77,25 +77,24 @@ static unsigned char *loongson_do_probe_ddc_edid(struct i2c_adapter *adapter,uns
 			.buf = buf,
 		}
 	};
-	if (!buf){
-		dev_warn(&adapter->dev, "unable to allocate memory for EDID "
-			"block.\n");
-		return NULL;
-	}
-	if (i2c_transfer(adapter, msgs, 2) == 2){
-		if(buf[126] != 0){
+	if (i2c_transfer(adapter, msgs, 2) == 2) {
+		if (buf[126] != 0) {
 			buf[126] = 0;
 			che_tmp = 0;
-			for(i = 0;i < 127;i++){
+			for(i = 0;i < 127;i++) {
 				che_tmp += buf[i];
 			}
 			buf[127] = 256-(che_tmp)%256;
 		}
-		return buf;
-	}
-	dev_warn(&adapter->dev, "unable to read EDID block.\n");
-	kfree(buf);
-	return NULL;
+		if (!drm_edid_block_valid(buf, 0, true, NULL)) {
+                        dev_warn_once(&adapter->dev, "Invalid EDID block\n");
+                        return false;
+                }
+        } else {
+                 dev_warn_once(&adapter->dev, "unable to read EDID block\n");
+                 return false;
+        }
+        return true;
 }
 
 
@@ -182,18 +181,12 @@ static void loongson_do_probe_ddc_ch7034(struct i2c_adapter *adapter)
  *
  * According to i2c bus,acquire screen information
  */
-static unsigned char *loongson_i2c_connector(unsigned int id)
+static bool loongson_i2c_connector(unsigned int id, unsigned char *buf)
 {
-	unsigned char *edid = NULL;
 
-	DRM_DEBUG("edid entry\n");
-	if (!edid) {
-		if (eeprom_info[id].adapter){
-			edid = loongson_do_probe_ddc_edid(eeprom_info[id].adapter,id);
-		}
-	}
-
-	return edid;
+	if (eeprom_info[id].adapter) {
+                return loongson_do_probe_ddc_edid(eeprom_info[id].adapter, id, buf);
+        }
 }
 
 
@@ -207,18 +200,31 @@ static unsigned char *loongson_i2c_connector(unsigned int id)
  */
 static int loongson_vga_get_modes(struct drm_connector *connector)
 {
+	struct drm_device *dev = connector->dev;
 	struct loongson_connector *loongson_connector = to_loongson_connector(connector);
-	struct edid *edid;
+	struct loongson_drm_device *ldev = dev->dev_private;
+        enum loongson_edid_method ledid_method;
+        unsigned char *buf = kmalloc(EDID_LENGTH *2, GFP_KERNEL);
+	struct edid *edid = NULL;
+	bool dret = false;
 	int ret = 0;
 
+	if (!buf) {
+                dev_warn(&dev->dev, "Unable to allocate memory for EDID block\n");
+                return 0;
+        }
+	ledid_method = ldev->connector_vbios[drm_connector_index(connector)]->edid_method;
+
 	DRM_DEBUG("connecotro_id = %d\n",connector->connector_id);
-	edid = (struct edid *)loongson_i2c_connector(connector->connector_id);
-	if (edid) {
-		drm_mode_connector_update_edid_property(connector, edid);
-		ret = drm_add_edid_modes(connector, edid);
-		kfree(edid);
-	}
-	DRM_DEBUG("the vga get modes ret is %d\n",ret);
+	if (ledid_method == edid_method_i2c) {
+                dret = loongson_i2c_connector(connector->connector_id, buf);
+                if (dret) {
+                        edid = (struct edid *)buf;
+                        drm_mode_connector_update_edid_property(connector, edid);
+                        ret = drm_add_edid_modes(connector, edid);
+                }
+        }
+	kfree(buf);
 	return ret;
 }
 
@@ -296,9 +302,11 @@ static enum drm_connector_status loongson_vga_detect(struct drm_connector
 	struct loongson_connector *loongson_connector = to_loongson_connector(connector);
         enum drm_connector_status ret = connector_status_disconnected;
 	enum loongson_edid_method ledid_method;
-        int r;
+	enum drm_connector_status old_status;
+	int r;
 
 	ledid_method = ldev->connector_vbios[connector->connector_id]->edid_method;
+	old_status = connector->status;
 
 	DRM_DEBUG("loongson_vga_detect connect_id=%d, ledid_method=%d\n", connector->connector_id, ledid_method);
 
@@ -320,8 +328,15 @@ static enum drm_connector_status loongson_vga_detect(struct drm_connector
 	} else if (ledid_method == edid_method_null ||
 			ledid_method == edid_method_vbios) {
 		ret = connector_status_connected;
-	} 		
-	return ret;
+	}
+
+	/* Power on when the host is not connected to any monitor */
+	if(old_status == connector_status_unknown &&
+                        ret == connector_status_disconnected)
+        {
+                ret = connector_status_connected;
+        }
+  	return ret;
 }
 
 /**
