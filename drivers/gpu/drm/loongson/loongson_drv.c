@@ -360,6 +360,7 @@ int loongson_modeset_init(struct loongson_drm_device *ldev)
 
 		ldev->mode_info[i].connector = connector;
 		drm_mode_connector_attach_encoder(connector, encoder);
+		connector->polled = DRM_CONNECTOR_POLL_CONNECT | DRM_CONNECTOR_POLL_DISCONNECT;
 	}
 	DRM_DEBUG("loongson drm fbdev init\n");
 	ret = loongson_fbdev_init(ldev);
@@ -480,7 +481,7 @@ static int loongson_vga_load(struct drm_device *dev, unsigned long flags)
 	/* Make small buffers to store a hardware cursor (double buffered icon updates) */
 	loongson_bo_create(dev, roundup(32*32*4, PAGE_SIZE), 0, 0,
 					  &ldev->cursor.pixels);
-
+	drm_kms_helper_poll_init(dev);
 	return 0;
 }
 
