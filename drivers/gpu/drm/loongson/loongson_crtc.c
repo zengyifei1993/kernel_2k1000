@@ -122,7 +122,9 @@ static int loongson_crtc_do_set_base(struct drm_crtc *crtc,
 	DRM_DEBUG ("crtc pitches[0]=%d\n",crtc->primary->fb->pitches[0]);
 	loongson_fb = to_loongson_framebuffer(crtc->primary->fb);
 
-	if(ldev->mode_info[0].connector->base.status == connector_status_connected
+	if(ldev->num_crtc < 2) {
+		ldev->clone_mode = false;
+        }else if(ldev->mode_info[0].connector->base.status == connector_status_connected
 		&& ldev->mode_info[1].connector->base.status == connector_status_connected
 		&& loongson_fb->base.width == crtc->mode.hdisplay && loongson_fb->base.height == crtc->mode.vdisplay && x == 0 && y == 0){
 		DRM_DEBUG("use clone mode\n");
