@@ -249,7 +249,7 @@ int has_loongson_workaround(struct hda_codec *codec)
 {
 	struct azx *chip = bus_to_azx(&codec->bus->core);
 
-	return chip->driver_caps & AZX_DCAPS_LS2H_WORKAROUND;
+	return chip->driver_caps & AZX_DCAPS_LS_HDA_WORKAROUND;
 }
 
 /*
@@ -4785,6 +4785,7 @@ enum {
 	ALC221_FIXUP_HP_FRONT_MIC,
 	ALC292_FIXUP_TPT460,
 	ALC269_FIXUP_CZC_B20,
+	ALC269_FIXUP_LS3A7A,
 };
 
 static const struct hda_fixup alc269_fixups[] = {
@@ -5456,7 +5457,16 @@ static const struct hda_fixup alc269_fixups[] = {
 			{ }
 		},
 		.chain_id =ALC269_FIXUP_DMIC,
-    },
+	},
+	[ALC269_FIXUP_LS3A7A] = {
+		.type = HDA_FIXUP_PINS,
+		.v.pins = (const struct hda_pintbl[]) {
+			{ 0x1b, 0x02214c40 }, /* Front Mic */
+			{ 0x15, 0x01014030 }, /* Rear Mic */
+			{ }
+		},
+	},
+
 };
 
 static const struct snd_pci_quirk alc269_fixup_tbl[] = {
@@ -5634,7 +5644,7 @@ static const struct snd_pci_quirk alc269_fixup_tbl[] = {
 	SND_PCI_QUIRK(0x17aa, 0x9e54, "LENOVO NB", ALC269_FIXUP_LENOVO_EAPD),
 	SND_PCI_QUIRK(0x1b35, 0x1235, "CZC B20", ALC269_FIXUP_CZC_B20),
 	SND_PCI_QUIRK(0x1b7d, 0xa831, "Ordissimo EVE2 ", ALC269VB_FIXUP_ORDISSIMO_EVE2), /* Also known as Malata PC-B1303 */
-
+	SND_PCI_QUIRK(0x10ec, 0x0269, "ls3a7a", ALC269_FIXUP_LS3A7A),
 #if 0
 	/* Below is a quirk table taken from the old code.
 	 * Basically the device should work as is without the fixup table.

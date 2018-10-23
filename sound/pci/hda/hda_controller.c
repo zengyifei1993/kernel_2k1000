@@ -303,7 +303,7 @@ unsigned int azx_get_position(struct azx *chip,
 	int stream = substream->stream;
 	int delay = 0;
 
-	if (chip->driver_caps & AZX_DCAPS_LS2H_WORKAROUND) {
+	if (chip->driver_caps & AZX_DCAPS_LS_HDA_WORKAROUND) {
 		pos = chip->get_position[stream](chip, azx_dev);
 
 		if (pos >= azx_dev->fix_prvpos) {
@@ -618,7 +618,7 @@ static int azx_rirb_get_response(struct hdac_bus *bus, unsigned int addr,
 	for (loopcounter = 0;; loopcounter++) {
 		spin_lock_irq(&bus->reg_lock);
 		if (chip->polling_mode || do_poll) {
-			if (chip->driver_caps & AZX_DCAPS_LS2H_WORKAROUND)
+			if (chip->driver_caps & AZX_DCAPS_LS_HDA_WORKAROUND)
 				bus->rirb.cmds[addr] %= AZX_MAX_RIRB_ENTRIES;
 			snd_hdac_bus_update_rirb(bus);
 		}
@@ -779,7 +779,7 @@ static int azx_send_cmd(struct hdac_bus *bus, unsigned int val)
 
 	if (chip->disabled)
 		return 0;
-	if (chip->driver_caps & AZX_DCAPS_LS2H_WORKAROUND)
+	if (chip->driver_caps & AZX_DCAPS_LS_HDA_WORKAROUND)
 		udelay(500);
 	if (chip->single_cmd)
 		return azx_single_send_cmd(bus, val);
@@ -968,7 +968,7 @@ irqreturn_t azx_interrupt(int irq, void *dev_id)
 		goto unlock;
 
 	do {
-		if (chip->driver_caps & AZX_DCAPS_LS2H_WORKAROUND) {
+		if (chip->driver_caps & AZX_DCAPS_LS_HDA_WORKAROUND) {
 			list_for_each_entry(azx_dev, &bus->stream_list, list) {
 				status |= (snd_hdac_stream_readb(azx_dev, SD_STS) & SD_INT_MASK) ?
 				    (1 << i) : 0;
@@ -980,7 +980,7 @@ irqreturn_t azx_interrupt(int irq, void *dev_id)
 			status = azx_readl(chip, INTSTS);
 
 		if (status == 0 ||
-			(status == 0xffffffff && !(chip->driver_caps & AZX_DCAPS_LS2H_WORKAROUND)))
+			(status == 0xffffffff && !(chip->driver_caps & AZX_DCAPS_LS_HDA_WORKAROUND)))
 			break;
 
 		handled = true;
@@ -997,7 +997,7 @@ irqreturn_t azx_interrupt(int irq, void *dev_id)
 					udelay(80);
 				snd_hdac_bus_update_rirb(bus);
 			}
-			if (chip->driver_caps & AZX_DCAPS_LS2H_WORKAROUND)
+			if (chip->driver_caps & AZX_DCAPS_LS_HDA_WORKAROUND)
 				azx_writeb(chip, RIRBSTS, status & RIRB_INT_MASK);
 			else
 				azx_writeb(chip, RIRBSTS, RIRB_INT_MASK);

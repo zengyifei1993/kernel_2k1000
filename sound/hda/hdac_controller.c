@@ -57,14 +57,14 @@ void snd_hdac_bus_init_cmd_io(struct hdac_bus *bus)
 
 	/* reset the corb hw read pointer */
 	snd_hdac_chip_writew(bus, CORBRP, AZX_CORBRP_RST);
-	if (chip->driver_caps & AZX_DCAPS_LS2H_WORKAROUND)
+	if (chip->driver_caps & AZX_DCAPS_LS_HDA_WORKAROUND)
 		snd_hdac_chip_writew(bus, CORBRP, 0);
 	else if (!bus->corbrp_self_clear)
 		azx_clear_corbrp(bus);
 
 	/* enable corb dma */
 	snd_hdac_chip_writeb(bus, CORBCTL, AZX_CORBCTL_RUN);
-	if (chip->driver_caps & AZX_DCAPS_LS2H_WORKAROUND)
+	if (chip->driver_caps & AZX_DCAPS_LS_HDA_WORKAROUND)
 		snd_hdac_chip_readb(bus, CORBCTL);
 
 	/* RIRB set up */
@@ -82,7 +82,7 @@ void snd_hdac_bus_init_cmd_io(struct hdac_bus *bus)
 	/* set N=1, get RIRB response interrupt for new entry */
 	snd_hdac_chip_writew(bus, RINTCNT, 1);
 	/* enable rirb dma and response irq */
-	if (chip->driver_caps & AZX_DCAPS_LS2H_WORKAROUND) {
+	if (chip->driver_caps & AZX_DCAPS_LS_HDA_WORKAROUND) {
 		snd_hdac_chip_writeb(bus, RIRBCTL, AZX_RBCTL_DMA_EN);
 		snd_hdac_chip_readb(bus, RIRBCTL);
 	}
@@ -389,7 +389,7 @@ static void azx_int_clear(struct hdac_bus *bus)
 
 	/* clear stream status */
 	list_for_each_entry(azx_dev, &bus->stream_list, list) {
-		if (chip->driver_caps & AZX_DCAPS_LS2H_WORKAROUND)
+		if (chip->driver_caps & AZX_DCAPS_LS_HDA_WORKAROUND)
 			snd_hdac_stream_updateb(azx_dev, SD_STS, 0, 0);
 		else
 			snd_hdac_stream_writeb(azx_dev, SD_STS, SD_INT_MASK);
@@ -399,7 +399,7 @@ static void azx_int_clear(struct hdac_bus *bus)
 	snd_hdac_chip_writew(bus, STATESTS, STATESTS_INT_MASK);
 
 	/* clear rirb status */
-	if (chip->driver_caps & AZX_DCAPS_LS2H_WORKAROUND)
+	if (chip->driver_caps & AZX_DCAPS_LS_HDA_WORKAROUND)
 		snd_hdac_chip_updateb(bus, RIRBSTS, ~RIRB_INT_MASK, 0);
 	else
 		snd_hdac_chip_writeb(bus, RIRBSTS, RIRB_INT_MASK);
@@ -485,7 +485,7 @@ int snd_hdac_bus_handle_stream_irq(struct hdac_bus *bus, unsigned int status,
 	list_for_each_entry(azx_dev, &bus->stream_list, list) {
 		if (status & azx_dev->sd_int_sta_mask) {
 			sd_status = snd_hdac_stream_readb(azx_dev, SD_STS);
-			if (chip->driver_caps & AZX_DCAPS_LS2H_WORKAROUND) {
+			if (chip->driver_caps & AZX_DCAPS_LS_HDA_WORKAROUND) {
 				snd_hdac_stream_writeb(azx_dev, SD_STS, sd_status);
 				snd_hdac_stream_readb(azx_dev, SD_STS);
 			}
