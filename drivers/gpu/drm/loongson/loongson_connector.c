@@ -283,6 +283,34 @@ void loongson_i2c_destroy(struct loongson_i2c_chan *i2c)
 	kfree(i2c);
 }
 
+/* Power on when there is noconnector,support hotplug */
+static bool poweron_flags = true;
+
+/**
+ * loongson_vga_boots
+ *
+ * Power on when the host is not connected to any monitor
+ */
+static enum drm_connector_status loongson_vga_boots(enum drm_connector_status status,
+                                                        enum drm_connector_status ret)
+{
+        if (status == connector_status_unknown &&
+			ret == connector_status_disconnected)
+        {
+                ret = connector_status_connected;
+        }
+        if (status == connector_status_connected &&
+			ret == connector_status_connected)
+        {
+                poweron_flags = false;
+        }
+        if (poweron_flags == true && status == connector_status_connected &&
+			ret == connector_status_disconnected)
+        {
+                ret =connector_status_connected;
+        }
+        return ret;
+}
 
 /**
  * loongson_vga_detect
@@ -302,11 +330,11 @@ static enum drm_connector_status loongson_vga_detect(struct drm_connector
 	struct loongson_connector *loongson_connector = to_loongson_connector(connector);
         enum drm_connector_status ret = connector_status_disconnected;
 	enum loongson_edid_method ledid_method;
-	enum drm_connector_status old_status;
 	int r;
+	enum drm_connector_status status;
+	status = connector->status;
 
 	ledid_method = ldev->connector_vbios[connector->connector_id]->edid_method;
-	old_status = connector->status;
 
 	DRM_DEBUG("loongson_vga_detect connect_id=%d, ledid_method=%d\n", connector->connector_id, ledid_method);
 
@@ -320,6 +348,7 @@ static enum drm_connector_status loongson_vga_detect(struct drm_connector
 			DRM_DEBUG("loongson_vga_detect: connected");
 			ret = connector_status_connected;
 		}
+		ret = loongson_vga_boots(status,ret);
 
 		pm_runtime_mark_last_busy(connector->dev->dev);
 		pm_runtime_put_autosuspend(connector->dev->dev);
@@ -330,12 +359,6 @@ static enum drm_connector_status loongson_vga_detect(struct drm_connector
 		ret = connector_status_connected;
 	}
 
-	/* Power on when the host is not connected to any monitor */
-	if(old_status == connector_status_unknown &&
-                        ret == connector_status_disconnected)
-        {
-                ret = connector_status_connected;
-        }
   	return ret;
 }
 
