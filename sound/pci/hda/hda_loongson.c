@@ -83,7 +83,7 @@ static bool enable[SNDRV_CARDS] = SNDRV_DEFAULT_ENABLE_PNP;
 static char *model[SNDRV_CARDS];
 static int bdl_pos_adj[SNDRV_CARDS] = {[0 ... (SNDRV_CARDS-1)] = -1};
 static int probe_only[SNDRV_CARDS];
-static int jackpoll_ms[SNDRV_CARDS];
+static int jackpoll_ms[SNDRV_CARDS] = {1000};
 static bool single_cmd;
 static int enable_msi = -1;
 #ifdef CONFIG_SND_HDA_INPUT_BEEP
@@ -152,7 +152,7 @@ MODULE_SUPPORTED_DEVICE("{{Intel, ICH6},"
 			 "{Intel, ICH8},"
 			 "{Intel, ICH9},"
 			 "{Intel, ICH10}}");
-MODULE_DESCRIPTION("Loongson-2H HDA driver");
+MODULE_DESCRIPTION("Loongson HDA driver");
 
 /* driver types */
 enum {
@@ -521,6 +521,11 @@ static int azx_dev_free(struct snd_device *device)
  */
 static const struct hdac_io_ops loongson_hda_io_ops;
 static const struct hda_controller_ops loongson_hda_ops;
+static void azx_probe_work(struct work_struct *work)
+{
+	struct hda_loongson *hda = container_of(work, struct hda_loongson, probe_work);
+	azx_probe_continue(&hda->chip);
+}
 
 static int azx_create(struct snd_card *card, struct platform_device *pdev,
 		      int dev, unsigned int driver_caps,
@@ -586,6 +591,8 @@ static int azx_create(struct snd_card *card, struct platform_device *pdev,
 		azx_free(chip);
 		return err;
 	}
+	
+	INIT_WORK(&hda->probe_work, azx_probe_work);
 
 	*rchip = chip;
 
@@ -776,7 +783,6 @@ static int azx_probe(struct platform_device *pdev)
 		dev++;
 		return -ENOENT;
 	}
-
 	err = snd_card_new(&pdev->dev, index[dev], id[dev], THIS_MODULE,
 			   0, &card);
 	if (err < 0) {
@@ -784,7 +790,7 @@ static int azx_probe(struct platform_device *pdev)
 		return err;
 	}
 
-	err = azx_create(card, pdev, dev, AZX_DRIVER_ICH | AZX_DCAPS_LS2H_WORKAROUND, &chip);
+	err = azx_create(card, pdev, dev, AZX_DRIVER_ICH | AZX_DCAPS_LS_HDA_WORKAROUND, &chip);
 	if (err < 0)
 		goto out_free;
 	card->private_data = chip;
@@ -794,12 +800,8 @@ static int azx_probe(struct platform_device *pdev)
 
 	probe_now = !chip->disabled;
 
-	if (probe_now) {
-		err = azx_probe_continue(chip);
-		if (err < 0)
-			goto out_free;
-	}
-
+	if (probe_now)
+		schedule_work(&hda->probe_work);
 	dev++;
 	if (chip->disabled)
 		complete_all(&hda->probe_wait);
@@ -821,7 +823,6 @@ static int azx_probe_continue(struct azx *chip)
 	struct device *snddev = chip->card->dev;
 
 	hda->probe_continued = 1;
-
 	err = azx_first_init(chip);
 	if (err < 0)
 		goto out_free;
@@ -834,13 +835,11 @@ static int azx_probe_continue(struct azx *chip)
 	err = azx_probe_codecs(chip, azx_max_codecs[chip->driver_type]);
 	if (err < 0)
 		goto out_free;
-
 	if ((probe_only[dev] & 1) == 0) {
 		err = azx_codec_configure(chip);
 		if (err < 0)
 			goto out_free;
 	}
-
 	err = snd_card_register(chip->card);
 	if (err < 0)
 		goto out_free;
@@ -854,7 +853,7 @@ static int azx_probe_continue(struct azx *chip)
 	snd_hda_set_power_save(&chip->bus, power_save * 1000);
 	if (azx_has_pm_runtime(chip))
 		pm_runtime_put_noidle(snddev);
-
+	
 out_free:
 	complete_all(&hda->probe_wait);
 	return err;
@@ -883,15 +882,100 @@ static struct platform_driver azx_driver = {
 	.remove = azx_remove,
 	.shutdown = azx_shutdown,
 	.driver = {
-		.name = "ls2h-audio",
+		.name = "ls-audio",
 		.owner = THIS_MODULE,
 		.pm = AZX_PM_OPS,
 	},
 };
 
+#define PCI_DEVICE_ID_HDA 0x7a07
+#define PCI_VENDOR_ID_HDA 0x0014
+
+static DEFINE_PCI_DEVICE_TABLE(azx_id_table) = {
+	{PCI_DEVICE(PCI_VENDOR_ID_HDA, PCI_DEVICE_ID_HDA)},
+	{}
+};
+
+MODULE_DEVICE_TABLE(pci, azx_id_table);
+
+
+static struct resource ls_hda_resources[] = {
+	[0] = {
+		.flags	= IORESOURCE_MEM,
+	},
+	[1] = {
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+
+
+static struct platform_device ls_hda_device = {
+	.name		= "ls-audio",
+	.id		= 0,
+	.num_resources	= ARRAY_SIZE(ls_hda_resources),
+	.resource	= ls_hda_resources,
+};
+
+
+static int azx_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
+{
+	int ret;
+	unsigned char v8;
+
+	/* Enable device in PCI config */
+	ret = pci_enable_device(pdev);
+	if (ret < 0) {
+		printk(KERN_ERR "ls hda (%s): Cannot enable PCI device\n", pci_name(pdev));
+		goto err_out;
+	}
+
+
+	/* request the mem regions */
+	ret = pci_request_region(pdev, 0, "lshda io");
+	if (ret < 0) {
+		printk( KERN_ERR "lshda (%s): cannot request region 0.\n",
+			pci_name(pdev));
+		goto err_out;
+	}
+
+	ls_hda_resources[0].start = pci_resource_start (pdev, 0);
+	ls_hda_resources[0].end = pci_resource_end(pdev, 0);
+
+	ret = pci_read_config_byte(pdev, PCI_INTERRUPT_LINE, &v8); //need api from pci irq
+
+	if (ret == PCIBIOS_SUCCESSFUL) {
+
+		ls_hda_resources[1].start = v8;
+		ls_hda_resources[1].end = v8;
+
+		platform_device_register(&ls_hda_device);
+
+	}
+	return 0;
+err_out:
+	return ret;
+}
+
+static void azx_pci_remove(struct pci_dev *pdev)
+{
+}
+
+/* pci_driver definition */
+static struct pci_driver azx_pci_driver = {
+	.name = "azx_pci_driver",
+	.id_table = azx_id_table,
+	.probe = azx_pci_probe,
+	.remove = azx_pci_remove,
+};
+
 static int __init alsa_card_azx_init(void)
 {
-	return platform_driver_register(&azx_driver);
+	int err;
+	err = platform_driver_register(&azx_driver);
+	if (!err)
+		err = pci_register_driver(&azx_pci_driver);
+	printk("hda azx driver register\n");
+	return err;
 }
 
 static void __exit alsa_card_azx_exit(void)

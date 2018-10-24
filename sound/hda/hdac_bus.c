@@ -100,7 +100,7 @@ int snd_hdac_bus_exec_verb_unlocked(struct hdac_bus *bus, unsigned int addr,
 		*res = -1;
 	else if (bus->sync_write)
 		res = &tmp;
-	if (chip->driver_caps & AZX_DCAPS_LS2H_WORKAROUND)
+	if (chip->driver_caps & AZX_DCAPS_LS_HDA_WORKAROUND)
 		err = bus->ops->command(bus, cmd);
 	else for (;;) {
 		trace_hda_send_cmd(bus, cmd);

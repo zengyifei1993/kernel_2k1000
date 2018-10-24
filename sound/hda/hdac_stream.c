@@ -53,13 +53,13 @@ void snd_hdac_stream_start(struct hdac_stream *azx_dev, bool fresh_start)
 	trace_snd_hdac_stream_start(bus, azx_dev);
 
 	azx_dev->start_wallclk = snd_hdac_chip_readl(bus, WALLCLK);
-	if (!fresh_start && !(chip->driver_caps & AZX_DCAPS_LS2H_WORKAROUND))
+	if (!fresh_start && !(chip->driver_caps & AZX_DCAPS_LS_HDA_WORKAROUND))
 		azx_dev->start_wallclk -= azx_dev->period_wallclk;
 
 	/* enable SIE */
 	snd_hdac_chip_updatel(bus, INTCTL, 0, 1 << azx_dev->index);
 	/* set DMA start and interrupt mask */
-	if (chip->driver_caps & AZX_DCAPS_LS2H_WORKAROUND)
+	if (chip->driver_caps & AZX_DCAPS_LS_HDA_WORKAROUND)
 		snd_hdac_stream_updatel(azx_dev, SD_CTL,
 				0, SD_CTL_DMA_START | SD_INT_MASK);
 	else
@@ -79,7 +79,7 @@ void snd_hdac_stream_clear(struct hdac_stream *azx_dev)
 	int stream = substream->stream;
 	struct azx *chip = bus_to_azx(azx_dev->bus);
 
-	if (chip->driver_caps & AZX_DCAPS_LS2H_WORKAROUND) {
+	if (chip->driver_caps & AZX_DCAPS_LS_HDA_WORKAROUND) {
 		snd_hdac_stream_updatel(azx_dev, SD_CTL,
 				SD_CTL_DMA_START | SD_INT_MASK, 0);
 		snd_hdac_stream_updateb(azx_dev, SD_STS, 0, 0); /* to be sure */
@@ -121,7 +121,7 @@ void snd_hdac_stream_reset(struct hdac_stream *azx_dev)
 	int timeout;
 	struct azx *chip = bus_to_azx(azx_dev->bus);
 
-	if (chip->driver_caps & AZX_DCAPS_LS2H_WORKAROUND)
+	if (chip->driver_caps & AZX_DCAPS_LS_HDA_WORKAROUND)
 		goto out;
 
 	snd_hdac_stream_clear(azx_dev);
@@ -181,7 +181,7 @@ int snd_hdac_stream_setup(struct hdac_stream *azx_dev)
 	snd_hdac_stream_writel(azx_dev, SD_CTL, val);
 
 	/* program the length of samples in cyclic buffer */
-	if (chip->driver_caps & AZX_DCAPS_LS2H_WORKAROUND) {
+	if (chip->driver_caps & AZX_DCAPS_LS_HDA_WORKAROUND) {
 		if(azx_dev->substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
 			snd_hdac_stream_writel(azx_dev, SD_CBL, azx_dev->bufsize - 64);
 		else
@@ -413,7 +413,7 @@ int snd_hdac_stream_setup_periods(struct hdac_stream *azx_dev)
 	azx_dev->frags = 0;
 
 	pos_adj = bus->bdl_pos_adj;
-	if (chip->driver_caps & AZX_DCAPS_LS2H_WORKAROUND)
+	if (chip->driver_caps & AZX_DCAPS_LS_HDA_WORKAROUND)
 		pos_adj = 0;
 	if (!azx_dev->no_period_wakeup && pos_adj > 0) {
 		pos_align = pos_adj;
