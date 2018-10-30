@@ -92,6 +92,8 @@ static int loongson_crtc_do_set_base(struct drm_crtc *crtc,
 	struct drm_gem_object *obj;
 	struct loongson_framebuffer *loongson_fb;
 	struct loongson_bo *bo;
+	struct drm_crtc *crtci;
+	struct drm_device *dev = crtc->dev;
 	int ret;
 	unsigned int depth;
 	u64 gpu_addr;
@@ -99,6 +101,8 @@ static int loongson_crtc_do_set_base(struct drm_crtc *crtc,
 	unsigned int crtc_id;
 	unsigned int crtc_address;
 	unsigned int width,pitch;
+	unsigned int crtc_count;
+
 	crtc_id = loongson_crtc->crtc_id;
 	base = (unsigned long)(ldev->rmmio);
 	ldev = crtc->dev->dev_private;
@@ -122,7 +126,14 @@ static int loongson_crtc_do_set_base(struct drm_crtc *crtc,
 	DRM_DEBUG ("crtc pitches[0]=%d\n",crtc->primary->fb->pitches[0]);
 	loongson_fb = to_loongson_framebuffer(crtc->primary->fb);
 
-	if(ldev->num_crtc < 2) {
+	crtc_count = 0;
+	list_for_each_entry(crtci, &dev->mode_config.crtc_list, head)
+		if (crtci->enabled) {
+			crtc_count++;
+		}
+
+	if(ldev->num_crtc < 2 || crtc_count < 2) {
+		DRM_DEBUG("not use clone mode\n");
 		ldev->clone_mode = false;
         }else if(ldev->mode_info[0].connector->base.status == connector_status_connected
 		&& ldev->mode_info[1].connector->base.status == connector_status_connected
