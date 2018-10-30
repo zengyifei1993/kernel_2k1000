@@ -411,7 +411,7 @@ static int find_lpc(void)
 		np = of_find_compatible_node(NULL, NULL, "simple-bus");
 		if (np) {
 
-			if (of_property_read_bool(np, "lpc")) {
+			if (of_property_read_bool(np, "enable-lpc-irq")) {
 				has_lpc = 1;
 			}
 
