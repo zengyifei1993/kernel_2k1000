@@ -817,7 +817,7 @@ int ni_init_microcode(struct radeon_device *rdev)
 		}
 	}
 
-	if ((rdev->family >= CHIP_BARTS) && (rdev->family <= CHIP_CAYMAN)) {
+	if ((rdev->family >= CHIP_BARTS) && (rdev->family <= CHIP_CAYMAN) && rdev->pdev->device != 0x6766) {
 		snprintf(fw_name, sizeof(fw_name), "radeon/%s_smc.bin", chip_name);
 		err = request_firmware(&rdev->smc_fw, fw_name, rdev->dev);
 		if (err) {
