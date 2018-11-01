@@ -19,6 +19,7 @@ static const char dwc_driver_name[] = "dwc_otg";
 
 static struct of_device_id dwc_otg_id_table[] = {
      { .compatible = "loongson,dwc-otg", },
+     { .compatible = "loongson,ls2k-otg", },
      { },
 };
 
@@ -41,7 +42,7 @@ static int dwc_otg_platform_driver_remove(
 	return 0;
 }
 
-static u64 dwc_dma_mask = 0;
+static u64 dwc_dma_mask = 0xffffffff;
 struct lm_device lm_device;
 static int dwc_otg_platform_driver_probe(
 struct platform_device *_dev

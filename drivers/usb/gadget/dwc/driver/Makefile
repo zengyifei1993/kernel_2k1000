@@ -16,9 +16,9 @@ endif
 # device-only mode.
 
 ifdef CONFIG_DWC_HOST_MODE
-EXTRA_CFLAGS        += -DDWC_HOST_ONLY
+#EXTRA_CFLAGS        += -DDWC_HOST_ONLY
 else
-EXTRA_CFLAGS        += -DDWC_DEVICE_ONLY
+#EXTRA_CFLAGS        += -DDWC_DEVICE_ONLY
 endif
 
 EXREA_CFLAGS	+= -Dlinux -DDWC_HS_ELECT_TST

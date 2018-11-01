@@ -831,7 +831,9 @@ static int dwc_otg_driver_probe(
 		goto fail;
 	}
 #endif
-#ifdef PCI_INTERFACE
+#ifdef LM_INTERFACE
+	dwc_otg_device->os_dep.lmdev = _dev;
+#elif PCI_INTERFACE
 	pci_set_drvdata(_dev, dwc_otg_device);
 	dwc_otg_device->os_dep.pcidev = _dev;
 #endif
@@ -875,7 +877,10 @@ static const struct pci_device_id pci_ids[] = { {
 						 PCI_DEVICE(0x16c3, 0xabcd),
 						 .driver_data =
 						 (unsigned long)0xdeadbeef,
-						 }, { /* end: all zeroes */ }
+						 }, 
+						 { PCI_DEVICE(0x14, 0x7a04), .driver_data = (unsigned long)0xdeadbeef, }, 
+
+						{ /* end: all zeroes */ }
 };
 
 MODULE_DEVICE_TABLE(pci, pci_ids);
