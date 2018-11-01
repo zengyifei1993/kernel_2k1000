@@ -602,7 +602,7 @@ CONFIGFS_ATTR_STRUCT(gadget_config_name);
 GS_STRINGS_RW(gadget_config_name, configuration);
 
 static struct configfs_attribute *gadget_config_name_langid_attrs[] = {
-	&gadget_config_name_configuration.attr,
+	&gadget_config_name_attr_configuration,
 	NULL,
 };
 
@@ -707,9 +707,9 @@ GS_STRINGS_RW(gadget_strings, product);
 GS_STRINGS_RW(gadget_strings, serialnumber);
 
 static struct configfs_attribute *gadget_strings_langid_attrs[] = {
-	&gadget_strings_manufacturer.attr,
-	&gadget_strings_product.attr,
-	&gadget_strings_serialnumber.attr,
+	&gadget_strings_attr_manufacturer,
+	&gadget_strings_attr_product,
+	&gadget_strings_attr_serialnumber,
 	NULL,
 };
 
