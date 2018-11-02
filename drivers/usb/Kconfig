@@ -96,6 +96,7 @@ endif
 
 source "drivers/usb/musb/Kconfig"
 
+source "drivers/usb/dwc2/Kconfig"
 source "drivers/usb/dwc3/Kconfig"
 
 source "drivers/usb/chipidea/Kconfig"
