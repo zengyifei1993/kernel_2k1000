@@ -32,6 +32,9 @@
 #include <boot_param.h>
 #include <workarounds.h>
 #include <loongson-pch.h>
+int plat_device_is_ls3a_pci(const struct device *dev);
+int ls3a_pci_map_irq(const struct pci_dev *dev, u8 slot, u8 pin);
+int ls3a_pcibios_dev_init(struct pci_dev *pdev);
 
 static void print_fixup_info(const struct pci_dev * pdev)
 {
@@ -204,6 +207,9 @@ int __init ls2h_pcibios_map_irq(const struct pci_dev *dev, u8 slot, u8 pin)
 
 int __init pcibios_map_irq(const struct pci_dev *dev, u8 slot, u8 pin)
 {
+	if(plat_device_is_ls3a_pci(&dev->dev))
+		return ls3a_pci_map_irq(dev, slot, pin);
+
 	return loongson_pch->pcibios_map_irq(dev, slot, pin);
 }
 
@@ -219,6 +225,9 @@ int pcibios_plat_dev_init(struct pci_dev *dev)
 	init_dma_attrs(&dev->dev.archdata.dma_attrs);
 	if (loongson_workarounds & WORKAROUND_PCIE_DMA)
 		dma_set_attr(DMA_ATTR_FORCE_SWIOTLB, &dev->dev.archdata.dma_attrs);
+
+	if(plat_device_is_ls3a_pci(&dev->dev))
+		return ls3a_pcibios_dev_init(dev);
 
 	if (loongson_pch->pcibios_dev_init)
 		ret = loongson_pch->pcibios_dev_init(dev);

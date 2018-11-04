@@ -46,6 +46,8 @@ static int loongson_pcibios_config_access(unsigned char access_type,
 	int function = PCI_FUNC(devfn);
 	int reg = where & ~3;
 
+	if (!bus->parent) busnum = 0;
+
 	if (busnum == 0) {
 		/* board-specific part,currently,only fuloong2f,yeeloong2f
 		 * use CS5536, fuloong2e use via686b, gdium has no

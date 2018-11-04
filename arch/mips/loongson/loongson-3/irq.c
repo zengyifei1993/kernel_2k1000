@@ -56,18 +56,36 @@ void mach_irq_dispatch(unsigned int pending)
 		loongson_pch->irq_dispatch();
 	if (pending & CAUSEF_IP2)
 	{
-		if(ls_lpc_reg_base == LS3_LPC_REG_BASE)
+		int cpu = smp_processor_id();
+		int irqs, irq, irqs_pci, irq_lpc;
+		
+		if(cpu == 0)
 		{
-			int irqs, irq;
-			irqs = ls2h_readl(LS_LPC_INT_ENA) & ls2h_readl(LS_LPC_INT_STS) & 0xfeff;
-			if (irqs) {
-				while ((irq = ffs(irqs)) != 0) {
-					do_IRQ(irq - 1);
-					irqs &= ~(1 << (irq-1));
+
+			irqs_pci = LOONGSON_INT_ROUTER_ISR(0) & 0xf0;
+			irq_lpc = LOONGSON_INT_ROUTER_ISR(0) & 0x400;
+			if(irqs_pci)
+			{
+				while ((irq = ffs(irqs_pci)) != 0) {
+					do_IRQ(irq - 1 + SYS_IRQ_BASE);
+					irqs_pci &= ~(1 << (irq-1));
 				}
 			}
-			else
+			else if(irq_lpc)
+			{
+				if(ls_lpc_reg_base == LS3_LPC_REG_BASE)
+				{
+					irqs = ls2h_readl(LS_LPC_INT_ENA) & ls2h_readl(LS_LPC_INT_STS) & 0xfeff;
+					if (irqs) {
+						while ((irq = ffs(irqs)) != 0) {
+							do_IRQ(irq - 1);
+							irqs &= ~(1 << (irq-1));
+						}
+					}
+				}
+
 				do_IRQ(LOONGSON_UART_IRQ);
+			}
 		}
 		else
 			do_IRQ(LOONGSON_UART_IRQ);
