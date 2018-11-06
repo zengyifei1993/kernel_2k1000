@@ -42,6 +42,7 @@ extern void __init prom_init_env(void);
 extern unsigned long _loongson_uart_base[], loongson_uart_base[];
 extern void prom_init_loongson_uart_base(void);
 #endif
+extern unsigned long loongson_efi_facility;
 
 static inline void prom_init_uart_base(void)
 {

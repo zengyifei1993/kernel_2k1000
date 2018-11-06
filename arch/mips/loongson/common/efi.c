@@ -2,10 +2,24 @@
 #include <linux/init.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
+#include <linux/kobject.h>
+#include <linux/efi.h>
 
 struct proc_dir_entry *proc_efi;
 extern unsigned int has_systab;
 extern unsigned long systab_addr;
+static struct kobject *efi_kobj;
+unsigned long loongson_efi_facility=0;
+
+/*
+ * Returns 1 if 'facility' is enabled, 0 otherwise.
+ */
+int loongson_efi_enabled(int facility)
+{
+	return test_bit(facility, &loongson_efi_facility) != 0;
+}
+EXPORT_SYMBOL(loongson_efi_enabled);
+
 
 static int show_systab(struct seq_file *m, void *v)
 {
@@ -58,6 +72,14 @@ static const struct file_operations proc_systab_operations = {
   */
 int __init efi_init_procfs(void)
 {
+	if (loongson_efi_enabled(EFI_BOOT)){
+	    efi_kobj = kobject_create_and_add("efi", firmware_kobj);
+	    if (!efi_kobj) {
+		    pr_err("efi: Firmware registration failed.\n");
+		    return -ENOMEM;
+        }
+    }
+
 	proc_efi = proc_mkdir("efi", NULL);
 	if(!proc_efi)
 		return -ENOMEM;
