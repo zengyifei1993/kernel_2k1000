@@ -24,6 +24,7 @@
 #include <boot_param.h>
 #include <workarounds.h>
 #include <loongson-pch.h>
+#include <linux/efi.h>
 
 struct boot_params *boot_p;
 struct loongson_params *loongson_p;
@@ -291,6 +292,14 @@ void __init prom_init_env(void)
         strcpy(_board_info, eboard->name);
         board_info = _board_info;
         board_manufacturer = strsep(&board_info, "-");
+
+    if (strstr(einter->description,"uefi") || strstr(einter->description,"UEFI")) {
+        pr_info("The BIOS is EFI Mode! \n");
+        set_bit(EFI_BOOT, &loongson_efi_facility);
+    } else
+        clear_bit(EFI_BOOT, &loongson_efi_facility);
+
+    pr_info("The BIOS Version: %s\n",einter->description);
 
 	poweroff_addr = boot_p->reset_system.Shutdown;
 	restart_addr = boot_p->reset_system.ResetWarm;
