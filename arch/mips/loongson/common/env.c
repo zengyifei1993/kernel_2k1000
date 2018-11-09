@@ -239,6 +239,7 @@ void __init prom_init_env(void)
 		loongson_hwmon = 0;
 
 	hw_coherentio = !eirq_source->dma_noncoherent;
+	pr_info("BIOS configured I/O coherency: %s\n", hw_coherentio?"ON":"OFF");
 
 	if (strstr(eboard->name,"2H")) {
 		int ls2h_board_ver;

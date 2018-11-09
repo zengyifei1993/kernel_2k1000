@@ -506,4 +506,17 @@ struct platform_gpio_data {
 	int gpio_base;
 	int ngpio;
 };
+
+#define HT_cache_enable_reg1	*(volatile unsigned int *)(0x90000EFDFB000000 + 0x68)
+#define HT_cache_base_reg1	    *(volatile unsigned int *)(0x90000EFDFB000000 + 0x6c)
+#define HT_uncache_enable_reg0	*(volatile unsigned int *)(0x90000EFDFB000000 + 0xF0)
+#define HT_uncache_base_reg0	*(volatile unsigned int *)(0x90000EFDFB000000 + 0xF4)
+#define HT_uncache_enable_reg1	*(volatile unsigned int *)(0x90000EFDFB000000 + 0xF8)
+#define HT_uncache_base_reg1	*(volatile unsigned int *)(0x90000EFDFB000000 + 0xFC)
+#define HT_uncache_enable_reg2	*(volatile unsigned int *)(0x90000EFDFB000000 + 0x168)
+#define HT_uncache_base_reg2	*(volatile unsigned int *)(0x90000EFDFB000000 + 0x16C)
+#define HT_uncache_enable_reg3	*(volatile unsigned int *)(0x90000EFDFB000000 + 0x170)
+#define HT_uncache_base_reg3	*(volatile unsigned int *)(0x90000EFDFB000000 + 0x174)
+
+extern void uncache_resume(void);
 #endif

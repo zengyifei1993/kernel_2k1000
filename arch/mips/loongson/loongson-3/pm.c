@@ -39,6 +39,8 @@ extern void acpi_registers_setup(void);
 extern void ls2h_irq_router_init(void);
 extern void rs780_irq_router_init(void);
 extern void	ls7a_irq_router_init(void);
+extern void init_7a_irqs(void);
+extern int ls3a_msi_enabled;
 
 struct loongson_registers {
 	u32 config4;
@@ -100,6 +102,26 @@ int wakeup_loongson(void)
 	return 0;
 }
 
+void uncache_resume(void)
+{
+	if (loongson_pch->board_type == LS7A) {
+		HT_uncache_enable_reg0	= HT_cache_enable_reg1; //for 7a gpu
+		HT_uncache_base_reg0	= HT_cache_base_reg1;
+	} else {
+		HT_uncache_enable_reg0  = 0xc0000000; //Low 256M
+		HT_uncache_base_reg0    = 0x0080fff0;
+	}
+	HT_uncache_enable_reg1	= 0xc0000000; //Node 0
+	HT_uncache_base_reg1	= 0x0000e000;
+	HT_uncache_enable_reg2	= 0xc0100000; //Node 1
+	HT_uncache_base_reg2	= 0x2000e000;
+	HT_uncache_enable_reg3	= 0xc0200000; //Node 2/3
+	HT_uncache_base_reg3	= 0x4000c000;
+	writeq(0x0000202000000000, (void *)0x900000003ff02708);
+	writeq(0xffffffe000000000, (void *)0x900000003ff02748);
+	writeq(0x0000300000000086, (void *)0x900000003ff02788);
+}
+
 void mach_suspend(suspend_state_t state)
 {
 	if (state == PM_SUSPEND_MEM) {
@@ -158,10 +180,18 @@ void mach_resume(suspend_state_t state)
 		}
 
 		loongson_pch->early_config();
+
+		if (hw_coherentio == 0)
+			uncache_resume();
+
 		if (loongson_pch->board_type == LS2H)
 			ls2h_irq_router_init();
-		else if(loongson_pch->board_type == LS7A)
+
+		else if(loongson_pch->board_type == LS7A) {
+            if (ls3a_msi_enabled)
+                init_7a_irqs();
 			ls7a_irq_router_init();
+        }
 		else {
 			rs780_irq_router_init();
 			acpi_registers_setup();
