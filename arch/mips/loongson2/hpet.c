@@ -17,12 +17,12 @@ DEFINE_PER_CPU(struct clock_event_device, hpet_clockevent_device);
 
 static int hpet_read(int offset)
 {
-	return readq((void *)(HPET_MMIO_ADDR + offset));
+	return readl((void *)(HPET_MMIO_ADDR + offset));
 }
 
 static void hpet_write(int offset, int data)
 {
-	writeq(data,(void *)(HPET_MMIO_ADDR + offset));
+	writel(data,(void *)(HPET_MMIO_ADDR + offset));
 }
 
 static void hpet_start_counter(void)
