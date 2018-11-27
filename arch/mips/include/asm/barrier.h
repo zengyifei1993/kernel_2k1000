@@ -148,7 +148,7 @@ do {									\
 	___p1;								\
 })
 
-#define smp_mb__before_atomic()	smp_mb__before_llsc()
-#define smp_mb__after_atomic()	smp_llsc_mb()
+#define smp_mb__before_atomic()	 __asm__ __volatile__(__WEAK_LLSC_MB : : :"memory")
+#define smp_mb__after_atomic() __asm__ __volatile__(__WEAK_LLSC_MB : : :"memory")
 
 #endif /* __ASM_BARRIER_H */
