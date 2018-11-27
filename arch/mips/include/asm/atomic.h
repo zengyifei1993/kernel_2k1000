@@ -79,10 +79,10 @@ static __inline__ void atomic_add(int i, atomic_t * v)
 	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR) {
 		int temp;
 
+		__ls3a_war_llsc();
 		do {
 			__asm__ __volatile__(
 			"	.set	mips3				\n"
-			__WEAK_LLSC_MB
 			"	ll	%0, %1		# atomic_add	\n"
 			"	addu	%0, %2				\n"
 			"	sc	%0, %1				\n"
@@ -137,10 +137,10 @@ static __inline__ void atomic_sub(int i, atomic_t * v)
 	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR) {
 		int temp;
 
+		__ls3a_war_llsc();
 		do {
 			__asm__ __volatile__(
 			"	.set	mips3				\n"
-			__WEAK_LLSC_MB
 			"	ll	%0, %1		# atomic_sub	\n"
 			"	subu	%0, %2				\n"
 			"	sc	%0, %1				\n"
@@ -196,10 +196,10 @@ static __inline__ int atomic_add_return(int i, atomic_t * v)
 	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR) {
 		int temp;
 
+		__ls3a_war_llsc();
 		do {
 			__asm__ __volatile__(
 			"	.set	mips3				\n"
-			__WEAK_LLSC_MB
 			"	ll	%1, %2	# atomic_add_return	\n"
 			"	addu	%0, %1, %3			\n"
 			"	sc	%0, %2				\n"
@@ -263,10 +263,10 @@ static __inline__ int atomic_sub_return(int i, atomic_t * v)
 	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR) {
 		int temp;
 
+		__ls3a_war_llsc();
 		do {
 			__asm__ __volatile__(
 			"	.set	mips3				\n"
-			__WEAK_LLSC_MB
 			"	ll	%1, %2	# atomic_sub_return	\n"
 			"	subu	%0, %1, %3			\n"
 			"	sc	%0, %2				\n"
@@ -343,8 +343,8 @@ static __inline__ int atomic_sub_if_positive(int i, atomic_t * v)
 
 		__asm__ __volatile__(
 		"	.set	mips3					\n"
+		__LS3A_WAR_LLSC
 		"1:				# atomic_sub_if_positive\n"
-		__WEAK_LLSC_MB
 		"	ll	%1, %2					\n"
 		"	subu	%0, %1, %3				\n"
 		"	bltz	%0, 1f					\n"
@@ -353,7 +353,8 @@ static __inline__ int atomic_sub_if_positive(int i, atomic_t * v)
 		"	beqz	%0, 1b					\n"
 		"	 subu	%0, %1, %3				\n"
 		"	.set	reorder					\n"
-		"1:							\n" /* we have smp_llsc_mb at the end */
+		"1:							\n"
+		__LS_WAR_LLSC
 		"	.set	mips0					\n"
 		: "=&r" (result), "=&r" (temp), "+m" (v->counter)
 		: "Ir" (i));
@@ -370,7 +371,7 @@ static __inline__ int atomic_sub_if_positive(int i, atomic_t * v)
 		"	beqz	%0, 1b					\n"
 		"	 subu	%0, %1, %3				\n"
 		"	.set	reorder					\n"
-		"1:							\n" /* we have smp_llsc_mb at the end */
+		"1:							\n"
 		"	.set	mips0					\n"
 		: "=&r" (result), "=&r" (temp), "+m" (v->counter)
 		: "Ir" (i));
@@ -542,10 +543,10 @@ static __inline__ void atomic64_add(long i, atomic64_t * v)
 	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR) {
 		long temp;
 
+		__ls3a_war_llsc();
 		do {
 			__asm__ __volatile__(
 			"	.set	mips3				\n"
-			__WEAK_LLSC_MB
 			"	lld	%0, %1		# atomic64_add	\n"
 			"	daddu	%0, %2				\n"
 			"	scd	%0, %1				\n"
@@ -600,10 +601,10 @@ static __inline__ void atomic64_sub(long i, atomic64_t * v)
 	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR) {
 		long temp;
 
+		__ls3a_war_llsc();
 		do {
 			__asm__ __volatile__(
 			"	.set	mips3				\n"
-			__WEAK_LLSC_MB
 			"	lld	%0, %1		# atomic64_sub	\n"
 			"	dsubu	%0, %2				\n"
 			"	scd	%0, %1				\n"
@@ -659,10 +660,10 @@ static __inline__ long atomic64_add_return(long i, atomic64_t * v)
 	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR) {
 		long temp;
 
+		__ls3a_war_llsc();
 		do {
 			__asm__ __volatile__(
 			"	.set	mips3				\n"
-			__WEAK_LLSC_MB
 			"	lld	%1, %2	# atomic64_add_return	\n"
 			"	daddu	%0, %1, %3			\n"
 			"	scd	%0, %2				\n"
@@ -731,10 +732,10 @@ static __inline__ long atomic64_sub_return(long i, atomic64_t * v)
 	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR) {
 		long temp;
 
+		__ls3a_war_llsc();
 		do {
 			__asm__ __volatile__(
 			"	.set	mips3				\n"
-			__WEAK_LLSC_MB
 			"	lld	%1, %2	# atomic64_sub_return	\n"
 			"	dsubu	%0, %1, %3			\n"
 			"	scd	%0, %2				\n"
@@ -817,8 +818,8 @@ static __inline__ long atomic64_sub_if_positive(long i, atomic64_t * v)
 
 		__asm__ __volatile__(
 		"	.set	mips3					\n"
+		__LS3A_WAR_LLSC
 		"1:				# atomic64_sub_if_positive\n"
-		__WEAK_LLSC_MB
 		"	lld	%1, %2					\n"
 		"	dsubu	%0, %1, %3				\n"
 		"	bltz	%0, 1f					\n"
@@ -827,7 +828,8 @@ static __inline__ long atomic64_sub_if_positive(long i, atomic64_t * v)
 		"	beqz	%0, 1b					\n"
 		"	 dsubu	%0, %1, %3				\n"
 		"	.set	reorder					\n"
-		"1:							\n" /* we have smp_llsc_mb at the end */
+		"1:							\n"
+		__LS_WAR_LLSC
 		"	.set	mips0					\n"
 		: "=&r" (result), "=&r" (temp), "+m" (v->counter)
 		: "Ir" (i));
@@ -844,7 +846,7 @@ static __inline__ long atomic64_sub_if_positive(long i, atomic64_t * v)
 		"	beqz	%0, 1b					\n"
 		"	 dsubu	%0, %1, %3				\n"
 		"	.set	reorder					\n"
-		"1:							\n" /* we have smp_llsc_mb at the end */
+		"1:							\n"
 		"	.set	mips0					\n"
 		: "=&r" (result), "=&r" (temp), "+m" (v->counter)
 		: "Ir" (i));

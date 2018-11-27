@@ -48,8 +48,8 @@ static __inline__ long local_add_return(long i, local_t * l)
 
 		__asm__ __volatile__(
 		"	.set	mips3					\n"
+			__LS3A_WAR_LLSC
 		"1:				# local_add_return	\n"
-			__WEAK_LLSC_MB
 			__LL	"%1, %2					\n"
 		"	addu	%0, %1, %3				\n"
 			__SC	"%0, %2					\n"
@@ -110,8 +110,8 @@ static __inline__ long local_sub_return(long i, local_t * l)
 
 		__asm__ __volatile__(
 		"	.set	mips3					\n"
+			__LS3A_WAR_LLSC
 		"1:				# local_sub_return	\n"
-			__WEAK_LLSC_MB
 			__LL	"%1, %2					\n"
 		"	subu	%0, %1, %3				\n"
 			__SC	"%0, %2					\n"

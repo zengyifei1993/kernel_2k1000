@@ -106,12 +106,20 @@
 #define smp_wmb()	barrier()
 #endif
 
-#if defined(CONFIG_WEAK_REORDERING_BEYOND_LLSC) && defined(CONFIG_SMP)
 #if defined(CONFIG_CPU_LOONGSON3)
-#  define __WEAK_LLSC_MB	"	.set mips64r2\nsynci 0\n.set mips0\n"
-# else
+#define __LS3A_WAR_LLSC		"	.set mips64r2\nsynci 0\n.set mips0\n"
+#define __ls3a_war_llsc()		__asm__ __volatile__("synci 0" : : :"memory")
+#endif
+
+#if defined(CONFIG_MACH_LOONGSON2)
+#define __LS3A_WAR_LLSC
+#define __ls3a_war_llsc()
+#endif
+
+#define __LS_WAR_LLSC	"	.set mips3\nsync\n.set mips0\n"
+
+#if defined(CONFIG_WEAK_REORDERING_BEYOND_LLSC) && defined(CONFIG_SMP)
 #define __WEAK_LLSC_MB		"	sync	\n"
-# endif
 #else
 #define __WEAK_LLSC_MB		"		\n"
 #endif
@@ -119,7 +127,11 @@
 #define set_mb(var, value) \
 	do { var = value; smp_mb(); } while (0)
 
+#if defined(CONFIG_CPU_LOONGSON3) || defined(CONFIG_MACH_LOONGSON2)
+#define smp_llsc_mb()
+#else
 #define smp_llsc_mb()	__asm__ __volatile__(__WEAK_LLSC_MB : : :"memory")
+#endif
 
 #ifdef CONFIG_CPU_CAVIUM_OCTEON
 #define smp_mb__before_llsc() smp_wmb()
@@ -128,6 +140,11 @@
 					    ".set arch=octeon\n\t"	\
 					    "syncw\n\t"			\
 					    ".set pop" : : : "memory")
+
+#elif defined(CONFIG_CPU_LOONGSON3) || defined(CONFIG_MACH_LOONGSON2)
+#define smp_mb__before_llsc()
+#define nudge_writes() mb()
+
 #else
 #define smp_mb__before_llsc() smp_llsc_mb()
 #define nudge_writes() mb()

@@ -212,8 +212,8 @@ static inline void set_pte(pte_t *ptep, pte_t pteval)
 			"	.set	arch=r4000			\n"
 			"	.set	push				\n"
 			"	.set	noreorder			\n"
+				__LS3A_WAR_LLSC
 			"1:						\n"
-				__WEAK_LLSC_MB
 				__LL	"%[tmp], %[buddy]		\n"
 			"	bnez	%[tmp], 2f			\n"
 			"	 or	%[tmp], %[tmp], %[global]	\n"
@@ -221,12 +221,11 @@ static inline void set_pte(pte_t *ptep, pte_t pteval)
 			"	beqz	%[tmp], 1b			\n"
 			"	nop					\n"
 			"2:						\n"
-			"	sync					\n"
+				__LS_WAR_LLSC
 			"	.set	pop				\n"
 			"	.set	mips0				\n"
 			: [buddy] "+m" (buddy->pte), [tmp] "=&r" (tmp)
 			: [global] "r" (page_global));
-			smp_llsc_mb();
 		} else if (kernel_uses_llsc) {
 			__asm__ __volatile__ (
 			"	.set	arch=r4000			\n"

@@ -38,8 +38,8 @@ notrace unsigned long loongson3_phase_lock_acquire(void)
 
 	__asm__ __volatile__(
                 "       .set    noreorder       # lock for phase    	\n"
+		__LS3A_WAR_LLSC
                 "1:							\n"
-		__WEAK_LLSC_MB
                 "	ll      %1, %2					\n"
                 "       bnez    %1, 1b					\n"
                 "       li	%1, 1					\n"
