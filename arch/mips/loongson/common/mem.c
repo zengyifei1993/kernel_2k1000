@@ -116,8 +116,7 @@ int __uncached_access(struct file *file, unsigned long addr)
 	if (file->f_flags & O_DSYNC)
 		return 1;
 
-	return addr >= __pa(high_memory) ||
-		((addr >= LOONGSON_MMIO_MEM_START) &&
+	return ((addr >= LOONGSON_MMIO_MEM_START) &&
 		 (addr < LOONGSON_MMIO_MEM_END));
 }
 
