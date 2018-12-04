@@ -23,6 +23,7 @@
 #include <loongson-pch.h>
 #endif/* CONFIG_CPU_LOONGSON3 */
 
+#define LOONGSON_GPIO_IN_OFFSET	16
 #define GPIO_IO_CONF(x)	(x->base + x->conf_offset)
 #define GPIO_OUT(x)	(x->base + x->out_offset)
 #define GPIO_IN(x)	(x->base + x->in_offset)
@@ -51,7 +52,17 @@ static inline void
 __set_direction(struct loongson_gpio_chip *lgpio, unsigned pin, int input)
 {
 	u64 u;
+	u32 temp;
 
+	if (!strcmp(lgpio->chip.label,"loongson-gpio")){
+		temp = readl(GPIO_IO_CONF(lgpio));
+		if (input)
+			temp |= 1 << pin;
+		else
+			temp &= ~(1 << pin);
+		writel(temp, GPIO_IO_CONF(lgpio));
+		return ;
+	}
 	u = readq(GPIO_IO_CONF(lgpio));
 	if (input)
 		u |= 1UL << pin;
@@ -63,6 +74,18 @@ __set_direction(struct loongson_gpio_chip *lgpio, unsigned pin, int input)
 static void __set_level(struct loongson_gpio_chip *lgpio, unsigned pin, int high)
 {
 	u64 u;
+	u32 temp;
+
+	/* If GPIO controller is on 3A,then... */
+	if (!strcmp(lgpio->chip.label,"loongson-gpio")){
+		temp = readl(GPIO_OUT(lgpio));
+		if (high)
+			temp |= 1 << pin;
+		else
+			temp &= ~(1 << pin);
+		writel(temp, GPIO_OUT(lgpio));
+		return;
+	}
 
 	u = readq(GPIO_OUT(lgpio));
 	if (high)
@@ -105,6 +128,13 @@ static int loongson_gpio_get(struct gpio_chip *chip, unsigned pin)
 	struct loongson_gpio_chip *lgpio =
 		container_of(chip, struct loongson_gpio_chip, chip);
 	u64 val;
+	u32 temp;
+
+	/* GPIO controller in 3A is different for 7A */
+	if (!strcmp(lgpio->chip.label,"loongson-gpio")){
+		temp = readl(GPIO_IN(lgpio));
+		return ((temp & (1 << (pin + LOONGSON_GPIO_IN_OFFSET))) != 0);
+	}
 
 	if (readq(GPIO_IO_CONF(lgpio)) & (1UL << pin))
 		val = readq(GPIO_IN(lgpio));
@@ -127,9 +157,9 @@ static void loongson_gpio_set(struct gpio_chip *chip, unsigned pin, int value)
 
 static int loongson_gpio_init(struct loongson_gpio_chip *lgpio, struct device_node *np,
 			    int gpio_base, int ngpio,
-			    void __iomem *base, int conf_offset, int out_offset, int in_offset)
+			    void __iomem *base, int conf_offset, int out_offset, int in_offset, const char* name)
 {
-	lgpio->chip.label = kstrdup("loongson-gpio", GFP_KERNEL);
+	lgpio->chip.label = kstrdup(name, GFP_KERNEL);
 	lgpio->chip.request = loongson_gpio_request;
 	lgpio->chip.direction_input = loongson_gpio_direction_input;
 	lgpio->chip.get = loongson_gpio_get;
@@ -200,6 +230,7 @@ static int loongson_gpio_probe(struct platform_device *pdev)
 		conf_offset = gpio_data->gpio_conf;
 		out_offset  = gpio_data->gpio_out;
 		in_offset   = gpio_data->gpio_in;
+		name		= pdev->name;
 		iores = platform_get_resource(pdev,IORESOURCE_MEM, 0);
 		if (!iores) {
 			ret = -ENODEV;
@@ -223,7 +254,7 @@ static int loongson_gpio_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	platform_set_drvdata(pdev, lgpio);
-	loongson_gpio_init(lgpio, np, gpio_base, ngpio, base, conf_offset, out_offset, in_offset);
+	loongson_gpio_init(lgpio, np, gpio_base, ngpio, base, conf_offset, out_offset, in_offset, name);
 
 	return 0;
 out:
