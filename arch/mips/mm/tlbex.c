@@ -168,6 +168,7 @@ enum label_id {
 	label_r3000_write_probe_fail,
 	label_large_segbits_fault,
 #ifdef CONFIG_MIPS_HUGE_TLB_SUPPORT
+	label_tlb_huge_update_pre,
 	label_tlb_huge_update,
 #endif
 };
@@ -187,6 +188,7 @@ UASM_L_LA(_smp_pgtable_change)
 UASM_L_LA(_r3000_write_probe_fail)
 UASM_L_LA(_large_segbits_fault)
 #ifdef CONFIG_MIPS_HUGE_TLB_SUPPORT
+UASM_L_LA(_tlb_huge_update_pre)
 UASM_L_LA(_tlb_huge_update)
 #endif
 
@@ -1672,14 +1674,6 @@ static void __cpuinit
 iPTE_LW(u32 **p, unsigned int pte, unsigned int ptr)
 {
 #ifdef CONFIG_SMP
-	// here just for test, ls2k does not need this
-#if 	!defined(CONFIG_CPU_LOONGSON2K)
-	if (read_c0_prid() == 0x146305) //for 3A1000/2H/2j3
-		uasm_i_sync(p);
-	else if (read_c0_prid() == 0x146308 || read_c0_prid() == 0x146309)  //for 3A2000ABC/3A3000CD
-		uasm_i_synci(p);
-
-#endif
 # ifdef CONFIG_64BIT_PHYS_ADDR
 	if (cpu_has_64bits)
 		uasm_i_lld(p, pte, 0, ptr);
@@ -2029,7 +2023,7 @@ build_r4000_tlbchange_handler_head(u32 **p, struct uasm_label **l,
 	 * instead contains the tlb pte. Check the PAGE_HUGE bit and
 	 * see if we need to jump to huge tlb processing.
 	 */
-	build_is_huge_pte(p, r, wr.r1, wr.r2, label_tlb_huge_update);
+	build_is_huge_pte(p, r, wr.r1, wr.r2, label_tlb_huge_update_pre);
 #endif
 
 	UASM_i_MFC0(p, wr.r1, C0_BADVADDR);
@@ -2039,6 +2033,13 @@ build_r4000_tlbchange_handler_head(u32 **p, struct uasm_label **l,
 	UASM_i_ADDU(p, wr.r2, wr.r2, wr.r1);
 
 #ifdef CONFIG_SMP
+	// here just for test, ls2k does not need this
+#if 	!defined(CONFIG_CPU_LOONGSON2K)
+	if (read_c0_prid() >= 0x146305 && read_c0_prid() <= 0x146307) //for 3A1000/2H/2j3/3B1000/3B1500
+		uasm_i_sync(p);
+	else if (read_c0_prid() == 0x146308 || read_c0_prid() == 0x146309)  //for 3A2000ABC/3A3000CD
+		uasm_i_synci(p);
+#endif
 	uasm_l_smp_pgtable_change(l, *p);
 #endif
 	iPTE_LW(p, wr.r1, wr.r2); /* get even pte */
@@ -2158,6 +2159,13 @@ static void __cpuinit build_r4000_tlb_load_handler(void)
 	 * This is the entry point when build_r4000_tlbchange_handler_head
 	 * spots a huge page.
 	 */
+	uasm_l_tlb_huge_update_pre(&l, p);
+#if 	!defined(CONFIG_CPU_LOONGSON2K)
+	if (read_c0_prid() >= 0x146305 && read_c0_prid() <= 0x146307) //for 3A1000/2H/2j3/3B1000/3B1500
+		uasm_i_sync(&p);
+	else if (read_c0_prid() == 0x146308 || read_c0_prid() == 0x146309)  //for 3A2000ABC/3A3000CD
+		uasm_i_synci(&p);
+#endif
 	uasm_l_tlb_huge_update(&l, p);
 	iPTE_LW(&p, wr.r1, wr.r2);
 	build_pte_present(&p, &r, wr.r1, wr.r2, wr.r3, label_nopage_tlbl);
@@ -2274,6 +2282,13 @@ static void __cpuinit build_r4000_tlb_store_handler(void)
 	 * This is the entry point when
 	 * build_r4000_tlbchange_handler_head spots a huge page.
 	 */
+	uasm_l_tlb_huge_update_pre(&l, p);
+#if 	!defined(CONFIG_CPU_LOONGSON2K)
+	if (read_c0_prid() >= 0x146305 && read_c0_prid() <= 0x146307) //for 3A1000/2H/2j3/3B1000/3B1500
+		uasm_i_sync(&p);
+	else if (read_c0_prid() == 0x146308 || read_c0_prid() == 0x146309)  //for 3A2000ABC/3A3000CD
+		uasm_i_synci(&p);
+#endif
 	uasm_l_tlb_huge_update(&l, p);
 	iPTE_LW(&p, wr.r1, wr.r2);
 	build_pte_writable(&p, &r, wr.r1, wr.r2, wr.r3, label_nopage_tlbs);
@@ -2332,6 +2347,13 @@ static void __cpuinit build_r4000_tlb_modify_handler(void)
 	 * This is the entry point when
 	 * build_r4000_tlbchange_handler_head spots a huge page.
 	 */
+	uasm_l_tlb_huge_update_pre(&l, p);
+#if 	!defined(CONFIG_CPU_LOONGSON2K)
+	if (read_c0_prid() >= 0x146305 && read_c0_prid() <= 0x146307) //for 3A1000/2H/2j3/3B1000/3B1500
+		uasm_i_sync(&p);
+	else if (read_c0_prid() == 0x146308 || read_c0_prid() == 0x146309)  //for 3A2000ABC/3A3000CD
+		uasm_i_synci(&p);
+#endif
 	uasm_l_tlb_huge_update(&l, p);
 	iPTE_LW(&p, wr.r1, wr.r2);
 	build_pte_modifiable(&p, &r, wr.r1, wr.r2,  wr.r3, label_nopage_tlbm);
