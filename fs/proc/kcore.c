@@ -40,11 +40,20 @@
 static struct proc_dir_entry *proc_root_kcore;
 
 
+#ifdef CONFIG_DEBUG_INFO
+#ifndef kc_vaddr_to_offset
+#define	kc_vaddr_to_offset(v) ((v) - IO_BASE)
+#endif
+#ifndef	kc_offset_to_vaddr
+#define	kc_offset_to_vaddr(o) ((o) + IO_BASE)
+#endif
+#else
 #ifndef kc_vaddr_to_offset
 #define	kc_vaddr_to_offset(v) ((v) - PAGE_OFFSET)
 #endif
 #ifndef	kc_offset_to_vaddr
 #define	kc_offset_to_vaddr(o) ((o) + PAGE_OFFSET)
+#endif
 #endif
 
 /* An ELF note in memory */
@@ -153,6 +162,33 @@ static int kcore_update_ram(void)
 	ent->size = max_low_pfn << PAGE_SHIFT;
 	ent->type = KCORE_RAM;
 	list_add(&ent->list, &head);
+
+#ifdef CONFIG_DEBUG_INFO
+	ent = kmalloc(sizeof(*ent), GFP_KERNEL);
+	if (!ent)
+		return -ENOMEM;
+	ent->addr = (unsigned long)CKSEG0ADDR(0);
+	ent->size = 0x10000000;
+	ent->type = KCORE_RAM;
+	list_add(&ent->list, &head);
+
+	ent = kmalloc(sizeof(*ent), GFP_KERNEL);
+	if (!ent)
+		return -ENOMEM;
+	ent->addr = (unsigned long)CKSEG1ADDR(0);
+	ent->size = 0x10000000;
+	ent->type = KCORE_RAM;
+	list_add(&ent->list, &head);
+
+	ent = kmalloc(sizeof(*ent), GFP_KERNEL);
+	if (!ent)
+		return -ENOMEM;
+	ent->addr = (unsigned long)IO_BASE;
+	ent->size = 0x100000000000ULL;
+	ent->type = KCORE_RAM;
+	list_add(&ent->list, &head);
+#endif
+
 	__kcore_update_ram(&head);
 	return ret;
 }
@@ -266,6 +302,35 @@ static int kcore_update_ram(void)
 		free_kclist_ents(&head);
 		return -ENOMEM;
 	}
+
+#ifdef CONFIG_DEBUG_INFO
+	{
+	struct kcore_list *ent;
+	ent = kmalloc(sizeof(*ent), GFP_KERNEL);
+	if (!ent)
+		return -ENOMEM;
+	ent->addr = (unsigned long)CKSEG0ADDR(0);
+	ent->size = 0x10000000;
+	ent->type = KCORE_RAM;
+	list_add(&ent->list, &head);
+
+	ent = kmalloc(sizeof(*ent), GFP_KERNEL);
+	if (!ent)
+		return -ENOMEM;
+	ent->addr = (unsigned long)CKSEG1ADDR(0);
+	ent->size = 0x10000000;
+	ent->type = KCORE_RAM;
+	list_add(&ent->list, &head);
+
+	ent = kmalloc(sizeof(*ent), GFP_KERNEL);
+	if (!ent)
+		return -ENOMEM;
+	ent->addr = (unsigned long)IO_BASE;
+	ent->size = 0x100000000000ULL;
+	ent->type = KCORE_RAM;
+	list_add(&ent->list, &head);
+	}
+#endif
 	__kcore_update_ram(&head);
 	return ret;
 }
@@ -545,6 +610,96 @@ read_kcore(struct file *file, char __user *buffer, size_t buflen, loff_t *fpos)
 	return acc;
 }
 
+#ifdef CONFIG_DEBUG_INFO
+static ssize_t
+write_kcore(struct file *file, char __user *buffer, size_t buflen, loff_t *fpos)
+{
+	ssize_t acc = 0;
+	size_t size, tsz;
+	size_t elf_buflen;
+	int nphdr;
+	unsigned long start;
+
+	read_lock(&kclist_lock);
+	size = get_kcore_size(&nphdr, &elf_buflen);
+
+	if (buflen == 0 || *fpos >= size) {
+		read_unlock(&kclist_lock);
+		return 0;
+	}
+
+	/* trim buflen to not go beyond EOF */
+	if (buflen > size - *fpos)
+		buflen = size - *fpos;
+
+	/* construct an ELF core header if we'll need some of it */
+	if (*fpos < elf_buflen) {
+			return -EFAULT;
+	} else
+		read_unlock(&kclist_lock);
+
+	/*
+	 * Check to see if our file offset matches with any of
+	 * the addresses in the elf_phdr on our list.
+	 */
+	start = kc_offset_to_vaddr(*fpos - elf_buflen);
+	if ((tsz = (PAGE_SIZE - (start & ~PAGE_MASK))) > buflen)
+		tsz = buflen;
+		
+	while (buflen) {
+		struct kcore_list *m;
+
+		read_lock(&kclist_lock);
+		list_for_each_entry(m, &kclist_head, list) {
+			if (start >= m->addr && start < (m->addr+m->size))
+				break;
+		}
+		read_unlock(&kclist_lock);
+
+		if (&m->list == &kclist_head) {
+				return -EFAULT;
+		} else if (is_vmalloc_or_module_addr((void *)start)) {
+			char * elf_buf;
+
+			elf_buf = kzalloc(tsz, GFP_KERNEL);
+			if (!elf_buf)
+				return -ENOMEM;
+			/* we have to zero-fill user buffer even if no read */
+			if (copy_from_user(elf_buf, buffer, tsz)) {
+				kfree(elf_buf);
+				return -EFAULT;
+			}
+			vwrite(elf_buf, (char *)start, tsz);
+			kfree(elf_buf);
+		} else {
+			if (kern_addr_valid(start)) {
+				unsigned long n;
+
+				n = copy_from_user((char *)start, buffer, tsz);
+				/*
+				 * We cannot distinguish between fault on source
+				 * and fault on destination. When this happens
+				 * we clear too and hope it will trigger the
+				 * EFAULT again.
+				 */
+				if (n) { 
+						return -EFAULT;
+				}
+			} else {
+					return -EFAULT;
+			}
+		}
+		buflen -= tsz;
+		*fpos += tsz;
+		buffer += tsz;
+		acc += tsz;
+		start += tsz;
+		tsz = (buflen > PAGE_SIZE ? PAGE_SIZE : buflen);
+	}
+
+	return acc;
+}
+#endif
 
 static int open_kcore(struct inode *inode, struct file *filp)
 {
@@ -563,6 +718,9 @@ static int open_kcore(struct inode *inode, struct file *filp)
 
 static const struct file_operations proc_kcore_operations = {
 	.read		= read_kcore,
+#ifdef CONFIG_DEBUG_INFO
+	.write		= write_kcore,
+#endif
 	.open		= open_kcore,
 	.llseek		= default_llseek,
 };
@@ -615,8 +773,15 @@ static void __init add_modules_range(void)
 			MODULES_END - MODULES_VADDR, KCORE_VMALLOC);
 }
 #else
+#ifdef CONFIG_DEBUG_INFO
+struct kcore_list kcore_modules;
+#endif
 static void __init add_modules_range(void)
 {
+#ifdef CONFIG_DEBUG_INFO
+	kclist_add(&kcore_modules, (void *)MODULE_START,
+			MODULE_END - MODULE_START, KCORE_VMALLOC);
+#endif
 }
 #endif
 
