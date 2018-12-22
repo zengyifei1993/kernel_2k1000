@@ -233,6 +233,13 @@ static inline int is_ra_save_ins(union mips_instruction *ip)
 #endif
 }
 
+static inline int is_ra_gssq_ins(union mips_instruction *ip)
+{
+	/* gssq $ra,xx offset($sp) */
+	return 	ip->loongson3_lswc2_format.opcode == swc2_op && (ip->loongson3_lswc2_format.rq == 31 || \
+        ip->loongson3_lswc2_format.rt == 31) && ip->loongson3_lswc2_format.base == 29;
+}
+
 static inline int is_jump_ins(union mips_instruction *ip)
 {
 #ifdef CONFIG_CPU_MICROMIPS
@@ -350,6 +357,12 @@ static int get_frame_info(struct mips_frame_info *info)
 		if (info->pc_offset == -1 && is_ra_save_ins(ip)) {
 			info->pc_offset =
 				ip->i_format.simmediate / sizeof(long);
+			break;
+		}
+
+		if (info->pc_offset == -1 && is_ra_gssq_ins(ip)) {
+			info->pc_offset =
+				(ip->loongson3_lswc2_format.offset*16 + (ip->loongson3_lswc2_format.rq == 31)*8) / sizeof(long);
 			break;
 		}
 	}
