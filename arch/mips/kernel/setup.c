@@ -870,3 +870,52 @@ static int __init debugfs_mips(void)
 }
 arch_initcall(debugfs_mips);
 #endif
+
+#if defined(CONFIG_CPU_LOONGSON3) && defined(CONFIG_NUMA)
+#include <linux/percpu.h>
+unsigned long __per_cpu_offset[NR_CPUS] __read_mostly;
+EXPORT_SYMBOL(__per_cpu_offset);
+
+static void* __init pcpu_alloc_bootmem(unsigned int cpu, size_t size,
+		size_t align)
+{
+
+	return __alloc_bootmem_node(NODE_DATA(cpu_to_node(cpu)), size, align, 0);
+
+}
+
+static void __init pcpu_free_bootmem(void *ptr, size_t size)
+{
+
+	free_bootmem(__pa(ptr), size);
+}
+
+
+static int __init  pcpu_cpu_distance(unsigned int from, unsigned int to)
+{
+	if (cpu_to_node(from) == cpu_to_node(to))
+		return LOCAL_DISTANCE;
+	else
+		return REMOTE_DISTANCE;
+}
+
+
+void __init setup_per_cpu_areas(void)
+{
+	unsigned int cpu;
+	unsigned long delta;
+	int rc = -EINVAL;
+
+	rc = pcpu_embed_first_chunk(PERCPU_MODULE_RESERVE,
+			PERCPU_DYNAMIC_RESERVE, 1 << 20,
+			pcpu_cpu_distance, pcpu_alloc_bootmem,
+			pcpu_free_bootmem);
+	if (rc)
+		pr_warning("PERCPU: allocater failed!\n");
+
+	delta = (unsigned long)pcpu_base_addr - (unsigned long)__per_cpu_start;
+
+	for_each_possible_cpu(cpu)
+		__per_cpu_offset[cpu] = delta + pcpu_unit_offsets[cpu];
+}
+#endif
