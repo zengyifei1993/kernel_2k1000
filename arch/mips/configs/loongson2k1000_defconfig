@@ -2766,7 +2766,7 @@ CONFIG_RTC_DRV_DS1307=y
 #
 # on-CPU RTC drivers
 #
-# CONFIG_RTC_DRV_LS is not set
+CONFIG_RTC_DRV_LS=y
 # CONFIG_RTC_DRV_SNVS is not set
 
 #

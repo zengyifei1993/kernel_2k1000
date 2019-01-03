@@ -224,10 +224,12 @@
 			interrupts = <30>;
 			#address-cells = <1>;
 			#size-cells = <0>;
+		/*
 			rtc@68{
 				compatible = "dallas,ds1338";
 				reg = <0x68>;
 			};
+		*/
 			eeprom@57{
 				compatible = "atmel,24c16";
 				reg = <0x57>;
