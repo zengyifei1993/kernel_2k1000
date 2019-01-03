@@ -277,6 +277,7 @@ void atombios_crtc_dpms(struct drm_crtc *crtc, int mode)
 		atombios_blank_crtc(crtc, ATOM_DISABLE);
 		if (dev->num_crtcs > radeon_crtc->crtc_id)
 			drm_vblank_on(dev, radeon_crtc->crtc_id);
+		mdelay(100);
 		radeon_crtc_load_lut(crtc);
 		break;
 	case DRM_MODE_DPMS_STANDBY:
