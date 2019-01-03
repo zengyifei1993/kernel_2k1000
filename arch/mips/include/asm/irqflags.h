@@ -137,6 +137,12 @@ static inline void arch_local_irq_disable(void)
 	: );
 
 	legacy_arch_local_irq_disable();
+
+	__asm__ __volatile__(
+	"								\n"
+	: /* no outputs */
+	: /* no inputs */
+	: );
 }
 
 #define IRQ_SAVE_MARK_NUM		0x00000003
