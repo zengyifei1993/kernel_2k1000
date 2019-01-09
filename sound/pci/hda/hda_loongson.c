@@ -52,6 +52,7 @@
 #include <linux/clocksource.h>
 #include <linux/time.h>
 #include <linux/completion.h>
+#include <linux/pci.h>
 
 #include <sound/core.h>
 #include <sound/initval.h>
@@ -59,8 +60,10 @@
 #include "hda_codec.h"
 #include "hda_controller.h"
 
+#ifdef CONFIG_CPU_LOONGSON3
 #include <boot_param.h>
 #include <loongson-pch.h>
+#endif
 
 /* macros for convenience. */
 #define platform_resource_start(dev,bar)   ((dev)->resource[(bar)].start)
@@ -876,6 +879,14 @@ static void azx_shutdown(struct platform_device *pdev)
 		azx_stop_chip(chip);
 }
 
+#ifdef CONFIG_OF
+static struct of_device_id ls_hda_id_table[] = {
+	{.compatible = "loongson,ls-audio"},
+	{},
+};
+MODULE_DEVICE_TABLE(of, ls_hda_id_table);
+#endif
+
 /* platform_driver definition */
 static struct platform_driver azx_driver = {
 	.probe = azx_probe,
@@ -884,6 +895,9 @@ static struct platform_driver azx_driver = {
 	.driver = {
 		.name = "ls-audio",
 		.owner = THIS_MODULE,
+#ifdef CONFIG_OF
+		.of_match_table = of_match_ptr(ls_hda_id_table),
+#endif
 		.pm = AZX_PM_OPS,
 	},
 };
