@@ -198,13 +198,32 @@ static void __init szmem(unsigned int node)
 				memblock_reserve(((node_id << 44) | emap->map[i].mem_start), 0x2000);
 				break;
 			case UMA_VIDEO_RAM:
-#ifdef LS_VRAM_ADD_BY_PMON
-				vram_type = VRAM_TYPE_UMA;
-				add_memory_region((node_id << 44) + emap->map[i].mem_start,
-					(u64)emap->map[i].mem_size << 20, BOOT_MEM_RESERVED);
-				memblock_reserve(((node_id << 44) | emap->map[i].mem_start), mem_size << 20);
-#endif
-
+				{
+					unsigned long start_pfn, end_pfn, ts, te;
+					get_pfn_range_for_nid(node, &start_pfn, &end_pfn);
+					ts = PFN_DOWN(emap->map[i].mem_start);
+					te = PFN_UP(emap->map[i].mem_start + (emap->map[i].mem_size << 20));
+					
+					/*
+ 					* case0: Don't add VRAM into reserved memblock when it's OUT OF the memory region,
+ 					* so that bootmem can't fetch VRAM from reserved memblock to reserve it.(Reserve a region
+ 					* beyond memory will lead to BUG())
+ 					*
+ 					* case1: Add VRAM into reserved memblock when it's INSIDE the memory region, so that bootmem
+ 					* will reserve the VRAM and don't use it. 
+ 					*
+ 					* case2: Add VRAM into reserved memblock when it ACROSSES the memory region, so that the
+ 					* error case can be checked out.(The kernel will BUG() when bootmem reserve the VRAM 
+ 					* memblock because of part of it beyond memory.)
+ 					*
+ 					* */
+					if ((te >= start_pfn) && (ts < end_pfn)) {
+						vram_type = VRAM_TYPE_UMA;
+						add_memory_region((node_id << 44) + emap->map[i].mem_start,
+						(u64)emap->map[i].mem_size << 20, BOOT_MEM_RESERVED);
+						memblock_reserve(((node_id << 44) | emap->map[i].mem_start), mem_size << 20);	
+					}
+				}
 				uma_vram_addr = emap->map[i].mem_start;
 				uma_vram_size = emap->map[i].mem_size << 20;
 				break;
