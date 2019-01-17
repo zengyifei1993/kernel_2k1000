@@ -349,6 +349,7 @@ do {									\
 
 #endif /* CONFIG_64BIT */
 
+#define CORE_DUMP_USE_REGSET
 #define ELF_EXEC_PAGESIZE	PAGE_SIZE
 
 /* This yields a mask that user programs can use to figure out what
