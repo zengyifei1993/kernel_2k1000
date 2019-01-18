@@ -240,6 +240,8 @@ static void  r4k_blast_icache_page_setup(void)
 		r4k_blast_icache_page = (void *)cache_noop;
 	else if (ic_lsize == 16)
 		r4k_blast_icache_page = blast_icache16_page;
+	else if (ic_lsize == 32 && current_cpu_type() == CPU_LOONGSON2)
+		r4k_blast_icache_page = loongson2_blast_icache32_page;
 	else if (ic_lsize == 32)
 		r4k_blast_icache_page = blast_icache32_page;
 	else if (ic_lsize == 64)
@@ -264,6 +266,9 @@ static void  r4k_blast_icache_page_indexed_setup(void)
 		else if (TX49XX_ICACHE_INDEX_INV_WAR)
 			r4k_blast_icache_page_indexed =
 				tx49_blast_icache32_page_indexed;
+		else if (current_cpu_type() == CPU_LOONGSON2)
+			r4k_blast_icache_page_indexed =
+				loongson2_blast_icache32_page_indexed;
 		else
 			r4k_blast_icache_page_indexed =
 				blast_icache32_page_indexed;
@@ -287,6 +292,8 @@ static void  r4k_blast_icache_setup(void)
 			r4k_blast_icache = blast_r4600_v1_icache32;
 		else if (TX49XX_ICACHE_INDEX_INV_WAR)
 			r4k_blast_icache = tx49_blast_icache32;
+		else if (current_cpu_type() == CPU_LOONGSON2)
+			r4k_blast_icache = loongson2_blast_icache32;
 		else
 			r4k_blast_icache = blast_icache32;
 	} else if (ic_lsize == 64)
@@ -368,18 +375,13 @@ static void  r4k_blast_scache_node_setup(void)
 
 static inline void local_r4k___flush_cache_all(void * args)
 {
-#if defined(CONFIG_CPU_LOONGSON2) || defined(CONFIG_CPU_LOONGSON2K)
-	r4k_blast_scache();
-	return;
-#endif
 #if defined(CONFIG_CPU_LOONGSON3)
 	r4k_blast_scache_node(((read_c0_ebase() & 0x3FF)) >> 2);
 	return;
 #endif
-	r4k_blast_dcache();
-	r4k_blast_icache();
 
 	switch (current_cpu_type()) {
+	case CPU_LOONGSON2:
 	case CPU_R4000SC:
 	case CPU_R4000MC:
 	case CPU_R4400SC:
@@ -388,6 +390,11 @@ static inline void local_r4k___flush_cache_all(void * args)
 	case CPU_R12000:
 	case CPU_R14000:
 		r4k_blast_scache();
+		break;
+	default:
+		r4k_blast_dcache();
+		r4k_blast_icache();
+		break;
 	}
 }
 
@@ -598,8 +605,17 @@ static inline void local_r4k_flush_icache_range(unsigned long start, unsigned lo
 
 	if (end - start > icache_size)
 		r4k_blast_icache();
-	else
-		protected_blast_icache_range(start, end);
+	else {
+		switch (boot_cpu_type()) {
+		case CPU_LOONGSON2:
+			protected_loongson2_blast_icache_range(start, end);
+			break;
+
+		default:
+			protected_blast_icache_range(start, end);
+			break;
+		}
+	}
 }
 
 static inline void local_r4k_flush_icache_range_ipi(void *args)
@@ -1280,7 +1296,6 @@ static int  probe_scache(void)
 	return 1;
 }
 
-#if defined(CONFIG_CPU_LOONGSON2)
 static void __init loongson2_sc_init(void)
 {
 	struct cpuinfo_mips *c = &current_cpu_data;
@@ -1296,7 +1311,6 @@ static void __init loongson2_sc_init(void)
 
 	c->options |= MIPS_CPU_INCLUSIVE_CACHES;
 }
-#endif
 
 static void __init loongson3_sc_init(void)
 {
@@ -1381,9 +1395,7 @@ static void  setup_scache(void)
 		return;
 
 	case CPU_LOONGSON2:
-#if defined(CONFIG_CPU_LOONGSON2)
 		loongson2_sc_init();
-#endif
 		return;
 
 	case CPU_LOONGSON3:
