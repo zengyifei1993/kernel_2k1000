@@ -257,11 +257,11 @@ void set_irq_attr(int irq, unsigned int imask, unsigned int core_mask, int mode)
 
 	ls64_conf_write8(imask << 4 | core_mask, (void *)(base + index));
 
-	ret = ls64_conf_read32((void*)(base + INT_BCE_OFF));
+	ret = ls64_conf_read32((void*)(base + INT_BCE_OFF)) & ~(1 << index);
 	ret |= (bounce << index);
 	ls64_conf_write32(ret, (void *)(base + INT_BCE_OFF));
 
-	ret = ls64_conf_read32((void*)(base + INT_AUTO_OFF));
+	ret = ls64_conf_read32((void*)(base + INT_AUTO_OFF)) & ~(1 << index);
 	ret |= (au << index);
 	ls64_conf_write32(ret, (void *)(base + INT_AUTO_OFF));
 }
