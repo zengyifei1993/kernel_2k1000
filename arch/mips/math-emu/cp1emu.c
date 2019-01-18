@@ -884,6 +884,17 @@ static inline int cop1_64bit(struct pt_regs *xcp)
 		set_fpr32(&ctx->fpr[(x) & ~1], (x) & 1, si);		\
 	}								\
 } while (0)
+
+#define SIFROMHREG(si, x)	((si) = (int)get_fpr32(&ctx->fpr[x], 1))
+
+#define SITOHREG(si, x)							\
+do {									\
+	unsigned int i;							\
+	set_fpr32(&ctx->fpr[x], 1, si);					\
+	for (i = 2; i < ARRAY_SIZE(ctx->fpr[x].val32); i++)		\
+		set_fpr32(&ctx->fpr[x], i, 0);				\
+} while (0)
+
 #define DIFROMREG(di, x) \
 	((di) = get_fpr64(&ctx->fpr[(x) & ~(cop1_64bit(xcp) == 0)], 0))
 
@@ -1068,6 +1079,24 @@ static int cop1Emulate(struct pt_regs *xcp, struct mips_fpu_struct *ctx,
 			DITOREG(xcp->regs[MIPSInst_RT(ir)], MIPSInst_RD(ir));
 			break;
 #endif
+		case mfhc_op:
+			if (!cpu_has_mips_r2)
+				return SIGILL;
+
+			/* copregister rd -> gpr[rt] */
+			if (MIPSInst_RT(ir) != 0) {
+				SIFROMHREG(xcp->regs[MIPSInst_RT(ir)],
+					MIPSInst_RD(ir));
+			}
+			break;
+
+		case mthc_op:
+			if (!cpu_has_mips_r2)
+				return SIGILL;
+
+			/* copregister rd <- gpr[rt] */
+			SITOHREG(xcp->regs[MIPSInst_RT(ir)], MIPSInst_RD(ir));
+			break;
 
 		case mfc_op:
 			/* copregister rd -> gpr[rt] */
@@ -1551,10 +1580,10 @@ static int fpux_emu(struct pt_regs *xcp, struct mips_fpu_struct *ctx,
 		break;
 	}
 
-	case 0x7:		/* 7 */
-		if (MIPSInst_FUNC(ir) != pfetch_op) {
+	case 0x3:
+		if (MIPSInst_FUNC(ir) != pfetch_op)
 			return SIGILL;
-		}
+
 		/* ignore prefx operation */
 		break;
 
