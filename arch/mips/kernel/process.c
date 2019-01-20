@@ -65,8 +65,7 @@ void start_thread(struct pt_regs * regs, unsigned long pc, unsigned long sp)
 	regs->cp0_status = status;
 	clear_used_math();
 	clear_fpu_owner();
-	if (cpu_has_dsp)
-		__init_dsp();
+	init_dsp();
 	clear_thread_flag(TIF_USEDMSA);
 	clear_thread_flag(TIF_MSA_CTX_LIVE);
 	disable_msa();
