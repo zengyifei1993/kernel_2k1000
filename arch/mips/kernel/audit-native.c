@@ -74,9 +74,9 @@ int audit_classify_syscall(int abi, unsigned syscall)
 #endif
 		if (abi == AUDIT_ARCH_MIPS || abi == AUDIT_ARCH_MIPSEL)
 			res = 1;
-		else if (abi == AUDIT_ARCH_MIPS64 || abi == AUDIT_ARCH_MIPS64EL)
+		else if (abi == AUDIT_ARCH_MIPS64 || abi == AUDIT_ARCH_MIPSEL64)
 			res = 0;
-		else if (abi == AUDIT_ARCH_MIPS64_N32 || abi == AUDIT_ARCH_MIPS64EL_N32)
+		else if (abi == AUDIT_ARCH_MIPS64N32 || abi == AUDIT_ARCH_MIPSEL64N32)
 			res = 6;
 	}
 
