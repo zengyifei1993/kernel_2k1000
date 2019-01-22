@@ -37,7 +37,7 @@
 
 /*
  * This is used for calculating the real page sizes
- * for FTLB or VTLB + FTLB confugrations.
+ * for FTLB or VTLB + FTLB configrations.
  */
 static inline unsigned int page_size_ftlb(unsigned int mmuextdef)
 {
@@ -190,7 +190,9 @@ typedef struct { unsigned long pgprot; } pgprot_t;
  * https://patchwork.linux-mips.org/patch/1541/
  */
 
+#ifndef __pa_symbol
 #define __pa_symbol(x)	__pa(RELOC_HIDE((unsigned long)(x), 0))
+#endif
 
 #define pfn_to_kaddr(pfn)	__va((pfn) << PAGE_SHIFT)
 
