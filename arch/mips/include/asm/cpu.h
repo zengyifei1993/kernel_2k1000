@@ -23,6 +23,8 @@
    spec.
 */
 
+#define PRID_COMP_MASK		0xff0000
+
 #define PRID_COMP_LEGACY	0x000000
 #define PRID_COMP_MIPS		0x010000
 #define PRID_COMP_BROADCOM	0x020000
@@ -43,6 +45,9 @@
  * certain CPU type exactly eventually additional registers may need to
  * be examined.	 These are valid when 23:16 == PRID_COMP_LEGACY
  */
+
+#define PRID_IMP_MASK		0xff00
+
 #define PRID_IMP_R2000		0x0100
 #define PRID_IMP_AU1_REV1	0x0100
 #define PRID_IMP_AU1_REV2	0x0200
