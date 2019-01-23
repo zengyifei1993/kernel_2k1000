@@ -72,12 +72,6 @@ typedef elf_fpreg_t elf_fpregset_t[ELF_NFPREG];
 
 #include <asm/processor.h>
 
-/*
- * When this file is selected, we are definitely running a 64bit kernel.
- * So using the right regs define in asm/reg.h
- */
-#define WANT_COMPAT_REG_H
-
 #include <linux/module.h>
 #include <linux/elfcore.h>
 #include <linux/compat.h>
