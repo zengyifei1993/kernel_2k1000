@@ -65,13 +65,15 @@ static int ls_spi_update_state(struct ls_spi *ls_spi,struct spi_device *spi,
 	unsigned int div, div_tmp;
 	unsigned int bit;
 	unsigned long clk;
+	unsigned char val;
+	const char rdiv[12] = {0, 1, 4, 2, 3, 5, 6, 7, 8, 9, 10, 11};
 
 	hz  = t ? t->speed_hz : spi->max_speed_hz;
 
 	if (!hz)
 		hz = spi->max_speed_hz;
 
-	if (ls_spi->hz != hz) {
+	if (hz && ls_spi->hz != hz) {
 		clk = 100000000;
 		div = DIV_ROUND_UP(clk, hz);
 
@@ -82,32 +84,10 @@ static int ls_spi_update_state(struct ls_spi *ls_spi,struct spi_device *spi,
 			div = 4096;
 
 		bit = fls(div) - 1;
-		switch(1 << bit) {
-			case 16:
-				div_tmp = 2;
-				if (div > (1<<bit)) {
-					div_tmp++;
-				}
-				break;
-			case 32:
-				div_tmp = 3;
-				if (div > (1<<bit)) {
-					div_tmp += 2;
-				}
-				break;
-			case 8:
-				div_tmp = 4;
-				if (div > (1<<bit)) {
-					div_tmp -= 2;
-				}
-				break;
-			default:
-				div_tmp = bit-1;
-				if (div > (1<<bit)) {
-					div_tmp++;
-				}
-				break;
-		}
+		if ((1<<bit) == div)
+			bit--;
+		div_tmp = rdiv[bit];
+
 		dev_dbg(&spi->dev, "clk = %ld hz = %d div_tmp = %d bit = %d\n",
 				clk, hz, div_tmp, bit);
 
@@ -115,6 +95,10 @@ static int ls_spi_update_state(struct ls_spi *ls_spi,struct spi_device *spi,
 		ls_spi->spcr = div_tmp & 3;
 		ls_spi->sper = (div_tmp >> 2) & 3;
 
+		val = ls_spi_read_reg(ls_spi, SPCR);
+		ls_spi_write_reg(ls_spi, SPCR, (val & ~3) | ls_spi->spcr);
+		val = ls_spi_read_reg(ls_spi, SPER);
+		ls_spi_write_reg(ls_spi, SPER, (val & ~3) | ls_spi->sper);
 	}
 
 	return 0;
@@ -133,14 +117,7 @@ static int ls_spi_setup(struct spi_device *spi)
 	if(spi->chip_select >= spi->master->num_chipselect)
 		return -EINVAL;
 
-	if(!ls_spi_update_state(ls_spi, spi, NULL))
-	{
-		unsigned char val;
-		val = ls_spi_read_reg(ls_spi, SPCR);
-		ls_spi_write_reg(ls_spi, SPCR, (val & ~3) | ls_spi->spcr);
-		val = ls_spi_read_reg(ls_spi, SPER);
-		ls_spi_write_reg(ls_spi, SPER, (val & ~3) | ls_spi->sper);
-	}
+	ls_spi_update_state(ls_spi, spi, NULL);
 
 	set_cs(ls_spi, spi, 1);
 
@@ -220,6 +197,9 @@ static void ls_spi_work(struct work_struct *work)
 		spin_unlock(&ls_spi->lock);
 
 		spi = m->spi;
+
+		/*setup spi clock*/
+		ls_spi_update_state(ls_spi, spi, NULL);
 
 		/*in here set cs*/
 		set_cs(ls_spi, spi, 0);
