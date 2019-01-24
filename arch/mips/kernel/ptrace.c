@@ -24,7 +24,6 @@
 #include <linux/ptrace.h>
 #include <linux/regset.h>
 #include <linux/smp.h>
-#include <linux/user.h>
 #include <linux/security.h>
 #include <linux/tracehook.h>
 #include <linux/audit.h>
@@ -40,9 +39,9 @@
 #include <asm/mipsmtregs.h>
 #include <asm/pgtable.h>
 #include <asm/page.h>
+#include <asm/reg.h>
 #include <asm/uaccess.h>
 #include <asm/bootinfo.h>
-#include <asm/reg.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/syscalls.h>
