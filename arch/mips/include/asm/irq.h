@@ -119,6 +119,8 @@ static inline int smtc_handle_on_other_cpu(unsigned int irq)
 
 #endif
 
+asmlinkage void plat_irq_dispatch(void);
+
 extern void do_IRQ(unsigned int irq);
 
 #ifdef CONFIG_MIPS_MT_SMTC_IRQAFF
