@@ -1749,7 +1749,6 @@ static const struct mips_perf_event *mipsxx_pmu_map_raw_event(u64 config)
 	unsigned int raw_id = config & 0xff;
 	unsigned int base_id = raw_id & 0x7f;
 
-	raw_event.event_id = base_id;
 
 	switch (current_cpu_type()) {
 	case CPU_24K:
@@ -1818,6 +1817,8 @@ static const struct mips_perf_event *mipsxx_pmu_map_raw_event(u64 config)
 		raw_event.cntr_mask = raw_id > 127 ? CNTR_ODD : CNTR_EVEN;
 	break;
 	}
+
+	raw_event.event_id = base_id;
 
 	return &raw_event;
 }
