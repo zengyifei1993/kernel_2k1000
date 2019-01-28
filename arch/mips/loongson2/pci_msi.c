@@ -49,7 +49,7 @@ static DEFINE_SPINLOCK(lock);
  */
 static int ls2k_create_irq(void)
 {
-	int irq, pos;
+	int irq, pos, reg;
 	unsigned long flags;
 
 	spin_lock_irqsave(&lock, flags);
@@ -68,17 +68,21 @@ again:
 	spin_unlock_irqrestore(&lock, flags);
 
 	dynamic_irq_init(irq);
+	reg = pos<32?LS2K_INT_MSI_TRIGGER_EN_0:LS2K_INT_MSI_TRIGGER_EN_1;
+	ls2k_writel(ls2k_readl(reg)|(1<<(pos&0x1f)), reg);
 
 	return irq;
 }
 
 static void ls2k_destroy_irq(unsigned int irq)
 {
-	int pos = irq2bit(irq);
+	int pos = irq2bit(irq), reg;
 
 	dynamic_irq_cleanup(irq);
 
 	clear_bit(pos, msi_irq_in_use);
+	reg = pos<32?LS2K_INT_MSI_TRIGGER_EN_0:LS2K_INT_MSI_TRIGGER_EN_1;
+	ls2k_writel(ls2k_readl(reg)&~(1<<(pos&0x1f)), reg);
 }
 
 void ls2k_teardown_msi_irq(unsigned int irq)
@@ -88,22 +92,13 @@ void ls2k_teardown_msi_irq(unsigned int irq)
 
 void disable_ls2k_msi_irq(struct irq_data *d)
 {
-	unsigned int irq = d->irq;
-	int pos = irq2bit(irq);
-	int reg = pos<32?LS2K_INT_MSI_TRIGGER_EN_0:LS2K_INT_MSI_TRIGGER_EN_1;
-	ls_mask_icu_irq(d);
 	mask_msi_irq(d);
-	ls2k_writel(ls2k_readl(reg)&~(1<<(pos&0x1f)), reg);
 }
 
 void enable_ls2k_msi_irq(struct irq_data *d)
 {
-	unsigned int irq = d->irq;
-	int pos = irq2bit(irq);
-	int reg = pos<32?LS2K_INT_MSI_TRIGGER_EN_0:LS2K_INT_MSI_TRIGGER_EN_1;
 	ls_unmask_icu_irq(d);
 	unmask_msi_irq(d);
-	ls2k_writel(ls2k_readl(reg)|(1<<(pos&0x1f)), reg);
 }
 
 int ls_set_affinity_icu_irq(struct irq_data *data, const struct cpumask *affinity, bool force);
@@ -113,7 +108,6 @@ static struct irq_chip ls2k_msi_chip = {
 	.irq_ack	= ls_mask_icu_irq,
 	.irq_mask	= disable_ls2k_msi_irq,
 	.irq_unmask	= enable_ls2k_msi_irq,
-	//.irq_eoi	= enable_ls2k_msi_irq,
 	.irq_set_affinity	= ls_set_affinity_icu_irq,
 };
 
