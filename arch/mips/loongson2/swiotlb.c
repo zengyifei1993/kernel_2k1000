@@ -206,9 +206,79 @@ static struct dma_map_ops loongson2_linear_dma_map_ops = {
 		.dma_supported = swiotlb_dma_supported,
 };
 
+
+static char *vstart;
+static size_t swiotlbsize;
+
+static __init void ls2k_swiotlb_init(int verbose)
+{
+	unsigned long swiotlb_nslabs;
+	swiotlbsize = 64 * (1<<20);
+	swiotlb_nslabs = swiotlbsize >> IO_TLB_SHIFT;
+	swiotlb_nslabs = ALIGN(swiotlb_nslabs, IO_TLB_SEGSIZE);
+	swiotlbsize = swiotlb_nslabs << IO_TLB_SHIFT;
+
+	/* Get IO TLB memory from the low pages */
+	vstart = alloc_bootmem_low_pages_nopanic(PAGE_ALIGN(swiotlbsize));
+	if (vstart && !swiotlb_init_with_tbl(vstart, swiotlb_nslabs, verbose))
+		return;
+
+	if (vstart)
+		free_bootmem(virt_to_phys(vstart),
+				 PAGE_ALIGN(swiotlbsize));
+	vstart = NULL;
+
+	pr_warn("Cannot allocate buffer");
+}
+
+int swiotlb_late_init_with_default_size(size_t default_size);
+
+#define SLABS_PER_PAGE (1 << (PAGE_SHIFT - IO_TLB_SHIFT))
+#define IO_TLB_MIN_SLABS ((1<<20) >> IO_TLB_SHIFT)
+static int __init late_swiotlb_setup(void)
+{
+	unsigned long swiotlb_nslabs;
+	unsigned int order;
+	int rc = 0;
+
+	if(vstart) return 0;
+
+	/*
+	 * Get IO TLB memory from the low pages
+	 */
+	order = get_order(swiotlbsize);
+	swiotlb_nslabs = SLABS_PER_PAGE << order;
+	swiotlbsize = swiotlb_nslabs << IO_TLB_SHIFT;
+
+	while ((SLABS_PER_PAGE << order) > IO_TLB_MIN_SLABS) {
+		vstart = (void *)__get_free_pages(GFP_DMA32 | __GFP_NOWARN,
+						  order);
+		if (vstart)
+			break;
+		order--;
+	}
+
+	if (!vstart) {
+		return -ENOMEM;
+	}
+	if (order != get_order(swiotlbsize)) {
+		pr_warn("only able to allocate %ld MB\n",
+			(PAGE_SIZE << order) >> 20);
+		swiotlb_nslabs = SLABS_PER_PAGE << order;
+	}
+	rc = swiotlb_late_init_with_tbl(vstart, swiotlb_nslabs);
+	if (rc)
+		free_pages((unsigned long)vstart, order);
+
+	return rc;
+}
+
+__define_initcall(late_swiotlb_setup, rootfss);
+
+
 void __init plat_swiotlb_setup(void)
 {
 	pr_info("swiotlb:restricted 32bit dma!\n");
-	swiotlb_init(1);
+	ls2k_swiotlb_init(1);
 	mips_dma_map_ops = &loongson2_linear_dma_map_ops;
 }
