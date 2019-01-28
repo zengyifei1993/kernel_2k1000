@@ -252,10 +252,12 @@ extern u64 ls_lpc_reg_base;
 #define LS_LPC_CFG1_REG			(ls_lpc_reg_base + 0x4)
 #define LS_LPC_CFG2_REG			(ls_lpc_reg_base + 0x8)
 #define LS_LPC_CFG3_REG			(ls_lpc_reg_base + 0xc)
+#define LS_LPC_CFG4_REG			(ls_lpc_reg_base + 0x10)
 #define LS_LPC_INT_CTL			LS_LPC_CFG0_REG
 #define LS_LPC_INT_ENA			LS_LPC_CFG1_REG
 #define LS_LPC_INT_STS			LS_LPC_CFG2_REG
 #define LS_LPC_INT_CLR			LS_LPC_CFG3_REG
+#define LS_LPC_INT_POL			LS_LPC_CFG4_REG
 #define LS2H_LPC_CFG0_REG		(LS2H_LPC_REG_BASE + 0x0)
 #define LS2H_LPC_CFG1_REG		(LS2H_LPC_REG_BASE + 0x4)
 #define LS2H_LPC_CFG2_REG		(LS2H_LPC_REG_BASE + 0x8)

@@ -16,11 +16,13 @@ static volatile unsigned long long *irq_status = (volatile unsigned long long *)
 static volatile unsigned long long *irq_mask   = (volatile unsigned long long *)((LS7A_IOAPIC_INT_MASK  ));
 static volatile unsigned long long *irq_edge   = (volatile unsigned long long *)((LS7A_IOAPIC_INT_EDGE  ));
 static volatile unsigned long long *irq_clear  = (volatile unsigned long long *)((LS7A_IOAPIC_INT_CLEAR ));
+static volatile unsigned long long *irq_pol  = (volatile unsigned long long *)((LS7A_IOAPIC_INT_POL ));
 static volatile unsigned long long *irq_msi_en = (volatile unsigned long long *)((LS7A_IOAPIC_HTMSI_EN  ));
 static volatile unsigned char *irq_msi_vec = (volatile unsigned char *)((LS7A_IOAPIC_HTMSI_VEC ));
 
 extern unsigned long long smp_group[4];
 extern void loongson3_send_irq_by_ipi(int cpu, int irqs);
+static irqreturn_t lpc_irq_handler(int irq, void *data);
 
 static DEFINE_SPINLOCK(pch_irq_lock);
 extern int ls3a_msi_enabled;
@@ -108,7 +110,7 @@ static void unmask_pch_irq(struct irq_data *d)
 	spin_lock_irqsave(&pch_irq_lock, flags);
 
 	if(ls3a_msi_enabled)
-		*irq_clear |= 1ULL << (irq_nr - LS7A_IOAPIC_IRQ_BASE);
+		*irq_clear = 1ULL << (irq_nr - LS7A_IOAPIC_IRQ_BASE);
 	else
 		*irq_mask &= ~(1ULL << (irq_nr - LS7A_IOAPIC_IRQ_BASE));
 
@@ -143,6 +145,13 @@ void handle_7a_irqs(unsigned long long irqs) {
 	struct irq_data *irqd;
 	struct cpumask affinity;
 	int cpu = smp_processor_id();
+
+	if(irqs & 0x80000)
+	{
+		lpc_irq_handler(0, 0);
+		irqs &= ~0x80000;
+		*irq_clear = 0x80000;
+	}
 
 	while(irqs){
 		irq = __ffs(irqs);
@@ -257,11 +266,12 @@ static void init_7a_irq(int dev, int irq) {
 
 void init_7a_irqs(void)
 {
-	/*lpc irq is edeg trigged*/
-	*irq_edge   = 0x80000ULL;
-	*irq_clear  = 0ULL;
+	/*lpc irq is level trigged*/
+	*irq_edge   = 0x00000ULL;
+	*irq_pol    = 0x00000000ULL;
 	*irq_status = 0ULL;
 	*irq_mask   = 0xffffffffffffffffULL;
+	*irq_clear  = -1ULL;
 
 	init_7a_irq(LS7A_IOAPIC_UART0_OFFSET        , LS7A_IOAPIC_UART0_IRQ        );
 	init_7a_irq(LS7A_IOAPIC_I2C0_OFFSET         , LS7A_IOAPIC_I2C0_IRQ         );
@@ -349,14 +359,6 @@ static void mask_lpc_irq(struct irq_data *d)
 
 static void mask_ack_lpc_irq(struct irq_data *d)
 {
-	unsigned long flags;
-
-	spin_lock_irqsave(&lpc_irq_lock, flags);
-
-	ls2h_writel(0x1 << (d->irq), LS_LPC_INT_CLR);
-	ls2h_writel(ls2h_readl(LS_LPC_INT_ENA) & ~(0x1 << (d->irq)), LS_LPC_INT_ENA);
-
-	spin_unlock_irqrestore(&lpc_irq_lock, flags);
 }
 
 static void unmask_lpc_irq(struct irq_data *d)
@@ -386,7 +388,7 @@ static irqreturn_t lpc_irq_handler(int irq, void *data)
 	int irqs;
 	int lpc_irq;
 
-	irqs = ls2h_readl(LS_LPC_INT_ENA) & ls2h_readl(LS_LPC_INT_STS) & 0xfeff;
+	irqs = ls2h_readl(LS_LPC_INT_ENA) & ls2h_readl(LS_LPC_INT_STS);
 	if (irqs)
 		while ((lpc_irq = ffs(irqs))) {
 			do_IRQ(lpc_irq - 1);
@@ -432,11 +434,13 @@ static int ls7a_lpc_init(void)
 	/* added for KBC attached on LPC controler */
 	for(i = 0; i < 16; i++)
 		irq_set_chip_and_handler(i, &lpc_irq_chip, handle_level_irq);
-	/* Enable the LPC interrupt */
+	/* Enable the LPC interrupt, bit31: en  bit30: edge */
 	ls2h_writel(0x80000000, LS_LPC_INT_CTL);
 
-	/* set the 18-bit interrpt enable bit for keyboard and mouse */
-	ls2h_writel(0x1 << 0x1 | 0x1 << 12, LS_LPC_INT_ENA);
+	/*lpc pole high*/
+	ls2h_writel(-1, LS_LPC_INT_POL);
+
+	ls2h_writel(0, LS_LPC_INT_ENA);
 
 	/* clear all 18-bit interrpt bit */
 	ls2h_writel(0x3ffff, LS_LPC_INT_CLR);
