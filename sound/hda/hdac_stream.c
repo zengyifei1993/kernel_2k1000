@@ -59,9 +59,11 @@ void snd_hdac_stream_start(struct hdac_stream *azx_dev, bool fresh_start)
 	/* enable SIE */
 	snd_hdac_chip_updatel(bus, INTCTL, 0, 1 << azx_dev->index);
 	/* set DMA start and interrupt mask */
-	if (chip->driver_caps & AZX_DCAPS_LS_HDA_WORKAROUND)
+	if (chip->driver_caps & AZX_DCAPS_LS_HDA_WORKAROUND) {
 		snd_hdac_stream_updatel(azx_dev, SD_CTL,
-				0, SD_CTL_DMA_START | SD_INT_MASK);
+				0, SD_CTL_DMA_START | SD_INT_MASK);	
+		snd_hdac_stream_updatel(azx_dev, SD_CTL, SD_CTL_STREAM_TAG_MASK, azx_dev->stream_tag << SD_CTL_STREAM_TAG_SHIFT);
+	}
 	else
 		snd_hdac_stream_updateb(azx_dev, SD_CTL,
 				0, SD_CTL_DMA_START | SD_INT_MASK);
@@ -174,8 +176,11 @@ int snd_hdac_stream_setup(struct hdac_stream *azx_dev)
 	snd_hdac_stream_clear(azx_dev);
 	/* program the stream_tag */
 	val = snd_hdac_stream_readl(azx_dev, SD_CTL);
-	val = (val & ~SD_CTL_STREAM_TAG_MASK) |
-		(azx_dev->stream_tag << SD_CTL_STREAM_TAG_SHIFT);
+
+	if (!(chip->driver_caps & AZX_DCAPS_LS_HDA_WORKAROUND)) {
+		val = (val & ~SD_CTL_STREAM_TAG_MASK) |
+			(azx_dev->stream_tag << SD_CTL_STREAM_TAG_SHIFT);
+	}
 	if (!bus->snoop)
 		val |= SD_CTL_TRAFFIC_PRIO;
 	snd_hdac_stream_writel(azx_dev, SD_CTL, val);
