@@ -3091,6 +3091,10 @@ static int alc269_resume(struct hda_codec *codec)
 		msleep(150);
 	}
 
+	if (!spec->no_depop_delay) {
+		msleep(150);
+	}
+
 	codec->patch_ops.init(codec);
 
 	if (spec->codec_variant == ALC269_TYPE_ALC269VB)
