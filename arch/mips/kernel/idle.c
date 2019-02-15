@@ -17,6 +17,7 @@
 #include <linux/printk.h>
 #include <linux/sched.h>
 #include <asm/cpu.h>
+#include <asm/cpu-type.h>
 #include <asm/cpu-info.h>
 #include <asm/idle.h>
 #include <asm/mipsregs.h>

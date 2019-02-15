@@ -52,7 +52,7 @@ NESTED(handle_sys, PT_SIZE, sp)
 
 stack_done:
 	lw	t0, TI_FLAGS($28)	# syscall tracing enabled?
-	li	t1, _TIF_SYSCALL_TRACE | _TIF_SYSCALL_AUDIT
+	li	t1, _TIF_WORK_SYSCALL_ENTRY
 	and	t0, t1
 	bnez	t0, syscall_trace_entry # -> yes
 
@@ -218,20 +218,6 @@ illegal_syscall:
 einval: li	v0, -ENOSYS
 	jr	ra
 	END(sys_syscall)
-
-	.macro	fifty ptr, nargs, from=1, to=50
-	sys	\ptr		\nargs
-	.if	\to-\from
-	fifty	\ptr,\nargs,"(\from+1)",\to
-	.endif
-	.endm
-
-	.macro	mille ptr, nargs, from=1, to=20
-	fifty	\ptr,\nargs
-	.if	\to-\from
-	mille	\ptr,\nargs,"(\from+1)",\to
-	.endif
-	.endm
 
 	.macro	syscalltable
 	sys	sys_syscall		8	/* 4000 */

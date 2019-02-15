@@ -217,8 +217,6 @@ NESTED(kernel_entry, 16, sp)			# kernel entry point
 	j		start_kernel
 	END(kernel_entry)
 
-	__CPUINIT
-
 #ifdef CONFIG_SMP
 /*
  * SMP slave cpus entry point.	Board specific code for bootstrap calls this
@@ -247,5 +245,3 @@ NESTED(smp_bootstrap, 16, sp)
 	j	start_secondary
 	END(smp_bootstrap)
 #endif /* CONFIG_SMP */
-
-	__FINIT

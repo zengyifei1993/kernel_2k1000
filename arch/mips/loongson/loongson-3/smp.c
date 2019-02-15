@@ -289,7 +289,7 @@ void loongson3_ipi_interrupt(struct pt_regs *regs)
 /*
  * SMP init and finish on secondary CPUs
  */
-void __cpuinit loongson3_init_secondary(void)
+void  loongson3_init_secondary(void)
 {
 	int i;
 	uint32_t initcount;
@@ -326,7 +326,7 @@ void __cpuinit loongson3_init_secondary(void)
 	write_c0_count(initcount);
 }
 
-void __cpuinit loongson3_smp_finish(void)
+void  loongson3_smp_finish(void)
 {
 	int cpu = smp_processor_id();
 
@@ -396,7 +396,7 @@ void __init loongson3_prepare_cpus(unsigned int max_cpus)
 /*
  * Setup the PC, SP, and GP of a secondary processor and start it runing!
  */
-void __cpuinit loongson3_boot_secondary(int cpu, struct task_struct *idle)
+void  loongson3_boot_secondary(int cpu, struct task_struct *idle)
 {
 	volatile unsigned long startargs[4];
 
@@ -735,7 +735,7 @@ void loongson3_enable_clock(int cpu)
 }
 
 #define CPU_POST_DEAD_FROZEN	(CPU_POST_DEAD | CPU_TASKS_FROZEN)
-static int __cpuinit loongson3_cpu_callback(struct notifier_block *nfb,
+static int  loongson3_cpu_callback(struct notifier_block *nfb,
 	unsigned long action, void *hcpu)
 {
 	unsigned int cpu = (unsigned long)hcpu;
@@ -758,14 +758,14 @@ static int __cpuinit loongson3_cpu_callback(struct notifier_block *nfb,
 	return NOTIFY_OK;
 }
 
-static int __cpuinit register_loongson3_notifier(void)
+static int  register_loongson3_notifier(void)
 {
 	hotcpu_notifier(loongson3_cpu_callback, 0);
 	return 0;
 }
 early_initcall(register_loongson3_notifier);
 
-void __cpuinit disable_unused_cpus(void)
+void  disable_unused_cpus(void)
 {
 	int cpu;
 	struct cpumask tmp;

@@ -16,6 +16,8 @@
 #include <ls2k.h>
 #endif
 
+#include <asm/cpu-type.h>
+
 /* Allow other reference temperatures to fixup the original cpu temperature */
 int __weak fixup_cpu_temp(int cpu, int cputemp)
 {
@@ -33,7 +35,7 @@ int loongson_cpu_temp(int cpu)
 	int cputemp;
 	u32 reg, prid_rev;
 
-	switch(current_cpu_type()){
+	switch(boot_cpu_type()){
 	case CPU_LOONGSON3:
 		reg = LOONGSON_CHIPTEMP(cpu);
 		prid_rev = read_c0_prid() & PRID_REV_MASK;

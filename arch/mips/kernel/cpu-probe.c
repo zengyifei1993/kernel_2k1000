@@ -20,6 +20,7 @@
 
 #include <asm/bugs.h>
 #include <asm/cpu.h>
+#include <asm/cpu-type.h>
 #include <asm/fpu.h>
 #include <asm/mipsregs.h>
 #include <asm/msa.h>
@@ -28,7 +29,7 @@
 #include <asm/spram.h>
 #include <asm/uaccess.h>
 
-static int __cpuinitdata mips_fpu_disabled;
+static int  mips_fpu_disabled;
 
 static int __init fpu_disable(char *s)
 {
@@ -41,7 +42,7 @@ static int __init fpu_disable(char *s)
 __setup("nofpu", fpu_disable);
 
 #ifdef CONFIG_CPU_LOONGSON3
-int __cpuinitdata mips_dsp_disabled = 1;
+int  mips_dsp_disabled = 1;
 
 static int __init dsp_enable(char *s)
 {
@@ -53,7 +54,7 @@ static int __init dsp_enable(char *s)
 
 __setup("dsp", dsp_enable);
 #else
-int __cpuinitdata mips_dsp_disabled = 0;
+int  mips_dsp_disabled = 0;
 #endif
 
 static int __init dsp_disable(char *s)
@@ -84,7 +85,7 @@ static inline void check_errata(void)
 {
 	struct cpuinfo_mips *c = &current_cpu_data;
 
-	switch (c->cputype) {
+	switch (current_cpu_type()) {
 	case CPU_34K:
 		/*
 		 * Erratum "RPS May Cause Incorrect Instruction Execution"
@@ -180,7 +181,7 @@ static inline void cpu_probe_vmbits(struct cpuinfo_mips *c)
 #endif
 }
 
-static void __cpuinit set_isa(struct cpuinfo_mips *c, unsigned int isa)
+static void  set_isa(struct cpuinfo_mips *c, unsigned int isa)
 {
 	switch (isa) {
 	case MIPS_CPU_ISA_M64R2:
@@ -208,7 +209,7 @@ static void __cpuinit set_isa(struct cpuinfo_mips *c, unsigned int isa)
 	}
 }
 
-static char unknown_isa[] __cpuinitdata = KERN_ERR \
+static char unknown_isa[]  = KERN_ERR \
 	"Unsupported ISA type, c0.config0: %d.";
 
 static void set_ftlb_enable(struct cpuinfo_mips *c, int enable)
@@ -475,8 +476,7 @@ static inline unsigned int decode_config5(struct cpuinfo_mips *c)
 	return config5 & MIPS_CONF_M;
 }
 
-
-static void __cpuinit decode_configs(struct cpuinfo_mips *c)
+static void  decode_configs(struct cpuinfo_mips *c)
 {
 	int ok;
 
@@ -1495,7 +1495,7 @@ const char *__cpu_name[NR_CPUS];
 const char *__cpu_full_name[NR_CPUS];
 const char *__elf_platform;
 
-__cpuinit void cpu_probe(void)
+ void cpu_probe(void)
 {
 	struct cpuinfo_mips *c = &current_cpu_data;
 	unsigned int cpu = smp_processor_id();
@@ -1629,12 +1629,12 @@ static int __init overwrite_cpu_fullname(void)
 
 core_initcall(overwrite_cpu_fullname);
 
-__cpuinit void cpu_report(void)
+ void cpu_report(void)
 {
 	struct cpuinfo_mips *c = &current_cpu_data;
 
-	printk(KERN_INFO "CPU revision is: %08x (%s)\n",
-	       c->processor_id, cpu_name_string());
+	pr_info("CPU%d revision is: %08x (%s)\n",
+	       smp_processor_id(), c->processor_id, cpu_name_string());
 	if (c->options & MIPS_CPU_FPU)
 		printk(KERN_INFO "FPU revision is: %08x\n", c->fpu_id);
 	if (cpu_has_msa)

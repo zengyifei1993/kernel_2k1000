@@ -23,6 +23,7 @@
 #include <linux/uaccess.h>
 
 #include <asm/irq.h>
+#include <asm/cpu-type.h>
 #include <asm/irq_regs.h>
 #include <asm/stacktrace.h>
 #include <asm/time.h> /* For perf_irq */

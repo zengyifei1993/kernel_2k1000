@@ -86,7 +86,7 @@ void ls64_ipi_interrupt(struct pt_regs *regs)
 /*
  * SMP init and finish on secondary CPUs
  */
-void __cpuinit loongson_init_secondary(void)
+void  loongson_init_secondary(void)
 {
 	int i;
 	uint32_t initcount;
@@ -121,7 +121,7 @@ void __cpuinit loongson_init_secondary(void)
 	write_c0_count(initcount);
 }
 
-void __cpuinit loongson_smp_finish(void)
+void  loongson_smp_finish(void)
 {
 	int cpu = smp_processor_id();
 	unsigned long base = IPI_BASE_OF(cpu_logical_map(cpu));
@@ -162,7 +162,7 @@ void __init loongson_prepare_cpus(unsigned int max_cpus)
 /*
  * Setup the PC, SP, and GP of a secondary processor and start it runing!
  */
-void __cpuinit loongson_boot_secondary(int cpu, struct task_struct *idle)
+void  loongson_boot_secondary(int cpu, struct task_struct *idle)
 {
 	volatile unsigned long startargs[4];
 	unsigned long coreid = cpu_logical_map(cpu);
