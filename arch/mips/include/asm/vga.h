@@ -6,6 +6,7 @@
 #ifndef _ASM_VGA_H
 #define _ASM_VGA_H
 
+#include <asm/addrspace.h>
 #include <asm/byteorder.h>
 
 /*
