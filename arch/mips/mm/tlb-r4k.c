@@ -109,10 +109,11 @@ void local_flush_tlb_all(void)
 	entry = read_c0_wired();
 
 	/* Blast 'em all away. */
-	if (cpu_has_tlbinv) {
 #ifdef CONFIG_KVM_GUEST_LS3A3000
+	if (cpu_has_tlbinv) {
 		emulate_tlb_ops(0, 1088, 0, 0, 0x5002, 2);
 #else
+	if (cpu_has_tlbinv & !entry) {
 		if (current_cpu_data.tlbsizevtlb) {
 			write_c0_index(0);
 			mtc0_tlbw_hazard();
