@@ -361,6 +361,15 @@ static inline unsigned int decode_config3(struct cpuinfo_mips *c)
 #endif
 	if (config3 & MIPS_CONF3_VZ)
 		c->ases |= MIPS_ASE_VZ;
+
+	if (config3 & MIPS_CONF3_SC)
+		c->guest.options |= MIPS_CPU_SEGMENTS;
+
+	if (config3 & MIPS_CONF3_BI)
+		c->guest.options |= MIPS_CPU_BADINSTR;
+	if (config3 & MIPS_CONF3_BP)
+		c->guest.options |= MIPS_CPU_BADINSTRP;
+
 	if (config3 & MIPS_CONF3_MSA)
 		c->ases |= MIPS_ASE_MSA;
 	/* Only tested on 32-bit cores */
@@ -376,6 +385,7 @@ static inline unsigned int decode_config4(struct cpuinfo_mips *c)
 	unsigned int newcf4;
 	unsigned int mmuextdef;
 	unsigned int ftlb_page = MIPS_CONF4_FTLBPAGESIZE;
+	unsigned long asid_mask;
 
 	config4 = read_c0_config4();
 
@@ -421,8 +431,46 @@ static inline unsigned int decode_config4(struct cpuinfo_mips *c)
 
 	c->kscratch_mask = (config4 >> 16) & 0xff;
 
+	asid_mask = MIPS_ENTRYHI_ASID;
+	if (config4 & MIPS_CONF4_AE)
+		asid_mask |= MIPS_ENTRYHI_ASIDX;
+	set_cpu_asid_mask(c, asid_mask);
+
+	/*
+	 * Warn if the computed ASID mask doesn't match the mask the kernel
+	 * is built for. This may indicate either a serious problem or an
+	 * easy optimisation opportunity, but either way should be addressed.
+	 */
+	WARN_ON(asid_mask != cpu_asid_mask(c));
+
+
 	return config4 & MIPS_CONF_M;
 }
+
+static inline unsigned int decode_config5(struct cpuinfo_mips *c)
+{
+	unsigned int config5;
+
+	config5 = read_c0_config5();
+	config5 &= ~(MIPS_CONF5_UFR | MIPS_CONF5_UFE);
+	write_c0_config5(config5);
+
+	if (config5 & MIPS_CONF5_EVA)
+		c->options |= MIPS_CPU_EVA;
+	if (config5 & MIPS_CONF5_MRP)
+		c->options |= MIPS_CPU_MAAR;
+	if (config5 & MIPS_CONF5_LLB)
+		c->options |= MIPS_CPU_RW_LLB;
+	if (config5 & MIPS_CONF5_MVH)
+		c->options |= MIPS_CPU_MVH;
+	if (cpu_has_mips_r6 && (config5 & MIPS_CONF5_VP))
+		c->options |= MIPS_CPU_VP;
+	if (config5 & MIPS_CONF5_CA2)
+		c->ases |= MIPS_ASE_MIPS16E2;
+
+	return config5 & MIPS_CONF_M;
+}
+
 
 static void __cpuinit decode_configs(struct cpuinfo_mips *c)
 {
@@ -447,6 +495,8 @@ static void __cpuinit decode_configs(struct cpuinfo_mips *c)
 		ok = decode_config3(c);
 	if (ok)
 		ok = decode_config4(c);
+	if (ok)
+		ok = decode_config5(c);
 
 	mips_probe_watch_registers(c);
 
@@ -461,6 +511,243 @@ static void __cpuinit decode_configs(struct cpuinfo_mips *c)
 
 	if (cpu_has_mips_r2)
 		c->core = read_c0_ebase() & 0x3ff;
+}
+
+/*
+ * Probe for certain guest capabilities by writing config bits and reading back.
+ * Finally write back the original value.
+ */
+#define probe_gc0_config(name, maxconf, bits)				\
+do {									\
+	unsigned int tmp;						\
+	tmp = read_gc0_##name();					\
+	write_gc0_##name(tmp | (bits));					\
+	back_to_back_c0_hazard();					\
+	maxconf = read_gc0_##name();					\
+	write_gc0_##name(tmp);						\
+} while (0)
+
+/*
+ * Probe for dynamic guest capabilities by changing certain config bits and
+ * reading back to see if they change. Finally write back the original value.
+ */
+#define probe_gc0_config_dyn(name, maxconf, dynconf, bits)		\
+do {									\
+	maxconf = read_gc0_##name();					\
+	write_gc0_##name(maxconf ^ (bits));				\
+	back_to_back_c0_hazard();					\
+	dynconf = maxconf ^ read_gc0_##name();				\
+	write_gc0_##name(maxconf);					\
+	maxconf |= dynconf;						\
+} while (0)
+
+static inline unsigned int decode_guest_config0(struct cpuinfo_mips *c)
+{
+	unsigned int config0;
+
+	probe_gc0_config(config, config0, MIPS_CONF_M);
+
+	if (config0 & MIPS_CONF_M)
+		c->guest.conf |= BIT(1);
+	return config0 & MIPS_CONF_M;
+}
+
+static inline unsigned int decode_guest_config1(struct cpuinfo_mips *c)
+{
+	unsigned int config1, config1_dyn;
+
+	probe_gc0_config_dyn(config1, config1, config1_dyn,
+			     MIPS_CONF_M | MIPS_CONF1_PC | MIPS_CONF1_WR |
+			     MIPS_CONF1_FP);
+
+	if (config1 & MIPS_CONF1_FP)
+		c->guest.options |= MIPS_CPU_FPU;
+	if (config1_dyn & MIPS_CONF1_FP)
+		c->guest.options_dyn |= MIPS_CPU_FPU;
+
+	if (config1 & MIPS_CONF1_WR)
+		c->guest.options |= MIPS_CPU_WATCH;
+	if (config1_dyn & MIPS_CONF1_WR)
+		c->guest.options_dyn |= MIPS_CPU_WATCH;
+
+	if (config1 & MIPS_CONF1_PC)
+		c->guest.options |= MIPS_CPU_PERF;
+	if (config1_dyn & MIPS_CONF1_PC)
+		c->guest.options_dyn |= MIPS_CPU_PERF;
+
+	if (config1 & MIPS_CONF_M)
+		c->guest.conf |= BIT(2);
+	return config1 & MIPS_CONF_M;
+}
+
+static inline unsigned int decode_guest_config2(struct cpuinfo_mips *c)
+{
+	unsigned int config2;
+
+	probe_gc0_config(config2, config2, MIPS_CONF_M);
+
+	if (config2 & MIPS_CONF_M)
+		c->guest.conf |= BIT(3);
+	return config2 & MIPS_CONF_M;
+}
+
+static inline unsigned int decode_guest_config3(struct cpuinfo_mips *c)
+{
+	unsigned int config3, config3_dyn;
+
+	probe_gc0_config_dyn(config3, config3, config3_dyn,
+			     MIPS_CONF_M | MIPS_CONF3_MSA | MIPS_CONF3_ULRI |
+			     MIPS_CONF3_CTXTC);
+
+	if (config3 & MIPS_CONF3_CTXTC)
+		c->guest.options |= MIPS_CPU_CTXTC;
+	if (config3_dyn & MIPS_CONF3_CTXTC)
+		c->guest.options_dyn |= MIPS_CPU_CTXTC;
+
+	if (config3 & MIPS_CONF3_PW)
+		c->guest.options |= MIPS_CPU_HTW;
+
+	if (config3 & MIPS_CONF3_ULRI)
+		c->guest.options |= MIPS_CPU_ULRI;
+
+	if (config3 & MIPS_CONF3_SC)
+		c->guest.options |= MIPS_CPU_SEGMENTS;
+
+	if (config3 & MIPS_CONF3_BI)
+		c->guest.options |= MIPS_CPU_BADINSTR;
+	if (config3 & MIPS_CONF3_BP)
+		c->guest.options |= MIPS_CPU_BADINSTRP;
+
+	if (config3 & MIPS_CONF3_MSA)
+		c->guest.ases |= MIPS_ASE_MSA;
+	if (config3_dyn & MIPS_CONF3_MSA)
+		c->guest.ases_dyn |= MIPS_ASE_MSA;
+
+	if (config3 & MIPS_CONF_M)
+		c->guest.conf |= BIT(4);
+	return config3 & MIPS_CONF_M;
+}
+
+static inline unsigned int decode_guest_config4(struct cpuinfo_mips *c)
+{
+	unsigned int config4;
+
+	probe_gc0_config(config4, config4,
+			 MIPS_CONF_M | MIPS_CONF4_KSCREXIST);
+
+	c->guest.kscratch_mask = (config4 & MIPS_CONF4_KSCREXIST)
+				>> MIPS_CONF4_KSCREXIST_SHIFT;
+
+	if (config4 & MIPS_CONF_M)
+		c->guest.conf |= BIT(5);
+	return config4 & MIPS_CONF_M;
+}
+
+static inline unsigned int decode_guest_config5(struct cpuinfo_mips *c)
+{
+	unsigned int config5, config5_dyn;
+
+	probe_gc0_config_dyn(config5, config5, config5_dyn,
+			 MIPS_CONF_M | MIPS_CONF5_MVH | MIPS_CONF5_MRP);
+
+	if (config5 & MIPS_CONF5_MRP)
+		c->guest.options |= MIPS_CPU_MAAR;
+	if (config5_dyn & MIPS_CONF5_MRP)
+		c->guest.options_dyn |= MIPS_CPU_MAAR;
+
+	if (config5 & MIPS_CONF5_LLB)
+		c->guest.options |= MIPS_CPU_RW_LLB;
+
+	if (config5 & MIPS_CONF5_MVH)
+		c->guest.options |= MIPS_CPU_MVH;
+
+	if (config5 & MIPS_CONF_M)
+		c->guest.conf |= BIT(6);
+	return config5 & MIPS_CONF_M;
+}
+
+static inline void decode_guest_configs(struct cpuinfo_mips *c)
+{
+	unsigned int ok;
+
+	ok = decode_guest_config0(c);
+	if (ok)
+		ok = decode_guest_config1(c);
+	if (ok)
+		ok = decode_guest_config2(c);
+	if (ok)
+		ok = decode_guest_config3(c);
+	if (ok)
+		ok = decode_guest_config4(c);
+	if (ok)
+		decode_guest_config5(c);
+}
+
+static inline void cpu_probe_guestctl0(struct cpuinfo_mips *c)
+{
+	unsigned int guestctl0;
+	unsigned int temp;
+
+	guestctl0 = read_c0_guestctl0();
+
+	if (guestctl0 & MIPS_GCTL0_G0E)
+		c->options |= MIPS_CPU_GUESTCTL0EXT;
+	if (guestctl0 & MIPS_GCTL0_G1)
+		c->options |= MIPS_CPU_GUESTCTL1;
+	if (guestctl0 & MIPS_GCTL0_G2)
+		c->options |= MIPS_CPU_GUESTCTL2;
+	if (!(guestctl0 & MIPS_GCTL0_RAD)) {
+		c->options |= MIPS_CPU_GUESTID;
+
+		/*
+		 * Probe for Direct Root to Guest (DRG). Set GuestCtl1.RID = 0
+		 * first, otherwise all data accesses will be fully virtualised
+		 * as if they were performed by guest mode.
+		 */
+		write_c0_guestctl1(0);
+		tlbw_use_hazard();
+
+		write_c0_guestctl0(guestctl0 | MIPS_GCTL0_DRG);
+		back_to_back_c0_hazard();
+		temp = read_c0_guestctl0();
+
+		if (temp & MIPS_GCTL0_DRG) {
+			write_c0_guestctl0(guestctl0);
+			c->options |= MIPS_CPU_DRG;
+		}
+	}
+}
+
+static inline void cpu_probe_guestctl1(struct cpuinfo_mips *c)
+{
+	if (cpu_has_guestid) {
+		/* determine the number of bits of GuestID available */
+		write_c0_guestctl1(MIPS_GCTL1_ID);
+		back_to_back_c0_hazard();
+		c->guestid_mask = (read_c0_guestctl1() & MIPS_GCTL1_ID)
+						>> MIPS_GCTL1_ID_SHIFT;
+		write_c0_guestctl1(0);
+	}
+}
+
+static inline void cpu_probe_gtoffset(struct cpuinfo_mips *c)
+{
+	/* determine the number of bits of GTOffset available */
+	write_c0_gtoffset(0xffffffff);
+	back_to_back_c0_hazard();
+	c->gtoffset_mask = read_c0_gtoffset();
+	write_c0_gtoffset(0);
+}
+
+static inline void cpu_probe_vz(struct cpuinfo_mips *c)
+{
+	cpu_probe_guestctl0(c);
+	if (cpu_has_guestctl1)
+		cpu_probe_guestctl1(c);
+
+	cpu_probe_gtoffset(c);
+
+	decode_guest_configs(c);
 }
 
 #define R4K_OPTS (MIPS_CPU_TLB | MIPS_CPU_4KEX | MIPS_CPU_4K_CACHE \
@@ -1268,6 +1555,10 @@ __cpuinit void cpu_probe(void)
 				    MIPS_CPU_ISA_M64R1 | MIPS_CPU_ISA_M64R2)) {
 			if (c->fpu_id & MIPS_FPIR_3D)
 				c->ases |= MIPS_ASE_MIPS3D;
+			if (c->fpu_id & MIPS_FPIR_UFRP)
+				c->options |= MIPS_CPU_UFR;
+			if (c->fpu_id & MIPS_FPIR_FREP)
+				c->options |= MIPS_CPU_FRE;
 		}
 	}
 
@@ -1284,6 +1575,9 @@ __cpuinit void cpu_probe(void)
 		WARN(c->msa_id & MSA_IR_WRPF,
 		     "Vector register partitioning unimplemented!");
 	}
+
+	if (cpu_has_vz)
+		cpu_probe_vz(c);
 
 	cpu_probe_vmbits(c);
 

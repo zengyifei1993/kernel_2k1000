@@ -9,6 +9,9 @@
  * Copyright (C) 2012, 2013  MIPS Technologies, Inc.  All rights reserved.
  */
 
+#ifndef __ASM_UASM_H
+#define __ASM_UASM_H
+
 #include <linux/types.h>
 
 #ifdef CONFIG_EXPORT_UASM
@@ -61,6 +64,10 @@ ISAOPC(op)(u32 **buf, unsigned int a, unsigned int b, unsigned int c)
 void __uasminit								\
 ISAOPC(op)(u32 **buf, unsigned int a, unsigned int b, unsigned int c)
 
+#define Ip_u3u2u1(op)							\
+void __uasminit								\
+ISAOPC(op)(u32 **buf, unsigned int a, unsigned int b, unsigned int c)
+
 #define Ip_u3u1u2(op)							\
 void __uasminit								\
 ISAOPC(op)(u32 **buf, unsigned int a, unsigned int b, unsigned int c)
@@ -72,6 +79,10 @@ ISAOPC(op)(u32 **buf, unsigned int a, unsigned int b, signed int c)
 #define Ip_u2s3u1(op)							\
 void __uasminit								\
 ISAOPC(op)(u32 **buf, unsigned int a, signed int b, unsigned int c)
+
+#define Ip_s3s1s2(op)							\
+void __uasminit								\
+ISAOPC(op)(u32 **buf, int a, int b, int c)
 
 #define Ip_u4u2u1s3(op)							\
 void __uasminit								\
@@ -88,6 +99,9 @@ ISAOPC(op)(u32 **buf, unsigned int a, unsigned int b, unsigned int c,	\
 	   unsigned int d)
 
 #define Ip_u1u2(op)							\
+void __uasminit ISAOPC(op)(u32 **buf, unsigned int a, unsigned int b)
+
+#define Ip_u2u1(op)							\
 void __uasminit ISAOPC(op)(u32 **buf, unsigned int a, unsigned int b)
 
 #define Ip_u1s2(op)							\
@@ -111,20 +125,28 @@ Ip_u1s2(_bltz);
 Ip_u1s2(_bltzl);
 Ip_u1u2s3(_bne);
 Ip_u2s3u1(_cache);
+Ip_u1u2(_cfc1);
+Ip_u2u1(_cfcmsa);
+Ip_u1u2(_ctc1);
+Ip_u2u1(_ctcmsa);
 Ip_u2u1s3(_daddiu);
 Ip_u3u1u2(_daddu);
 Ip_u2u1msbu3(_dext);
 Ip_u1(_di);
 Ip_u2u1msbu3(_dins);
 Ip_u2u1msbu3(_dinsm);
+Ip_u1u2(_divu);
 Ip_u1u2u3(_dmfc0);
+Ip_u1u2u3(_dmfgc0);
 Ip_u1u2u3(_dmtc0);
+Ip_u1u2u3(_dmtgc0);
 Ip_u2u1u3(_drotr);
 Ip_u2u1u3(_drotr32);
 Ip_u2u1u3(_dsll);
 Ip_u2u1u3(_dsll32);
 Ip_u2u1u3(_dsra);
 Ip_u2u1u3(_dsrl);
+Ip_u3u2u1(_dsrlv);
 Ip_u2u1u3(_dsrl32);
 Ip_u3u1u2(_dsubu);
 Ip_u1(_ei);
@@ -133,16 +155,33 @@ Ip_u2u1msbu3(_ext);
 Ip_u2u1msbu3(_ins);
 Ip_u1(_j);
 Ip_u1(_jal);
+Ip_u2u1(_jalr);
 Ip_u1(_jr);
+Ip_u2s3u1(_lb);
+Ip_u2s3u1(_lbu);
 Ip_u2s3u1(_ld);
 Ip_u3u1u2(_ldx);
+Ip_u2s3u1(_lh);
+Ip_u2s3u1(_lhu);
 Ip_u2s3u1(_ll);
 Ip_u2s3u1(_lld);
 Ip_u1s2(_lui);
 Ip_u2s3u1(_lw);
+Ip_u2s3u1(_lwu);
 Ip_u3u1u2(_lwx);
 Ip_u1u2u3(_mfc0);
+Ip_u1u2u3(_mfgc0);
+Ip_u1u2u3(_mfhc0);
+Ip_u1(_mfhi);
+Ip_u1(_mflo);
+Ip_u3u1u2(_movn);
+Ip_u3u1u2(_movz);
 Ip_u1u2u3(_mtc0);
+Ip_u1u2u3(_mtgc0);
+Ip_u1u2u3(_mthc0);
+Ip_u1(_mthi);
+Ip_u1(_mtlo);
+Ip_u3u1u2(_mul);
 Ip_u3u1u2(_or);
 Ip_u2u1u3(_ori);
 Ip_u2s3u1(_pref);
@@ -154,17 +193,28 @@ Ip_u2s3u1(_sd);
 Ip_u4u2u1s3(_gssq);
 Ip_u4u2u1s3(_gslq);
 Ip_u2u1u3(_sll);
+Ip_u3u2u1(_sllv);
+Ip_s3s1s2(_slt);
+Ip_u2u1s3(_sltiu);
+Ip_u3u1u2(_sltu);
 Ip_u2u1u3(_sra);
 Ip_u2u1u3(_srl);
 Ip_u3u1u2(_subu);
 Ip_u2s3u1(_sw);
+Ip_u2s3u1(_sb);
+Ip_u1(_sync);
 Ip_u1(_syscall);
+Ip_0(_tlbinvf);
 Ip_0(_tlbp);
 Ip_0(_tlbr);
 Ip_0(_tlbwi);
 Ip_0(_tlbwr);
+Ip_0(_hypcall);
+Ip_u1(_wait);
+Ip_u2u1(_wsbh);
 Ip_u3u1u2(_xor);
 Ip_u2u1u3(_xori);
+Ip_u2u1(_yield);
 Ip_u1u2(_ldpte);
 Ip_u2u1u3(_lddir);
 
@@ -198,7 +248,9 @@ static inline void __uasminit ISAFUNC(uasm_l##lb)(struct uasm_label **lab, u32 *
 # define UASM_i_LW(buf, rs, rt, off) uasm_i_ld(buf, rs, rt, off)
 # define UASM_i_LWX(buf, rs, rt, rd) uasm_i_ldx(buf, rs, rt, rd)
 # define UASM_i_MFC0(buf, rt, rd...) uasm_i_dmfc0(buf, rt, rd)
+# define UASM_i_MFGC0(buf, rt, rd...) uasm_i_dmfgc0(buf, rt, rd)
 # define UASM_i_MTC0(buf, rt, rd...) uasm_i_dmtc0(buf, rt, rd)
+# define UASM_i_MTGC0(buf, rt, rd...) uasm_i_dmtgc0(buf, rt, rd)
 # define UASM_i_ROTR(buf, rs, rt, sh) uasm_i_drotr(buf, rs, rt, sh)
 # define UASM_i_SC(buf, rs, rt, off) uasm_i_scd(buf, rs, rt, off)
 # define UASM_i_SLL(buf, rs, rt, sh) uasm_i_dsll(buf, rs, rt, sh)
@@ -214,7 +266,9 @@ static inline void __uasminit ISAFUNC(uasm_l##lb)(struct uasm_label **lab, u32 *
 # define UASM_i_LW(buf, rs, rt, off) uasm_i_lw(buf, rs, rt, off)
 # define UASM_i_LWX(buf, rs, rt, rd) uasm_i_lwx(buf, rs, rt, rd)
 # define UASM_i_MFC0(buf, rt, rd...) uasm_i_mfc0(buf, rt, rd)
+# define UASM_i_MFGC0(buf, rt, rd...) uasm_i_mfgc0(buf, rt, rd)
 # define UASM_i_MTC0(buf, rt, rd...) uasm_i_mtc0(buf, rt, rd)
+# define UASM_i_MTGC0(buf, rt, rd...) uasm_i_mtgc0(buf, rt, rd)
 # define UASM_i_ROTR(buf, rs, rt, sh) uasm_i_rotr(buf, rs, rt, sh)
 # define UASM_i_SC(buf, rs, rt, off) uasm_i_sc(buf, rs, rt, off)
 # define UASM_i_SLL(buf, rs, rt, sh) uasm_i_sll(buf, rs, rt, sh)
@@ -286,6 +340,8 @@ void uasm_il_bbit0(u32 **p, struct uasm_reloc **r, unsigned int reg,
 		   unsigned int bit, int lid);
 void uasm_il_bbit1(u32 **p, struct uasm_reloc **r, unsigned int reg,
 		   unsigned int bit, int lid);
+void uasm_il_beq(u32 **p, struct uasm_reloc **r, unsigned int r1,
+		 unsigned int r2, int lid);
 void uasm_il_beqz(u32 **p, struct uasm_reloc **r, unsigned int reg, int lid);
 void uasm_il_beqzl(u32 **p, struct uasm_reloc **r, unsigned int reg, int lid);
 void uasm_il_bgezl(u32 **p, struct uasm_reloc **r, unsigned int reg, int lid);
@@ -294,3 +350,5 @@ void uasm_il_bltz(u32 **p, struct uasm_reloc **r, unsigned int reg, int lid);
 void uasm_il_bne(u32 **p, struct uasm_reloc **r, unsigned int reg1,
 		 unsigned int reg2, int lid);
 void uasm_il_bnez(u32 **p, struct uasm_reloc **r, unsigned int reg, int lid);
+
+#endif /* __ASM_UASM_H */

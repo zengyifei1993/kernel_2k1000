@@ -12,6 +12,26 @@
 #define __ASM_CACHEOPS_H
 
 /*
+ *  * Most cache ops are split into a 2 bit field identifying the cache, and a 3
+ *   * bit field identifying the cache operation.
+ *    */
+#define CacheOp_Cache                   0x03
+#define CacheOp_Op                      0x1c
+
+#define Cache_I                         0x00
+#define Cache_D                         0x01
+#define Cache_T                         0x02
+#define Cache_V                         0x02 /* Loongson-3 */
+#define Cache_S                         0x03
+
+#define Index_Writeback_Inv             0x00
+#define Index_Load_Tag                  0x04
+#define Index_Store_Tag                 0x08
+#define Hit_Invalidate                  0x10
+#define Hit_Writeback_Inv               0x14    /* not with Cache_I though */
+#define Hit_Writeback                   0x18
+
+/*
  * Cache Operations available on all MIPS processors with R4000-style caches
  */
 #define Index_Invalidate_I	0x00

@@ -51,6 +51,8 @@
 #define cpu_has_ic_fills_f_dc	1
 #define cpu_hwrena_impl_bits	0xc0000000
 #endif
+#define cpu_has_ebase_wg	1
+#define cpu_has_segments	0
 
 extern int loongson3_perf_irq_mask;
 #endif /* __ASM_MACH_LOONGSON_CPU_FEATURE_OVERRIDES_H */

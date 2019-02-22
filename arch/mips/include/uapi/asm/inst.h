@@ -73,10 +73,20 @@ enum spec2_op {
 enum spec3_op {
 	ext_op, dextm_op, dextu_op, dext_op,
 	ins_op, dinsm_op, dinsu_op, dins_op,
-	lx_op = 0x0a,
-	bshfl_op = 0x20,
-	dbshfl_op = 0x24,
-	rdhwr_op = 0x3b
+	yield_op  = 0x09, lx_op = 0x0a,
+        lwle_op   = 0x19, lwre_op   = 0x1a,
+        cachee_op = 0x1b, sbe_op    = 0x1c,
+        she_op    = 0x1d, sce_op    = 0x1e,
+        swe_op    = 0x1f, bshfl_op = 0x20,
+	swle_op   = 0x21, swre_op   = 0x22,
+        prefe_op  = 0x23, dbshfl_op = 0x24,
+	cache6_op = 0x25, sc6_op    = 0x26,
+	scd6_op   = 0x27, lbue_op   = 0x28,
+	lhue_op   = 0x29, lbe_op    = 0x2c,
+	lhe_op    = 0x2d, lle_op    = 0x2e,
+	lwe_op    = 0x2f, pref6_op  = 0x35,
+	ll6_op    = 0x36, lld6_op   = 0x37,
+	rdhwr_op = 0x3b,
 };
 
 /*
@@ -94,6 +104,50 @@ enum lwc2_op {
 };
 
 /*
+ * Bits 10-6 minor opcode for r6 spec mult/div encodings
+ */
+enum mult_op {
+	mult_mult_op = 0x0,
+	mult_mul_op = 0x2,
+	mult_muh_op = 0x3,
+};
+enum multu_op {
+	multu_multu_op = 0x0,
+	multu_mulu_op = 0x2,
+	multu_muhu_op = 0x3,
+};
+enum div_op {
+	div_div_op = 0x0,
+	div_div6_op = 0x2,
+	div_mod_op = 0x3,
+};
+enum divu_op {
+	divu_divu_op = 0x0,
+	divu_divu6_op = 0x2,
+	divu_modu_op = 0x3,
+};
+enum dmult_op {
+	dmult_dmult_op = 0x0,
+	dmult_dmul_op = 0x2,
+	dmult_dmuh_op = 0x3,
+};
+enum dmultu_op {
+	dmultu_dmultu_op = 0x0,
+	dmultu_dmulu_op = 0x2,
+	dmultu_dmuhu_op = 0x3,
+};
+enum ddiv_op {
+	ddiv_ddiv_op = 0x0,
+	ddiv_ddiv6_op = 0x2,
+	ddiv_dmod_op = 0x3,
+};
+enum ddivu_op {
+	ddivu_ddivu_op = 0x0,
+	ddivu_ddivu6_op = 0x2,
+	ddivu_dmodu_op = 0x3,
+};
+
+/*
  * rt field of bcond opcodes.
  */
 enum rt_op {
@@ -104,7 +158,7 @@ enum rt_op {
 	bltzal_op, bgezal_op, bltzall_op, bgezall_op,
 	rt_op_0x14, rt_op_0x15, rt_op_0x16, rt_op_0x17,
 	rt_op_0x18, rt_op_0x19, rt_op_0x1a, rt_op_0x1b,
-	bposge32_op, rt_op_0x1d, rt_op_0x1e, rt_op_0x1f
+	bposge32_op, rt_op_0x1d, rt_op_0x1e, rt_op_0x1f, synci_op,
 };
 
 /*
@@ -112,10 +166,16 @@ enum rt_op {
  */
 enum cop_op {
 	mfc_op	      = 0x00, dmfc_op	    = 0x01,
-	cfc_op	      = 0x02, mtc_op	    = 0x04,
+	cfc_op	      = 0x02, mfhc0_op	    = 0x02,
+	mfhc_op       = 0x03, mfgc_op       = 0x03,
+	dmfgc_op      = 0x03, mtgc_op       = 0x03,
+        dmtgc_op      = 0x03, mtc_op	    = 0x04,
 	dmtc_op	      = 0x05, ctc_op	    = 0x06,
-	bc_op	      = 0x08, mfmc0_op      = 0x0b,
-	cop_op	      = 0x10, copm_op	    = 0x18
+	mthc0_op      = 0x06, mthc_op	    = 0x07,
+	bc_op	      = 0x08, bc1eqz_op     = 0x09,
+	mfmc0_op      = 0x0b, bc1nez_op     = 0x0d,
+	wrpgpr_op     = 0x0e, cop_op	    = 0x10,
+	copm_op	      = 0x18,
 };
 
 /*
@@ -131,7 +191,9 @@ enum bcop_op {
 enum cop0_coi_func {
 	tlbr_op	      = 0x01, tlbwi_op	    = 0x02,
 	tlbwr_op      = 0x06, tlbp_op	    = 0x08,
-	rfe_op	      = 0x10, eret_op	    = 0x18
+	rfe_op	      = 0x10, eret_op	    = 0x18,
+	wait_op       = 0x20, hypcall_op    = 0x28,
+	tlbinvf_op    = 0x4,
 };
 
 /*
@@ -163,9 +225,15 @@ enum cop1_sdw_func {
 	fceill_op    =	0x0a, ffloorl_op   =  0x0b,
 	fround_op    =	0x0c, ftrunc_op	   =  0x0d,
 	fceil_op     =	0x0e, ffloor_op	   =  0x0f,
+	fsel_op      =  0x10,
 	fmovc_op     =	0x11, fmovz_op	   =  0x12,
-	fmovn_op     =	0x13, frecip_op	   =  0x15,
-	frsqrt_op    =	0x16, fcvts_op	   =  0x20,
+	fmovn_op     =	0x13, fseleqz_op   =  0x14,
+	frecip_op    =  0x15, frsqrt_op    =  0x16,
+	fselnez_op   =  0x17, fmaddf_op    =  0x18,
+	fmsubf_op    =  0x19, frint_op     =  0x1a,
+	fclass_op    =  0x1b, fmin_op      =  0x1c,
+	fmina_op     =  0x1d, fmax_op      =  0x1e,
+	fmaxa_op     =  0x1f, fcvts_op     =  0x20,
 	fcvtd_op     =	0x21, fcvte_op	   =  0x22,
 	fcvtw_op     =	0x24, fcvtl_op	   =  0x25,
 	fcmp_op	     =	0x30
@@ -176,7 +244,7 @@ enum cop1_sdw_func {
  */
 enum cop1x_func {
 	lwxc1_op     =	0x00, ldxc1_op	   =  0x01,
-	pfetch_op    =	0x07, swxc1_op	   =  0x08,
+	pfetch_op    =	0x0f, swxc1_op	   =  0x08,
 	sdxc1_op     =	0x09, madd_s_op	   =  0x20,
 	madd_d_op    =	0x21, madd_e_op	   =  0x22,
 	msub_s_op    =	0x28, msub_d_op	   =  0x29,
@@ -215,6 +283,21 @@ enum lx_func {
 	lwux_op = 0x10,
 	lhux_op = 0x14,
 	lbx_op	= 0x16,
+};
+
+/*
+ * MSA minor opcodes.
+ */
+enum msa_func {
+	msa_elm_op = 0x19,
+};
+
+/*
+ * MSA ELM opcodes.
+ */
+enum msa_elm {
+	msa_ctc_op = 0x3e,
+	msa_cfc_op = 0x7e,
 };
 
 /*
@@ -571,6 +654,36 @@ struct r_format {			/* Register format */
 	;))))))
 };
 
+struct c0r_format {			/* C0 register format */
+	BITFIELD_FIELD(unsigned int opcode : 6,
+	BITFIELD_FIELD(unsigned int rs : 5,
+	BITFIELD_FIELD(unsigned int rt : 5,
+	BITFIELD_FIELD(unsigned int rd : 5,
+	BITFIELD_FIELD(unsigned int z: 8,
+	BITFIELD_FIELD(unsigned int sel : 3,
+	;))))))
+};
+
+struct mfmc0_format {			/* MFMC0 register format */
+	BITFIELD_FIELD(unsigned int opcode : 6,
+	BITFIELD_FIELD(unsigned int rs : 5,
+	BITFIELD_FIELD(unsigned int rt : 5,
+	BITFIELD_FIELD(unsigned int rd : 5,
+	BITFIELD_FIELD(unsigned int re : 5,
+	BITFIELD_FIELD(unsigned int sc : 1,
+	BITFIELD_FIELD(unsigned int : 2,
+	BITFIELD_FIELD(unsigned int sel : 3,
+	;))))))))
+};
+
+struct co_format {			/* C0 CO format */
+	BITFIELD_FIELD(unsigned int opcode : 6,
+	BITFIELD_FIELD(unsigned int co : 1,
+	BITFIELD_FIELD(unsigned int code : 19,
+	BITFIELD_FIELD(unsigned int func : 6,
+	;))))
+};
+
 struct p_format {		/* Performance counter format (R10000) */
 	BITFIELD_FIELD(unsigned int opcode : 6,
 	BITFIELD_FIELD(unsigned int rs : 5,
@@ -639,6 +752,15 @@ struct msa_mi10_format {		/* MSA MI10 */
 	BITFIELD_FIELD(unsigned int func : 4,
 	BITFIELD_FIELD(unsigned int df : 2,
 	;))))))
+};
+
+struct spec3_format {   /* SPEC3 */
+	BITFIELD_FIELD(unsigned int opcode:6,
+	BITFIELD_FIELD(unsigned int rs:5,
+	BITFIELD_FIELD(unsigned int rt:5,
+	BITFIELD_FIELD(signed int simmediate:9,
+	BITFIELD_FIELD(unsigned int func:7,
+	;)))))
 };
 
 /*
@@ -930,6 +1052,9 @@ union mips_instruction {
 	struct u_format u_format;
 	struct c_format c_format;
 	struct r_format r_format;
+	struct c0r_format c0r_format;
+	struct mfmc0_format mfmc0_format;
+	struct co_format co_format;
 	struct p_format p_format;
 	struct f_format f_format;
 	struct ma_format ma_format;
@@ -937,6 +1062,7 @@ union mips_instruction {
 	struct b_format b_format;
 	struct ps_format ps_format;
 	struct v_format v_format;
+	struct spec3_format spec3_format;
 	struct fb_format fb_format;
 	struct fp0_format fp0_format;
 	struct mm_fp0_format mm_fp0_format;
