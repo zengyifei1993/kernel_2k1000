@@ -1928,6 +1928,9 @@ void __cpuinit per_cpu_trap_init(bool is_boot_cpu)
 	if (!cpu_data[cpu].asid_cache)
 		cpu_data[cpu].asid_cache = ASID_FIRST_VERSION;
 
+	if (!cpu_data[cpu].vpid_cache)
+		cpu_data[cpu].vpid_cache = VPID_FIRST_VERSION;
+
 	atomic_inc(&init_mm.mm_count);
 	current->active_mm = &init_mm;
 	BUG_ON(current->mm);
@@ -2021,6 +2024,12 @@ void __init trap_init(void)
 			ebase += (read_c0_ebase() & 0x3ffff000);
 	}
 
+#ifdef CONFIG_KVM_GUEST_LS3A3000
+	ebase = 0xffffffff80100000;
+	write_c0_ebase(0x800);
+	write_c0_ebase(ebase);
+#endif
+
 	if (board_ebase_setup)
 		board_ebase_setup();
 	per_cpu_trap_init(true);
@@ -2097,7 +2106,11 @@ void __init trap_init(void)
 		if (cpu_has_vtag_icache)
 			set_except_vector(10, handle_ri_rdhwr_tlbp);
 		else if (current_cpu_type() == CPU_LOONGSON3)
+#ifdef CONFIG_KVM_GUEST_LS3A3000
+			set_except_vector(EXCCODE_RI, handle_ri);
+#else
 			set_except_vector(10, handle_ri_rdhwr_tlbp);
+#endif
 		else
 			set_except_vector(10, handle_ri_rdhwr);
 	}
@@ -2161,5 +2174,9 @@ void __init trap_init(void)
 
 	sort_extable(__start___dbe_table, __stop___dbe_table);
 
+#ifdef CONFIG_KVM_GUEST_LS3A3000
+	cu2_notifier(default_cu2_call, 0x80100000);	/* Run last  */
+#else
 	cu2_notifier(default_cu2_call, 0x80000000);	/* Run last  */
+#endif
 }

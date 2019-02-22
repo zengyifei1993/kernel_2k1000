@@ -24,6 +24,32 @@
 
 extern void build_tlb_refill_handler(void);
 
+#ifdef CONFIG_KVM_GUEST_LS3A3000
+static noinline void emulate_tlb_ops(unsigned long address,
+			    unsigned long pageshift, unsigned long even_pte,
+			    unsigned long odd_pte, int op_type,
+			    unsigned long flags)
+{
+	__asm__ __volatile__(
+	"	.set	push			\n"
+	"	.set	noreorder		\n"
+	"	move	$2, %[A4]		\n"
+	"	move	$3, %[A5]		\n"
+	"	move	$4, %[A0]		\n"
+	"	move	$5, %[A1]		\n"
+	"	move	$6, %[A2]		\n"
+	"	move	$7, %[A3]		\n"
+	"	.word	0x42000028		\n" //hypcall
+	"	nop				\n"
+	"	.set	reorder			\n"
+	"	.set	pop			\n"
+	:
+	: [A0] "r" (address), [A1] "r" (pageshift), [A2] "r" (even_pte),
+	  [A3] "r" (odd_pte), [A4] "r" (op_type), [A5] "r" (flags)
+	: "$2", "$3", "$4", "$5", "$6", "$7", "$8", "$9");
+}
+#endif
+
 /* Atomicity and interruptability */
 #ifdef CONFIG_MIPS_MT_SMTC
 
@@ -66,7 +92,11 @@ void local_flush_tlb_all(void)
 {
 	unsigned long flags;
 	unsigned long old_ctx;
+#ifndef CONFIG_KVM_GUEST_LS3A3000
 	int entry, ftlbhighset;
+#else
+	int entry;
+#endif
 
 	ENTER_CRITICAL(flags);
 	/* Save old context and create impossible VPN2 value */
@@ -79,6 +109,9 @@ void local_flush_tlb_all(void)
 
 	/* Blast 'em all away. */
 	if (cpu_has_tlbinv) {
+#ifdef CONFIG_KVM_GUEST_LS3A3000
+		emulate_tlb_ops(0, 1088, 0, 0, 0x5002, 2);
+#else
 		if (current_cpu_data.tlbsizevtlb) {
 			write_c0_index(0);
 			mtc0_tlbw_hazard();
@@ -93,6 +126,7 @@ void local_flush_tlb_all(void)
 			mtc0_tlbw_hazard();
 			tlbinvf();  /* invalidate one FTLB set */
 		}
+#endif
 	} else {
 		while (entry < current_cpu_data.tlbsize) {
 			/* Make sure all entries differ. */
@@ -148,6 +182,10 @@ void local_flush_tlb_range(struct vm_area_struct *vma, unsigned long start,
 			int newpid = cpu_asid(cpu, mm);
 
 			htw_stop();
+#ifdef CONFIG_KVM_GUEST_LS3A3000
+			write_c0_entryhi(newpid);
+			emulate_tlb_ops(start, end, size, 0, 0x5003, 2);
+#else
 			while (start < end) {
 				int idx;
 
@@ -166,6 +204,7 @@ void local_flush_tlb_range(struct vm_area_struct *vma, unsigned long start,
 				mtc0_tlbw_hazard();
 				tlb_write_indexed();
 			}
+#endif
 			tlbw_use_hazard();
 			write_c0_entryhi(oldpid);
 			htw_start();
@@ -194,6 +233,9 @@ void local_flush_tlb_kernel_range(unsigned long start, unsigned long end)
 		end &= (PAGE_MASK << 1);
 		htw_stop();
 
+#ifdef CONFIG_KVM_GUEST_LS3A3000
+		emulate_tlb_ops(start, end, size, 0, 0x5004, 2);
+#else
 		while (start < end) {
 			int idx;
 
@@ -212,6 +254,7 @@ void local_flush_tlb_kernel_range(unsigned long start, unsigned long end)
 			mtc0_tlbw_hazard();
 			tlb_write_indexed();
 		}
+#endif
 		tlbw_use_hazard();
 		write_c0_entryhi(pid);
 		htw_start();
@@ -228,13 +271,25 @@ void local_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
 
 	if (cpu_context(cpu, vma->vm_mm) != 0) {
 		unsigned long flags;
+#ifndef CONFIG_KVM_GUEST_LS3A3000
 		int oldpid, newpid, idx;
+#else
+		int oldpid, newpid;
+#endif
 
 		newpid = cpu_asid(cpu, vma->vm_mm);
+#ifndef CONFIG_KVM_GUEST_LS3A3000
 		page &= (PAGE_MASK << 1);
+#endif
 		ENTER_CRITICAL(flags);
 		oldpid = read_c0_entryhi();
 		htw_stop();
+#ifdef CONFIG_KVM_GUEST_LS3A3000
+		write_c0_entryhi(newpid);
+
+		emulate_tlb_ops(page, page, 0, 0, 0x5001, 2);
+		goto finish;
+#else
 		write_c0_entryhi(page | newpid);
 		mtc0_tlbw_hazard();
 		tlb_probe();
@@ -250,6 +305,7 @@ void local_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
 		tlb_write_indexed();
 		tlbw_use_hazard();
 
+#endif
 	finish:
 		write_c0_entryhi(oldpid);
 		htw_start();
@@ -265,11 +321,18 @@ void local_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
 void local_flush_tlb_one(unsigned long page)
 {
 	unsigned long flags;
+#ifndef CONFIG_KVM_GUEST_LS3A3000
 	int oldpid, idx;
+#else
+	int oldpid;
+#endif
 
 	ENTER_CRITICAL(flags);
 	oldpid = read_c0_entryhi();
 	htw_stop();
+#ifdef CONFIG_KVM_GUEST_LS3A3000
+	emulate_tlb_ops(page, page, 0, 0, 0x5005, 2);
+#else
 	page &= (PAGE_MASK << 1);
 	write_c0_entryhi(page);
 	mtc0_tlbw_hazard();
@@ -285,6 +348,7 @@ void local_flush_tlb_one(unsigned long page)
 		tlb_write_indexed();
 		tlbw_use_hazard();
 	}
+#endif
 	write_c0_entryhi(oldpid);
 	htw_start();
 	flush_micro_tlb();
@@ -303,7 +367,13 @@ void __update_tlb(struct vm_area_struct * vma, unsigned long address, pte_t pte)
 	pud_t *pudp;
 	pmd_t *pmdp;
 	pte_t *ptep;
+#ifdef CONFIG_KVM_GUEST_LS3A3000
+	unsigned long pageshift,even_pte,odd_pte;
+	unsigned long tmp_address;
+	unsigned long vm_flags;
+#else
 	int idx, pid;
+#endif
 
 	/*
 	 * Handle debugger faulting in for debugee.
@@ -314,6 +384,32 @@ void __update_tlb(struct vm_area_struct * vma, unsigned long address, pte_t pte)
 	ENTER_CRITICAL(flags);
 
 	htw_stop();
+
+#ifdef CONFIG_KVM_GUEST_LS3A3000
+	tmp_address = address;
+	address &= (PAGE_MASK << 1);
+	pgdp = pgd_offset(vma->vm_mm, address);
+	pudp = pud_offset(pgdp, address);
+	pmdp = pmd_offset(pudp, address);
+
+	ptep = pte_offset_map(pmdp, address);
+	pageshift= 14;
+	even_pte = pte_val(*ptep++);
+	odd_pte = pte_val(*ptep);
+
+	if((tmp_address >> PAGE_SHIFT) & 0x1)
+		if(odd_pte & _PAGE_DIRTY)
+			vm_flags = 3;
+		else
+			vm_flags = 2;
+	else
+		if(even_pte & _PAGE_DIRTY)
+			vm_flags = 3;
+		else
+			vm_flags = 2;
+
+	emulate_tlb_ops(tmp_address, pageshift, even_pte, odd_pte, 0x4000, vm_flags);
+#else
 	pid = read_c0_entryhi() & ASID_MASK;
 	address &= (PAGE_MASK << 1);
 	write_c0_entryhi(address | pid);
@@ -361,6 +457,7 @@ void __update_tlb(struct vm_area_struct * vma, unsigned long address, pte_t pte)
 			tlb_write_indexed();
 	}
 	tlbw_use_hazard();
+#endif
 	htw_start();
 	flush_micro_tlb_vm(vma);
 	EXIT_CRITICAL(flags);

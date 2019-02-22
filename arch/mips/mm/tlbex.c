@@ -51,12 +51,25 @@ struct work_registers {
 	int r3;
 };
 
+#ifndef CONFIG_KVM_GUEST_LS3A3000
 struct tlb_reg_save {
 	unsigned long a;
 	unsigned long b;
 } ____cacheline_aligned_in_smp;
 
 static struct tlb_reg_save handler_reg_save[NR_CPUS];
+#else
+struct tlb_gprs_save {
+	unsigned long a0;
+	unsigned long a1;
+	unsigned long a2;
+	unsigned long a3;
+	unsigned long v0;
+	unsigned long v1;
+} ____cacheline_aligned_in_smp;
+
+struct tlb_gprs_save handler_gprs_save[NR_CPUS];
+#endif
 
 static inline int r45k_bvahwbug(void)
 {
@@ -97,6 +110,7 @@ static int use_bbit_insns(void)
 	}
 }
 
+#ifndef CONFIG_KVM_GUEST_LS3A3000
 static int use_lwx_insns(void)
 {
 	switch (current_cpu_type()) {
@@ -106,6 +120,8 @@ static int use_lwx_insns(void)
 		return 0;
 	}
 }
+#endif
+
 #if defined(CONFIG_CAVIUM_OCTEON_CVMSEG_SIZE) && \
     CONFIG_CAVIUM_OCTEON_CVMSEG_SIZE > 0
 static bool scratchpad_available(void)
@@ -122,6 +138,7 @@ static int scratchpad_offset(int i)
 	return CONFIG_CAVIUM_OCTEON_CVMSEG_SIZE * 128 - (8 * i) - 32768;
 }
 #else
+#ifndef CONFIG_KVM_GUEST_LS3A3000
 static bool scratchpad_available(void)
 {
 	return false;
@@ -132,6 +149,7 @@ static int scratchpad_offset(int i)
 	/* Really unreachable, but evidently some GCC want this. */
 	return 0;
 }
+#endif
 #endif
 /*
  * Found by experiment: At least some revisions of the 4kc throw under
@@ -273,6 +291,23 @@ static inline void dump_handler(const char *symbol, const u32 *handler, int coun
 	pr_debug("\tEND(%s)\n", symbol);
 }
 
+static inline void loongson_dump_handler(const char *symbol, const u32 *handler, int count)
+{
+	int i;
+
+	pr_info("LEAF(%s)\n", symbol);
+
+	pr_info("\t.set push\n");
+	pr_info("\t.set noreorder\n");
+
+	for (i = 0; i < count; i++)
+		pr_info("\t.word\t0x%08x\t\t# %p\n", handler[i], &handler[i]);
+
+	pr_info("\t.set\tpop\n");
+
+	pr_info("\tEND(%s)\n", symbol);
+}
+
 /* The only general purpose registers allowed in TLB handlers. */
 #define K0		26
 #define K1		27
@@ -300,11 +335,13 @@ static inline void dump_handler(const char *symbol, const u32 *handler, int coun
 # define GET_CONTEXT(buf, reg) UASM_i_MFC0(buf, reg, C0_CONTEXT)
 #endif
 
+#ifndef CONFIG_KVM_GUEST_LS3A3000
 void uasm_i_synci(u32 **buf)
 {
 	**buf = 0x043f0000; // synci  0(zero)
 	(*buf)++;
 }
+#endif
 
 /* The worst case length of the handler is around 18 instructions for
  * R3000-style TLBs and up to 63 instructions for R4000-style TLBs.
@@ -357,6 +394,7 @@ int scratch_reg __cpuinitdata;
 int pgd_reg __cpuinitdata;
 enum vmalloc64_mode {not_refill, refill_scratch, refill_noscratch};
 
+#ifndef CONFIG_KVM_GUEST_LS3A3000
 static struct work_registers __cpuinit build_get_work_registers(u32 **p)
 {
 	struct work_registers r;
@@ -403,6 +441,53 @@ static void __cpuinit build_restore_work_registers(u32 **p)
 	UASM_i_LW(p, 1, offsetof(struct tlb_reg_save, a), K0);
 	UASM_i_LW(p, 2, offsetof(struct tlb_reg_save, b), K0);
 }
+#endif
+
+#ifdef CONFIG_KVM_GUEST_LS3A3000
+void build_save_gprs(u32 **p)
+{
+	if (num_possible_cpus() > 1) {
+		/* Get smp_processor_id */
+		UASM_i_CPUID_MFC0(p, K0, SMP_CPUID_REG);
+		UASM_i_SRL_SAFE(p, K0, K0, SMP_CPUID_REGSHIFT);
+
+		/* handler_reg_save index in K0 */
+		UASM_i_SLL(p, K0, K0, ilog2(sizeof(struct tlb_gprs_save)));
+
+		UASM_i_LA(p, K1, (long)&handler_gprs_save);
+		UASM_i_ADDU(p, K0, K0, K1);
+	} else {
+		UASM_i_LA(p, K0, (long)&handler_gprs_save);
+	}
+	/* K0 now points to save area, save $2 and $3,$4-$7  */
+	UASM_i_SW(p, 4, offsetof(struct tlb_gprs_save, a0), K0);
+	UASM_i_SW(p, 5, offsetof(struct tlb_gprs_save, a1), K0);
+	UASM_i_SW(p, 6, offsetof(struct tlb_gprs_save, a2), K0);
+	UASM_i_SW(p, 7, offsetof(struct tlb_gprs_save, a3), K0);
+}
+
+void build_restore_gprs(u32 **p)
+{
+	if (num_possible_cpus() > 1) {
+		/* Get smp_processor_id */
+		UASM_i_CPUID_MFC0(p, K0, SMP_CPUID_REG);
+		UASM_i_SRL_SAFE(p, K0, K0, SMP_CPUID_REGSHIFT);
+
+		/* handler_reg_save index in K0 */
+		UASM_i_SLL(p, K0, K0, ilog2(sizeof(struct tlb_gprs_save)));
+
+		UASM_i_LA(p, K1, (long)&handler_gprs_save);
+		UASM_i_ADDU(p, K0, K0, K1);
+	} else {
+		UASM_i_LA(p, K0, (long)&handler_gprs_save);
+	}
+	/* K0 now points to save area, save $2 and $3,$4-$7  */
+	UASM_i_LW(p, 4, offsetof(struct tlb_gprs_save, a0), K0);
+	UASM_i_LW(p, 5, offsetof(struct tlb_gprs_save, a1), K0);
+	UASM_i_LW(p, 6, offsetof(struct tlb_gprs_save, a2), K0);
+	UASM_i_LW(p, 7, offsetof(struct tlb_gprs_save, a3), K0);
+}
+#endif
 
 #ifndef CONFIG_MIPS_PGD_C0_CONTEXT
 
@@ -464,7 +549,9 @@ static void __cpuinit build_r3000_tlb_refill_handler(void)
  * other one.To keep things simple, we first assume linear space,
  * then we relocate it to the final handler layout as needed.
  */
+#ifndef CONFIG_KVM_GUEST_LS3A3000
 static u32 final_handler[64] __cpuinitdata;
+#endif
 
 /*
  * Hazards
@@ -669,6 +756,7 @@ static __cpuinit __maybe_unused void build_convert_pte_to_entrylo(u32 **p,
 	}
 }
 
+#ifndef CONFIG_KVM_GUEST_LS3A3000
 #ifdef CONFIG_MIPS_HUGE_TLB_SUPPORT
 
 static __cpuinit void build_restore_pagemask(u32 **p,
@@ -813,6 +901,7 @@ static __cpuinit void build_huge_handler_tail(u32 **p,
 	build_huge_tlb_write_entry(p, l, r, pte, tlb_indexed, 0);
 }
 #endif /* CONFIG_MIPS_HUGE_TLB_SUPPORT */
+#endif /* CONFIG_KVM_GUEST_LS3A3000*/
 
 #ifdef CONFIG_64BIT
 /*
@@ -902,6 +991,7 @@ build_get_pmde64(u32 **p, struct uasm_label **l, struct uasm_reloc **r,
  * BVADDR is the faulting address, PTR is scratch.
  * PTR will hold the pgd for vmalloc.
  */
+#ifndef CONFIG_KVM_GUEST_LS3A3000
 static void __cpuinit
 build_get_pgd_vmalloc64(u32 **p, struct uasm_label **l, struct uasm_reloc **r,
 			unsigned int bvaddr, unsigned int ptr,
@@ -967,6 +1057,7 @@ build_get_pgd_vmalloc64(u32 **p, struct uasm_label **l, struct uasm_reloc **r,
 		}
 	}
 }
+#endif
 
 #else /* !CONFIG_64BIT */
 
@@ -1117,6 +1208,7 @@ struct mips_huge_tlb_info {
 	bool need_reload_pte;
 };
 
+#ifndef CONFIG_KVM_GUEST_LS3A3000
 static struct mips_huge_tlb_info __cpuinit
 build_fast_tlb_refill_handler (u32 **p, struct uasm_label **l,
 			       struct uasm_reloc **r, unsigned int tmp,
@@ -1287,6 +1379,7 @@ build_fast_tlb_refill_handler (u32 **p, struct uasm_label **l,
 
 	return rv;
 }
+#endif
 
 /*
  * For a 64-bit kernel, we are using the 64-bit XTLB refill exception
@@ -1296,6 +1389,16 @@ build_fast_tlb_refill_handler (u32 **p, struct uasm_label **l,
  */
 #define MIPS64_REFILL_INSNS 32
 
+#ifdef CONFIG_KVM_GUEST_LS3A3000
+extern u32 tlb_miss[], handle_tlb_miss[];
+static void __cpuinit build_r4000_tlb_refill_handler(void)
+{
+	memcpy((void *)(ebase +0x200), tlb_miss, 0x200);
+	local_flush_icache_range(ebase+0x200, ebase + 0x400);
+
+	dump_handler("r4000_tlb_refill", (void *)(ebase +0x200), 128);
+}
+#else
 static void __cpuinit build_r4000_tlb_refill_handler(void)
 {
 	u32 *p = tlb_handler;
@@ -1472,6 +1575,7 @@ static void __cpuinit build_r4000_tlb_refill_handler(void)
 
 	dump_handler("r4000_tlb_refill", (u32 *)ebase, 64);
 }
+#endif
 
 static void __cpuinit setup_pw(void)
 {
@@ -1580,16 +1684,18 @@ static void __cpuinit build_loongson3_tlb_refill_handler(void)
 extern u32 handle_tlbl[], handle_tlbl_end[];
 extern u32 handle_tlbs[], handle_tlbs_end[];
 extern u32 handle_tlbm[], handle_tlbm_end[];
-extern u32 tlbmiss_handler_setup_pgd[], tlbmiss_handler_setup_pgd_end[];
+extern u32 tlbmiss_handler_setup_pgd_start[], tlbmiss_handler_setup_pgd[];
+extern u32 tlbmiss_handler_setup_pgd_end[];
 
 static void __cpuinit build_setup_pgd(void)
 {
+#ifndef CONFIG_KVM_GUEST_LS3A3000
 	const int a0 = 4;
 	const int __maybe_unused a1 = 5;
 	const int __maybe_unused a2 = 6;
-	u32 *p = tlbmiss_handler_setup_pgd;
+	u32 *p = tlbmiss_handler_setup_pgd_start;
 	const int tlbmiss_handler_setup_pgd_size =
-		tlbmiss_handler_setup_pgd_end - tlbmiss_handler_setup_pgd;
+		tlbmiss_handler_setup_pgd_end - tlbmiss_handler_setup_pgd_start;
 #ifndef CONFIG_MIPS_PGD_C0_CONTEXT
 	long pgdc = (long)pgd_current;
 #endif
@@ -1657,6 +1763,7 @@ static void __cpuinit build_setup_pgd(void)
 
 	dump_handler("tlbmiss_handler", tlbmiss_handler_setup_pgd,
 					tlbmiss_handler_setup_pgd_size);
+#endif
 }
 
 static void __cpuinit
@@ -1994,6 +2101,7 @@ static void __cpuinit build_r3000_tlb_modify_handler(void)
 /*
  * R4000 style TLB load/store/modify handlers.
  */
+#ifndef CONFIG_KVM_GUEST_LS3A3000
 static struct work_registers __cpuinit
 build_r4000_tlbchange_handler_head(u32 **p, struct uasm_label **l,
 				   struct uasm_reloc **r)
@@ -2054,19 +2162,23 @@ build_r4000_tlbchange_handler_tail(u32 **p, struct uasm_label **l,
 	build_get_pgd_vmalloc64(p, l, r, tmp, ptr, not_refill);
 #endif
 }
+#endif /*CONFIG_KVM_GUEST_LS3A3000*/
 
 static void __cpuinit build_r4000_tlb_load_handler(void)
 {
 	u32 *p = handle_tlbl;
 	const int handle_tlbl_size = handle_tlbl_end - handle_tlbl;
+#ifndef CONFIG_KVM_GUEST_LS3A3000
 	struct uasm_label *l = labels;
 	struct uasm_reloc *r = relocs;
 	struct work_registers wr;
 
 	memset(handle_tlbl, 0, handle_tlbl_size * sizeof(handle_tlbl[0]));
+#endif
 	memset(labels, 0, sizeof(labels));
 	memset(relocs, 0, sizeof(relocs));
 
+#ifndef CONFIG_KVM_GUEST_LS3A3000
 	if (bcm1250_m3_war()) {
 		unsigned int segbits = 44;
 
@@ -2236,6 +2348,7 @@ static void __cpuinit build_r4000_tlb_load_handler(void)
 #endif
 	uasm_i_j(&p, (unsigned long)tlb_do_page_fault_0 & 0x0fffffff);
 	uasm_i_nop(&p);
+#endif
 
 	if (p >= handle_tlbl_end)
 		panic("TLB load handler fastpath space exceeded");
@@ -2251,14 +2364,17 @@ static void __cpuinit build_r4000_tlb_store_handler(void)
 {
 	u32 *p = handle_tlbs;
 	const int handle_tlbs_size = handle_tlbs_end - handle_tlbs;
+#ifndef CONFIG_KVM_GUEST_LS3A3000
 	struct uasm_label *l = labels;
 	struct uasm_reloc *r = relocs;
 	struct work_registers wr;
 
 	memset(handle_tlbs, 0, handle_tlbs_size * sizeof(handle_tlbs[0]));
+#endif
 	memset(labels, 0, sizeof(labels));
 	memset(relocs, 0, sizeof(relocs));
 
+#ifndef CONFIG_KVM_GUEST_LS3A3000
 	wr = build_r4000_tlbchange_handler_head(&p, &l, &r);
 	build_pte_writable(&p, &r, wr.r1, wr.r2, wr.r3, label_nopage_tlbs);
 	if (m4kc_tlbp_war())
@@ -2300,6 +2416,7 @@ static void __cpuinit build_r4000_tlb_store_handler(void)
 #endif
 	uasm_i_j(&p, (unsigned long)tlb_do_page_fault_1 & 0x0fffffff);
 	uasm_i_nop(&p);
+#endif
 
 	if (p >= handle_tlbs_end)
 		panic("TLB store handler fastpath space exceeded");
@@ -2315,14 +2432,17 @@ static void __cpuinit build_r4000_tlb_modify_handler(void)
 {
 	u32 *p = handle_tlbm;
 	const int handle_tlbm_size = handle_tlbm_end - handle_tlbm;
+#ifndef CONFIG_KVM_GUEST_LS3A3000
 	struct uasm_label *l = labels;
 	struct uasm_reloc *r = relocs;
 	struct work_registers wr;
 
 	memset(handle_tlbm, 0, handle_tlbm_size * sizeof(handle_tlbm[0]));
+#endif
 	memset(labels, 0, sizeof(labels));
 	memset(relocs, 0, sizeof(relocs));
 
+#ifndef CONFIG_KVM_GUEST_LS3A3000
 	wr = build_r4000_tlbchange_handler_head(&p, &l, &r);
 	build_pte_modifiable(&p, &r, wr.r1, wr.r2, wr.r3, label_nopage_tlbm);
 	if (m4kc_tlbp_war())
@@ -2365,6 +2485,7 @@ static void __cpuinit build_r4000_tlb_modify_handler(void)
 #endif
 	uasm_i_j(&p, (unsigned long)tlb_do_page_fault_1 & 0x0fffffff);
 	uasm_i_nop(&p);
+#endif
 
 	if (p >= handle_tlbm_end)
 		panic("TLB modify handler fastpath space exceeded");

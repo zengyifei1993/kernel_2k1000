@@ -77,6 +77,12 @@ asmlinkage void __kprobes do_page_fault(struct pt_regs *regs, unsigned long writ
 # define VMALLOC_FAULT_TARGET vmalloc_fault
 #endif
 
+#ifdef CONFIG_KVM_GUEST_LS3A3000
+	// vaddr bits 40~47 set means collapse with VPID area
+	if (unlikely((address >> 40) & 0xff))
+		goto VMALLOC_FAULT_TARGET;
+#endif
+
 	if (unlikely(address >= VMALLOC_START && address <= VMALLOC_END))
 		goto VMALLOC_FAULT_TARGET;
 #ifdef MODULE_START

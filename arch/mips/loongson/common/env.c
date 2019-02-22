@@ -60,6 +60,7 @@ enum loongson_cpu_type cputype;
 u16 loongson_boot_cpu_id;
 u16 loongson_reserved_cpus_mask;
 u32 nr_cpus_loongson = NR_CPUS;
+u32 possible_cpus_loongson = NR_CPUS;
 u32 nr_nodes_loongson = MAX_NUMNODES;
 int cores_per_node;
 int cores_per_package;
@@ -156,7 +157,11 @@ void __init prom_init_env(void)
 		smp_group[1] = 0x900010003ff01000;
 		smp_group[2] = 0x900020003ff01000;
 		smp_group[3] = 0x900030003ff01000;
+#ifdef CONFIG_KVM_GUEST_LS3A3000
+		ht_control_base = 0x900000EFFB000000;
+#else
 		ht_control_base = 0x90000EFDFB000000;
+#endif
 		loongson_chipcfg[0] = 0x900000001fe00180;
 		loongson_chipcfg[1] = 0x900010001fe00180;
 		loongson_chipcfg[2] = 0x900020001fe00180;
@@ -205,7 +210,11 @@ void __init prom_init_env(void)
 	loongson_boot_cpu_id = ecpu->cpu_startup_core_id;
 	loongson_reserved_cpus_mask = ecpu->reserved_cores_mask;
 #ifdef CONFIG_KEXEC
+#ifdef CONFIG_KVM_GUEST_LS3A3000
+	loongson_boot_cpu_id = read_c0_ebase() & 0xff;
+#else
 	loongson_boot_cpu_id = read_c0_ebase() & 0x3ff;
+#endif
 	for (i = 0; i < loongson_boot_cpu_id; i++)
 		loongson_reserved_cpus_mask |= (1<<i);
 	pr_info("Boot CPU ID is being fixed from %d to %d\n",
@@ -214,6 +223,7 @@ void __init prom_init_env(void)
 	if (nr_cpus_loongson > NR_CPUS || nr_cpus_loongson == 0)
 		nr_cpus_loongson = NR_CPUS;
 	nr_nodes_loongson = (nr_cpus_loongson + cores_per_node - 1) / cores_per_node;
+	possible_cpus_loongson = nr_nodes_loongson * cores_per_node;
 
 	pci_mem_start_addr = eirq_source->pci_mem_start_addr;
 	pci_mem_end_addr = eirq_source->pci_mem_end_addr;

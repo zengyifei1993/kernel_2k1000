@@ -34,7 +34,11 @@ notrace unsigned long loongson3_phase_lock_acquire(void)
 	 * Make sure phase_lock address is cache-line seperated to avoid
 	 * Fake cache-line share.
 	 */
+#ifdef CONFIG_KVM_GUEST_LS3A3000
+	node_id = ((cpu & 0xFF) / 4) << 3;
+#else
 	node_id = ((cpu & 0x3FF) / 4) << 3;
+#endif
 
 	__asm__ __volatile__(
                 "       .set    noreorder       # lock for phase    	\n"
@@ -65,7 +69,11 @@ notrace void loongson3_phase_lock_release(unsigned long flags)
 		"	.set	mips0					\n"
 		: "=r" (cpu));
 
+#ifdef CONFIG_KVM_GUEST_LS3A3000
+	node_id = ((cpu & 0xFF) / 4) << 3;
+#else
 	node_id = ((cpu & 0x3FF) / 4) << 3;
+#endif
 
 	__asm__ __volatile__(
 		"	.set	noreorder       # unlock for phase   	\n"

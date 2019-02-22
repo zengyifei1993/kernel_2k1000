@@ -276,6 +276,8 @@ void  loongson3_inst_fixup(void)
 		}
 	}
 
+#ifndef CONFIG_KVM_GUEST_LS3A3000
 	loongson3_arch_func_optimize(cpu_type);
+#endif
 }
 EXPORT_SYMBOL(loongson3_inst_fixup);

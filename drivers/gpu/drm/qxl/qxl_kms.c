@@ -45,10 +45,12 @@ static bool qxl_check_device(struct qxl_device *qdev)
 	int mode_offset;
 	int i;
 
+#ifndef CONFIG_KVM_GUEST_LS3A3000
 	if (rom->magic != 0x4f525851) {
 		DRM_ERROR("bad rom signature %x\n", rom->magic);
 		return false;
 	}
+#endif
 
 	DRM_INFO("Device Version %d.%d\n", rom->id, rom->update_id);
 	DRM_INFO("Compression level %d log level %d\n", rom->compression_level,

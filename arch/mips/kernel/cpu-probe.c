@@ -170,9 +170,13 @@ static inline unsigned long cpu_get_msa_id(void)
 static inline void cpu_probe_vmbits(struct cpuinfo_mips *c)
 {
 #ifdef __NEED_VMBITS_PROBE
+#ifdef CONFIG_KVM_GUEST_LS3A3000
+	c->vmbits = 40;
+#else
 	write_c0_entryhi(0x3fffffffffffe000ULL);
 	back_to_back_c0_hazard();
 	c->vmbits = fls64(read_c0_entryhi() & 0x3fffffffffffe000ULL);
+#endif
 #endif
 }
 
@@ -1357,7 +1361,11 @@ static inline void cpu_probe_loongson(struct cpuinfo_mips *c, unsigned int cpu)
 		}
 
 		decode_configs(c);
+#ifdef CONFIG_KVM_GUEST_LS3A3000
+		c->options |= MIPS_CPU_FTLB | MIPS_CPU_TLBINV;
+#else
 		c->options |= MIPS_CPU_FTLB | MIPS_CPU_TLBINV | MIPS_CPU_LDPTE;
+#endif
 		break;
 	case PRID_IMP_LOONGSON2K:
 		switch (c->processor_id & PRID_REV_MASK) {

@@ -187,6 +187,12 @@ struct kvm_arch {
 	struct mm_struct gpa_mm;
 	/* Mask of CPUs needing GPA ASID flush */
 	cpumask_t asid_flush_mask;
+	unsigned long (*cksseg_map)[2];
+	int is_migrate;
+	long nodecounter_offset;
+	unsigned long nodecounter_value;
+	int online_vcpus;
+
 };
 
 #define N_MIPS_COPROC_REGS     32
@@ -312,6 +318,21 @@ struct kvm_mmu_memory_cache {
 
 #define KVM_MIPS_GUEST_TLB_SIZE	64
 
+#define STLB_WAY		(0x1 << 15)
+#define STLB_WAY_MASK		(STLB_WAY - 1)
+#define STLB_SET		2
+#define STLB_BUF_SIZE		(STLB_WAY * STLB_SET)
+#define STLB_ASID_SIZE		256
+typedef struct {
+	u32 vatag;
+	u32 lo0;
+	u32 lo1;
+	unsigned char rx0;
+	unsigned char rx1;
+	unsigned char asid;
+	unsigned char reserved;
+} soft_tlb;
+
 struct kvm_vcpu_arch {
 	void *guest_ebase;
 	int (*vcpu_run)(struct kvm_run *run, struct kvm_vcpu *vcpu);
@@ -329,7 +350,12 @@ struct kvm_vcpu_arch {
 	u32 host_cp0_guestctl0;
 	u32 host_cp0_badinstr;
 	u32 host_cp0_badinstrp;
+	u32 host_cp0_gscause;
 
+	unsigned long guest_entryhi;
+	unsigned long guest_pagemask;
+	u32 is_hypcall;
+	u32 is_nodecounter;
 	/* GPRS */
 	unsigned long gprs[32];
 	unsigned long hi;
@@ -343,6 +369,12 @@ struct kvm_vcpu_arch {
 
 	/* COP0 State */
 	struct mips_coproc *cop0;
+
+	/* COP0 State before Field-Change exception */
+	unsigned long old_cp0_status;
+	unsigned long old_cp0_intctl;
+	unsigned long old_cp0_cause;
+	unsigned long old_cp0_entryhi;
 
 	/* Host KSEG0 address of the EI/DI offset */
 	void *kseg0_commpage;
@@ -372,6 +404,9 @@ struct kvm_vcpu_arch {
 	/* Bitmask of pending exceptions to be cleared */
 	unsigned long pending_exceptions_clr;
 
+	unsigned long pending_exceptions_save;
+	unsigned long pending_exceptions_clr_save;
+
 	/* S/W Based TLB for guest */
 	struct kvm_mips_tlb guest_tlb[KVM_MIPS_GUEST_TLB_SIZE];
 
@@ -387,6 +422,8 @@ struct kvm_vcpu_arch {
 #ifdef CONFIG_KVM_MIPS_VZ
 	/* vcpu's vzguestid is different on each host cpu in an smp system */
 	u32 vzguestid[NR_CPUS];
+
+	u64 vpid[NR_CPUS];
 
 	/* wired guest TLB entries */
 	struct kvm_mips_tlb *wired_tlb;
@@ -407,6 +444,9 @@ struct kvm_vcpu_arch {
 
 	u8 fpu_enabled;
 	u8 msa_enabled;
+
+	soft_tlb *stlb;
+	unsigned long *asid_we;
 };
 
 static inline void _kvm_atomic_set_c0_guest_reg(unsigned long *reg,
@@ -739,6 +779,8 @@ __BUILD_KVM_SET_SAVED(config3,    32, MIPS_CP0_CONFIG,       3)
 __BUILD_KVM_SET_SAVED(config4,    32, MIPS_CP0_CONFIG,       4)
 __BUILD_KVM_SET_SAVED(config5,    32, MIPS_CP0_CONFIG,       5)
 
+/*Loongson 3000 feature*/
+__BUILD_KVM_RW_SW(gsebase,          l, MIPS_CP0_COUNT,        6)
 /* Helpers */
 
 static inline bool kvm_mips_guest_can_have_fpu(struct kvm_vcpu_arch *vcpu)
@@ -818,6 +860,7 @@ struct kvm_mips_callbacks {
 };
 extern struct kvm_mips_callbacks *kvm_mips_callbacks;
 int kvm_mips_emulation_init(struct kvm_mips_callbacks **install_callbacks);
+int kvm_mips_ls3a3000_init(struct kvm_mips_callbacks **install_callbacks);
 
 /* Debug: dump vcpu state */
 int kvm_arch_vcpu_dump_regs(struct kvm_vcpu *vcpu);
@@ -831,10 +874,25 @@ void *kvm_mips_build_tlb_refill_exception(void *addr, void *handler);
 void *kvm_mips_build_exception(void *addr, void *handler);
 void *kvm_mips_build_exit(void *addr);
 
+/*For Loongson 3000*/
+int kvm_mips_ls3a3000_entry_setup(void);
+void *kvm_mips_ls3a3000_build_vcpu_run(void *addr);
+void *kvm_mips_ls3a3000_build_tlb_refill_exception(void *addr, void *handler);
+void *kvm_mips_ls3a3000_build_tlb_refill_target(void *addr, void *handler);
+void *kvm_mips_ls3a3000_build_tlb_general_exception(void *addr, void *handler);
+void *kvm_mips_ls3a3000_build_exception(void *addr, void *handler);
+void *kvm_mips_ls3a3000_build_exit(void *addr);
+extern int handle_tlb_general_exception(struct kvm_run *run, struct kvm_vcpu *vcpu);
+extern int handle_ignore_tlb_general_exception(struct kvm_run *run, struct kvm_vcpu *vcpu);
+extern int kvm_mips_ls3a3000_handle_exit(struct kvm_run *run, struct kvm_vcpu *vcpu);
+extern void build_lsvz_guest_mode_reenter(void);
+int kvm_ls3a3000_get_inst(u32 *opc, struct kvm_vcpu *vcpu, u32 *out);
+
 /* FPU/MSA context management */
 void __kvm_save_fpu(struct kvm_vcpu_arch *vcpu);
 void __kvm_restore_fpu(struct kvm_vcpu_arch *vcpu);
 void __kvm_restore_fcsr(struct kvm_vcpu_arch *vcpu);
+void __kvm_save_fcsr(struct kvm_vcpu_arch *vcpu);
 void __kvm_save_msa(struct kvm_vcpu_arch *vcpu);
 void __kvm_restore_msa(struct kvm_vcpu_arch *vcpu);
 void __kvm_restore_msa_upper(struct kvm_vcpu_arch *vcpu);
@@ -853,6 +911,8 @@ u32 kvm_get_commpage_asid (struct kvm_vcpu *vcpu);
 
 #ifdef CONFIG_KVM_MIPS_VZ
 int kvm_mips_handle_vz_root_tlb_fault(unsigned long badvaddr,
+				      struct kvm_vcpu *vcpu, bool write_fault);
+int kvm_mips_handle_ls3a3000_vz_root_tlb_fault(unsigned long badvaddr,
 				      struct kvm_vcpu *vcpu, bool write_fault);
 #endif
 extern int kvm_mips_handle_kseg0_tlb_fault(unsigned long badbaddr,
@@ -1080,9 +1140,13 @@ int kvm_mips_restore_hrtimer(struct kvm_vcpu *vcpu, ktime_t before,
 #ifdef CONFIG_KVM_MIPS_VZ
 void kvm_vz_acquire_htimer(struct kvm_vcpu *vcpu);
 void kvm_vz_lose_htimer(struct kvm_vcpu *vcpu);
+void kvm_ls3a3000_vz_acquire_htimer(struct kvm_vcpu *vcpu);
+void kvm_ls3a3000_vz_lose_htimer(struct kvm_vcpu *vcpu);
 #else
 static inline void kvm_vz_acquire_htimer(struct kvm_vcpu *vcpu) {}
 static inline void kvm_vz_lose_htimer(struct kvm_vcpu *vcpu) {}
+static inline void kvm_ls3a3000_vz_acquire_htimer(struct kvm_vcpu *vcpu) {}
+static inline void kvm_ls3a3000_vz_lose_htimer(struct kvm_vcpu *vcpu) {}
 #endif
 
 enum emulation_result kvm_mips_check_privilege(u32 cause,

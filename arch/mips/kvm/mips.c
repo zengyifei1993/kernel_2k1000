@@ -25,6 +25,7 @@
 #include <asm/mmu_context.h>
 #include <asm/pgalloc.h>
 #include <asm/pgtable.h>
+#include <asm/uasm.h>
 
 #include <linux/kvm_host.h>
 
@@ -124,6 +125,10 @@ void kvm_arch_check_processor_compat(void *rtn)
 
 int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)
 {
+	unsigned long row = (1 << 14);
+#ifdef CONFIG_CPU_LOONGSON3
+		type = KVM_VM_MIPS_VZ;
+#endif
 	switch (type) {
 #ifdef CONFIG_KVM_MIPS_VZ
 	case KVM_VM_MIPS_VZ:
@@ -138,9 +143,16 @@ int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)
 
 	/* Allocate page table to map GPA -> RPA */
 	kvm->arch.gpa_mm.pgd = kvm_pgd_alloc();
+	kvm_info("gpm_mm.pgd @ %p\n",kvm->arch.gpa_mm.pgd);
 	if (!kvm->arch.gpa_mm.pgd)
 		return -ENOMEM;
 
+	if(current_cpu_type() == CPU_LOONGSON3) {
+		kvm->arch.cksseg_map = (unsigned long(*)[2])kzalloc(sizeof(unsigned long)*2*row, GFP_KERNEL);
+		kvm_info("cksseg_map @ %p\n",kvm->arch.cksseg_map);
+		if (!kvm->arch.cksseg_map)
+			return -ENOMEM;
+	}
 	return 0;
 }
 
@@ -178,6 +190,8 @@ static void kvm_mips_free_gpa_pt(struct kvm *kvm)
 	/* It should always be safe to remove after flushing the whole range */
 	WARN_ON(!kvm_mips_flush_gpa_pt(kvm, 0, ~0));
 	pgd_free(NULL, kvm->arch.gpa_mm.pgd);
+	if(current_cpu_type() == CPU_LOONGSON3)
+		kfree(kvm->arch.cksseg_map);
 }
 
 void kvm_arch_destroy_vm(struct kvm *kvm)
@@ -289,8 +303,13 @@ struct kvm_vcpu *kvm_arch_vcpu_create(struct kvm *kvm, unsigned int id)
 	int err, size;
 	void *gebase, *p, *handler, *refill_start, *refill_end;
 	int i;
+	struct kvm_vcpu *vcpu;
 
-	struct kvm_vcpu *vcpu = kzalloc(sizeof(struct kvm_vcpu), GFP_KERNEL);
+	if(current_cpu_type() == CPU_LOONGSON3) {
+		return kvm_arch_ls3a3000_vcpu_create(kvm, id);
+	}
+
+	vcpu = kzalloc(sizeof(struct kvm_vcpu), GFP_KERNEL);
 
 	if (!vcpu) {
 		err = -ENOMEM;
@@ -486,7 +505,11 @@ int kvm_vcpu_ioctl_interrupt(struct kvm_vcpu *vcpu,
 	int intr = (int)irq->irq;
 	struct kvm_vcpu *dvcpu = NULL;
 
+#ifdef CONFIG_CPU_LOONGSON3
+	if (intr == 3 || intr == -3 || intr == 6 || intr == -6)
+#else
 	if (intr == 3 || intr == -3 || intr == 4 || intr == -4)
+#endif
 		kvm_debug("%s: CPU: %d, INTR: %d\n", __func__, irq->cpu,
 			  (int)intr);
 
@@ -495,10 +518,18 @@ int kvm_vcpu_ioctl_interrupt(struct kvm_vcpu *vcpu,
 	else
 		dvcpu = vcpu->kvm->vcpus[irq->cpu];
 
+#ifdef CONFIG_CPU_LOONGSON3
+	if (intr == 2 || intr == 3 || intr == 4 || intr == 6) {
+#else
 	if (intr == 2 || intr == 3 || intr == 4) {
+#endif
 		kvm_mips_callbacks->queue_io_int(dvcpu, irq);
 
+#ifdef CONFIG_CPU_LOONGSON3
+	} else if (intr == -2 || intr == -3 || intr == -4 || intr == -6) {
+#else
 	} else if (intr == -2 || intr == -3 || intr == -4) {
+#endif
 		kvm_mips_callbacks->dequeue_io_int(dvcpu, irq);
 	} else {
 		kvm_err("%s: invalid interrupt ioctl (%d:%d)\n", __func__,
@@ -951,6 +982,21 @@ long kvm_arch_vcpu_ioctl(struct file *filp, unsigned int ioctl,
 		r = kvm_vcpu_ioctl_enable_cap(vcpu, &cap);
 		break;
 	}
+	case KVM_CHECK_EXTENSION: {
+		unsigned int ext;
+		if (copy_from_user(&ext, argp, sizeof(ext)))
+			return -EFAULT;
+		switch (ext) {
+		case KVM_CAP_MIPS_FPU:
+			r = !!raw_cpu_has_fpu;
+			break;
+		case KVM_CAP_MIPS_MSA:
+			r = !!cpu_has_msa;
+			break;
+		default:
+			break;
+		}
+	}
 	default:
 		r = -ENOIOCTLCMD;
 	}
@@ -1002,8 +1048,58 @@ int kvm_vm_ioctl_get_dirty_log(struct kvm *kvm, struct kvm_dirty_log *log)
 long kvm_arch_vm_ioctl(struct file *filp, unsigned int ioctl, unsigned long arg)
 {
 	long r;
+	struct kvm *kvm = filp->private_data;
+	struct kvm_vcpu *vcpu;
+	void __user *argp = (void __user *)arg;
+	int i;
 
 	switch (ioctl) {
+	case KVM_MIPS_GET_VCPU_STATE:
+	{
+		struct __user kvm_mips_vcpu_state *vcpu_state_user = argp;
+		struct  kvm_mips_vcpu_state *vcpu_state;
+		int num_vcpus = kvm->arch.online_vcpus;
+		vcpu_state = kzalloc(sizeof(struct kvm_mips_vcpu_state), GFP_KERNEL);
+
+		vcpu_state->is_migrate = 1;
+		vcpu_state->nodecounter_value =  kvm->arch.nodecounter_value;
+		vcpu_state->online_vcpus = num_vcpus;
+
+	        for (i = 0; i < num_vcpus; i++){
+	            vcpu = kvm->vcpus[i];
+		    vcpu_state->pending_exceptions |=  vcpu->arch.pending_exceptions_save << (i * 16);
+		    vcpu_state->pending_exceptions_clr |=  vcpu->arch.pending_exceptions_clr_save << (i * 16);
+	        }
+
+		if (copy_to_user(vcpu_state_user, vcpu_state, sizeof(struct kvm_mips_vcpu_state)))
+			return -EFAULT;
+		r = 0;
+		break;
+	}
+
+       case KVM_MIPS_SET_VCPU_STATE:
+       {
+               struct __user kvm_mips_vcpu_state *vcpu_state_user = argp;
+               struct  kvm_mips_vcpu_state *vcpu_state;
+	       vcpu_state = kzalloc(sizeof(struct kvm_mips_vcpu_state),GFP_KERNEL);
+
+               if (copy_from_user(vcpu_state, vcpu_state_user, sizeof(struct kvm_mips_vcpu_state)))
+                       return -EFAULT;
+
+               kvm->arch.is_migrate = vcpu_state->is_migrate;
+               kvm->arch.nodecounter_value = vcpu_state->nodecounter_value;
+               kvm->arch.online_vcpus = vcpu_state->online_vcpus;
+
+	        for (i = 0; i < kvm->arch.online_vcpus; i++){
+		    vcpu = kvm->vcpus[i];
+		    vcpu->arch.pending_exceptions |= ((vcpu_state->pending_exceptions >> (i * 16)) & 0xffff);
+		    vcpu->arch.pending_exceptions_clr |= ((vcpu_state->pending_exceptions_clr >> (i * 16)) & 0xffff);
+		}
+
+               r = 0;
+               break;
+       }
+
 	default:
 		r = -ENOIOCTLCMD;
 	}
@@ -1018,7 +1114,10 @@ int kvm_arch_init(void *opaque)
 		return -EEXIST;
 	}
 
-	return kvm_mips_emulation_init(&kvm_mips_callbacks);
+	if(current_cpu_type() == CPU_LOONGSON3)
+		return kvm_mips_ls3a3000_init(&kvm_mips_callbacks);
+	else
+		return kvm_mips_emulation_init(&kvm_mips_callbacks);
 }
 
 void kvm_arch_exit(void)
@@ -1220,13 +1319,14 @@ int kvm_arch_vcpu_setup(struct kvm_vcpu *vcpu)
 
 static void kvm_mips_set_c0_status(void)
 {
-	u32 status = read_c0_status();
 
-	if (cpu_has_dsp)
+	if (cpu_has_dsp) {
+		u32 status = read_c0_status();
 		status |= (ST0_MX);
 
-	write_c0_status(status);
-	ehb();
+		write_c0_status(status);
+		ehb();
+	}
 }
 
 /*
@@ -1483,7 +1583,8 @@ void kvm_own_fpu(struct kvm_vcpu *vcpu)
 
 	/* If guest FPU state not active, restore it now */
 	if (!(vcpu->arch.aux_inuse & KVM_MIPS_AUX_FPU)) {
-		__kvm_restore_fpu(&vcpu->arch);
+		if(!(current_cpu_type() == CPU_LOONGSON3))
+			__kvm_restore_fpu(&vcpu->arch);
 		vcpu->arch.aux_inuse |= KVM_MIPS_AUX_FPU;
 		trace_kvm_aux(vcpu, KVM_TRACE_AUX_RESTORE, KVM_TRACE_AUX_FPU);
 	} else {
@@ -1607,6 +1708,8 @@ void kvm_lose_fpu(struct kvm_vcpu *vcpu)
 		}
 
 		__kvm_save_fpu(&vcpu->arch);
+		if(current_cpu_type() == CPU_LOONGSON3)
+			__kvm_save_fcsr(&vcpu->arch);
 		vcpu->arch.aux_inuse &= ~KVM_MIPS_AUX_FPU;
 		trace_kvm_aux(vcpu, KVM_TRACE_AUX_SAVE, KVM_TRACE_AUX_FPU);
 
@@ -1670,10 +1773,16 @@ static int __init kvm_mips_init(void)
 {
 	int ret;
 
-	ret = kvm_mips_entry_setup();
-	if (ret)
-		return ret;
-
+	if(current_cpu_type() == CPU_LOONGSON3) {
+		build_lsvz_guest_mode_reenter();
+		ret = kvm_mips_ls3a3000_entry_setup();
+		if (ret)
+			return ret;
+	} else {
+		ret = kvm_mips_entry_setup();
+		if (ret)
+			return ret;
+	}
 	ret = kvm_init(NULL, sizeof(struct kvm_vcpu), 0, THIS_MODULE);
 
 	if (ret)

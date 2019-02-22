@@ -23,3 +23,5 @@ obj-$(CONFIG_PCI_MSI)  += pci_msi.o ls7a-pci_msi.o rs780-pci_msi.o ls2h-pci_msi.
 obj-$(CONFIG_PCI)  += ls3a-pci.o
 
 obj-$(CONFIG_USE_OF)  += dts/
+
+obj-$(CONFIG_KVM_GUEST_LS3A3000) += rtasd.o

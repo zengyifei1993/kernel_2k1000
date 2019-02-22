@@ -500,6 +500,18 @@ struct platform_controller_hub {
 
 extern struct platform_controller_hub *loongson_pch;
 
+#ifdef CONFIG_KVM_GUEST_LS3A3000
+enum virtdev_irq {
+     VIRTDEV_QXL_IRQ = 3,
+     VIRTDEV_BLK_VIRTIO_IRQ,
+     VIRTDEV_BALLOON_VIRTIO_IRQ,
+     VIRTDEV_NET_VIRTIO_IRQ,
+     VIRTDEV_SERIAL_VIRTIO_IRQ,
+     VIRTDEV_GPU_VIRTIO_IRQ,
+     VIRTDEV_IRQ_MAX = 15,
+};
+#endif
+
 /* gpio data */
 struct platform_gpio_data {
 	u32 gpio_conf;
@@ -509,6 +521,7 @@ struct platform_gpio_data {
 	int ngpio;
 };
 
+#ifndef CONFIG_KVM_GUEST_LS3A3000
 #define HT_cache_enable_reg1	*(volatile unsigned int *)(0x90000EFDFB000000 + 0x68)
 #define HT_cache_base_reg1	    *(volatile unsigned int *)(0x90000EFDFB000000 + 0x6c)
 #define HT_uncache_enable_reg0	*(volatile unsigned int *)(0x90000EFDFB000000 + 0xF0)
@@ -519,6 +532,18 @@ struct platform_gpio_data {
 #define HT_uncache_base_reg2	*(volatile unsigned int *)(0x90000EFDFB000000 + 0x16C)
 #define HT_uncache_enable_reg3	*(volatile unsigned int *)(0x90000EFDFB000000 + 0x170)
 #define HT_uncache_base_reg3	*(volatile unsigned int *)(0x90000EFDFB000000 + 0x174)
+#else
+#define HT_cache_enable_reg1	*(volatile unsigned int *)(0x900000EFFB000000 + 0x68)
+#define HT_cache_base_reg1	    *(volatile unsigned int *)(0x900000EFFB000000 + 0x6c)
+#define HT_uncache_enable_reg0	*(volatile unsigned int *)(0x900000EFFB000000 + 0xF0)
+#define HT_uncache_base_reg0	*(volatile unsigned int *)(0x900000EFFB000000 + 0xF4)
+#define HT_uncache_enable_reg1	*(volatile unsigned int *)(0x900000EFFB000000 + 0xF8)
+#define HT_uncache_base_reg1	*(volatile unsigned int *)(0x900000EFFB000000 + 0xFC)
+#define HT_uncache_enable_reg2	*(volatile unsigned int *)(0x900000EFFB000000 + 0x168)
+#define HT_uncache_base_reg2	*(volatile unsigned int *)(0x900000EFFB000000 + 0x16C)
+#define HT_uncache_enable_reg3	*(volatile unsigned int *)(0x900000EFFB000000 + 0x170)
+#define HT_uncache_base_reg3	*(volatile unsigned int *)(0x900000EFFB000000 + 0x174)
+#endif
 
 extern void uncache_resume(void);
 #endif

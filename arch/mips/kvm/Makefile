@@ -14,7 +14,7 @@ kvm-objs += hypcall.o
 kvm-objs += mmu.o
 
 ifdef CONFIG_KVM_MIPS_VZ
-kvm-objs		+= vz.o
+kvm-objs		+= vz.o ls3a3000_vz.o ls3a3000_entry.o
 else
 kvm-objs		+= dyntrans.o
 kvm-objs		+= trap_emul.o

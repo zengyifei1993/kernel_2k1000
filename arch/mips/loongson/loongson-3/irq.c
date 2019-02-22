@@ -8,6 +8,8 @@
 #include <asm/mipsregs.h>
 
 #include <loongson-pch.h>
+#include <linux/reboot.h>
+
 extern struct platform_controller_hub ls2h_pch;
 extern struct platform_controller_hub ls7a_pch;
 extern struct platform_controller_hub rs780_pch;
@@ -42,7 +44,11 @@ int plat_set_irq_affinity(struct irq_data *d, const struct cpumask *affinity,
 	return IRQ_SET_MASK_OK_NOCOPY;
 }
 
+#ifdef CONFIG_KVM_GUEST_LS3A3000
+#define UNUSED_IPS (CAUSEF_IP5 | CAUSEF_IP1 | CAUSEF_IP0)
+#else
 #define UNUSED_IPS (CAUSEF_IP5 | CAUSEF_IP4 | CAUSEF_IP1 | CAUSEF_IP0)
+#endif
 
 void mach_irq_dispatch(unsigned int pending)
 {
@@ -52,13 +58,21 @@ void mach_irq_dispatch(unsigned int pending)
 	if (pending & CAUSEF_IP6)
 		loongson3_ipi_interrupt(NULL);
 #endif
+#ifdef CONFIG_KVM_GUEST_LS3A3000
+	if (pending & CAUSEF_IP4) {
+		clear_c0_status(STATUSF_IP4);
+		orderly_poweroff(true);
+	}
+#endif
+
 	if (pending & CAUSEF_IP3)
 		loongson_pch->irq_dispatch();
 	if (pending & CAUSEF_IP2)
 	{
+#ifndef CONFIG_KVM_GUEST_LS3A3000
 		int cpu = smp_processor_id();
 		int irqs, irq, irqs_pci, irq_lpc;
-		
+
 		if(cpu == 0)
 		{
 
@@ -88,6 +102,7 @@ void mach_irq_dispatch(unsigned int pending)
 			}
 		}
 		else
+#endif
 			do_IRQ(LOONGSON_UART_IRQ);
 	}
 	if (pending & UNUSED_IPS) {
@@ -183,7 +198,11 @@ void __init mach_init_irq(void)
 		*(volatile u32 *)intenset_addr = 1 << 10;
 	}
 
+#ifndef CONFIG_KVM_GUEST_LS3A3000
 	set_c0_status(STATUSF_IP2 | STATUSF_IP6);
+#else
+	set_c0_status(STATUSF_IP2  | STATUSF_IP4 | STATUSF_IP6);
+#endif
 }
 
 #ifdef CONFIG_HOTPLUG_CPU

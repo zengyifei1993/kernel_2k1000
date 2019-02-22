@@ -215,6 +215,7 @@ struct ls_temp_id {
 };
 
 extern u32 nr_cpus_loongson;
+extern u32 possible_cpus_loongson;
 extern u32 nr_nodes_loongson;
 extern int cores_per_node;
 extern int cores_per_package;

@@ -25,7 +25,7 @@
 #define KVM_MMU_CACHE_MIN_PAGES 2
 #endif
 
-static int mmu_topup_memory_cache(struct kvm_mmu_memory_cache *cache,
+int mmu_topup_memory_cache(struct kvm_mmu_memory_cache *cache,
 				  int min, int max)
 {
 	void *page;
@@ -170,7 +170,7 @@ static pte_t *kvm_mips_walk_pgd(pgd_t *pgd, struct kvm_mmu_memory_cache *cache,
 }
 
 /* Caller must hold kvm->mm_lock */
-static pte_t *kvm_mips_pte_for_gpa(struct kvm *kvm,
+pte_t *kvm_mips_pte_for_gpa(struct kvm *kvm,
 				   struct kvm_mmu_memory_cache *cache,
 				   unsigned long addr)
 {
@@ -616,7 +616,7 @@ int kvm_test_age_hva(struct kvm *kvm, unsigned long hva)
  *		-EFAULT on failure due to absent GPA mapping or write to
  *		read-only page, in which case KVM must be consulted.
  */
-static int _kvm_mips_map_page_fast(struct kvm_vcpu *vcpu, unsigned long gpa,
+int _kvm_mips_map_page_fast(struct kvm_vcpu *vcpu, unsigned long gpa,
 				   bool write_fault,
 				   pte_t *out_entry, pte_t *out_buddy)
 {
@@ -1240,6 +1240,9 @@ enum kvm_mips_fault_result kvm_trap_emul_gva_fault(struct kvm_vcpu *vcpu,
 int kvm_get_inst(u32 *opc, struct kvm_vcpu *vcpu, u32 *out)
 {
 	int err;
+
+	if(current_cpu_type() == CPU_LOONGSON3)
+		return kvm_ls3a3000_get_inst(opc, vcpu, out);
 
 	if (WARN(IS_ENABLED(CONFIG_KVM_MIPS_VZ),
 		 "Expect BadInstr/BadInstrP registers to be used with VZ\n"))

@@ -86,12 +86,14 @@ extern unsigned long smtc_asid_mask;
 
 #define ASID_INC	0x1
 #define ASID_MASK	0xff
+#define VPID_MASK	0xff
 
 #endif
 
 #define cpu_context(cpu, mm)	((mm)->context.asid[cpu])
 #define cpu_asid(cpu, mm)	(cpu_context((cpu), (mm)) & ASID_MASK)
 #define asid_cache(cpu)		(cpu_data[cpu].asid_cache)
+#define vpid_cache(cpu)		(cpu_data[cpu].vpid_cache)
 
 static inline void enter_lazy_tlb(struct mm_struct *mm, struct task_struct *tsk)
 {
@@ -103,6 +105,9 @@ static inline void enter_lazy_tlb(struct mm_struct *mm, struct task_struct *tsk)
  */
 #define ASID_VERSION_MASK  ((unsigned long)~(ASID_MASK|(ASID_MASK-1)))
 #define ASID_FIRST_VERSION ((unsigned long)(~ASID_VERSION_MASK) + 1)
+
+#define VPID_VERSION_MASK  ((unsigned long)~(VPID_MASK|(VPID_MASK-1)))
+#define VPID_FIRST_VERSION ((unsigned long)(~VPID_VERSION_MASK) + 1)
 
 #ifndef CONFIG_MIPS_MT_SMTC
 /* Normal, classic MIPS get_new_mmu_context */

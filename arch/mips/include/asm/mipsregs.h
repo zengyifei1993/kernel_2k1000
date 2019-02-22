@@ -58,6 +58,7 @@
 #define CP0_BADVADDR $8
 #define CP0_BADINSTR $8, 1
 #define CP0_COUNT $9
+#define CP0_GSEBASE $9, 6
 #define CP0_ENTRYHI $10
 #define CP0_GUESTCTL1 $10, 4
 #define CP0_GUESTCTL2 $10, 5
@@ -65,12 +66,19 @@
 #define CP0_COMPARE $11
 #define CP0_GUESTCTL0EXT $11, 4
 #define CP0_STATUS $12
+#define CP0_GUESTCTL0 $12, 6
 #define CP0_GTOFFSET $12, 7
 #define CP0_CAUSE $13
 #define CP0_EPC $14
 #define CP0_PRID $15
+#define CP0_EBASE $15, 1
 #define CP0_CMGCRBASE $15, 3
 #define CP0_CONFIG $16
+#define CP0_CONFIG1 $16, 1
+#define CP0_CONFIG2 $16, 2
+#define CP0_CONFIG3 $16, 3
+#define CP0_CONFIG4 $16, 4
+#define CP0_CONFIG5 $16, 5
 #define CP0_LLADDR $17
 #define CP0_WATCHLO $18
 #define CP0_WATCHHI $19
@@ -1775,6 +1783,13 @@ do {									\
 
 #define read_c0_brcm_sleepcount()	__read_32bit_c0_register($22, 7)
 #define write_c0_brcm_sleepcount(val)	__write_32bit_c0_register($22, 7, val)
+
+/*Loongson 3000*/
+#define read_c0_gsebase()	__read_64bit_c0_register($9, 6)
+#define write_c0_gsebase(val)	__write_64bit_c0_register($9, 6, val)
+
+#define read_c0_vpid()		__read_32bit_c0_register($22, 2)
+#define write_c0_vpid(val)	__write_32bit_c0_register($22, 2, val)
 
 /*
  * Macros to access the guest system control coprocessor
