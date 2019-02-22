@@ -10,7 +10,9 @@
  * option) any later version.
  */
 #include "loongson_drv.h"
+#ifndef CONFIG_CPU_LOONGSON2K
 #include <ls7a-spiflash.h>
+#endif
 
 #define VBIOS_START_ADDR 0x1000
 #define VBIOS_SIZE 0x1E000
@@ -123,12 +125,21 @@ void * loongson_vbios_default(void){
 	connector_vbios[0]->crtc_id = 0;
 	connector_vbios[1]->crtc_id = 1;
 
+#ifdef CONFIG_CPU_LOONGSON2K
+	connector_vbios[0]->edid_method = edid_method_i2c;
+	connector_vbios[1]->edid_method = edid_method_i2c;
+
+
+	connector_vbios[0]->i2c_id = 0;
+	connector_vbios[1]->i2c_id = 1;
+#else
 	connector_vbios[0]->edid_method = edid_method_null;
 	connector_vbios[1]->edid_method = edid_method_null;
 
 
 	connector_vbios[0]->i2c_id = 6;
 	connector_vbios[1]->i2c_id = 7;
+#endif
 
 	connector_vbios[0]->i2c_type = i2c_type_gpio;
 	connector_vbios[1]->i2c_type = i2c_type_gpio;
@@ -186,6 +197,9 @@ int loongson_vbios_init(struct loongson_drm_device *ldev){
 
 	ldev->vbios = NULL;
 
+#ifdef CONFIG_CPU_LOONGSON2K
+	ldev->vbios = (struct loongson_vbios *)loongson_vbios_default();
+#else
 	if(vgabios_addr != NULL)
 	{
 		if(loongson_vbios_crc_check((void *)vgabios_addr)||loongson_vbios_title_check((struct loongson_vbios *)vgabios_addr)){
@@ -212,6 +226,7 @@ int loongson_vbios_init(struct loongson_drm_device *ldev){
 			DRM_INFO("VBIOS get from SPI check success!\n");
 		}
 	}
+#endif
 
 vbios_set:
 	vbios = ldev->vbios;

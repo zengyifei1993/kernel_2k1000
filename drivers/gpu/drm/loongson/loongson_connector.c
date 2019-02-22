@@ -409,6 +409,69 @@ static const struct drm_connector_funcs loongson_vga_connector_funcs = {
 static const unsigned short normal_i2c[] = { 0x50, I2C_CLIENT_END };
 
 
+
+
+#ifdef CONFIG_DRM_LOONGSON_VGA_PLATFORM
+
+static const struct i2c_device_id dvi_eep_ids[] = {
+	{ "dvi-eeprom-edid", 0 },
+	{ /* END OF LIST */ }
+};
+
+static const struct i2c_device_id vga_eep_ids[] = {
+	{ "eeprom-edid", 2 },
+	{ /* END OF LIST */ }
+};
+MODULE_DEVICE_TABLE(i2c, dvi_eep_ids);
+MODULE_DEVICE_TABLE(i2c, vga_eep_ids);
+
+static int dvi_eep_probe(struct i2c_client *client, const struct i2c_device_id *id)
+{
+	eeprom_info[0].adapter = client->adapter;
+	eeprom_info[0].addr = client->addr;
+	return 0;
+}
+
+
+static int vga_eep_probe(struct i2c_client *client, const struct i2c_device_id *id)
+{
+	eeprom_info[1].adapter = client->adapter;
+	eeprom_info[1].addr = client->addr;
+	return 0;
+}
+
+
+
+static int eep_remove(struct i2c_client *client)
+{
+	i2c_unregister_device(client);
+	return 0;
+}
+static struct i2c_driver vga_eep_driver = {
+	.driver = {
+		.name = "vga_eep-edid",
+		.owner = THIS_MODULE,
+	},
+	.probe = vga_eep_probe,
+	.remove = eep_remove,
+	.id_table = vga_eep_ids,
+};
+
+static struct i2c_driver dvi_eep_driver = {
+	.driver = {
+		.name = "dvi_eep-edid",
+		.owner = THIS_MODULE,
+	},
+	.probe = dvi_eep_probe,
+	.remove = eep_remove,
+	.id_table = dvi_eep_ids,
+};
+
+
+
+#endif
+
+
 /**
  * loongson_vga_init
  *
@@ -431,6 +494,13 @@ struct drm_connector *loongson_vga_init(struct drm_device *dev,unsigned int conn
 	if (!loongson_connector)
 		return NULL;
 
+#ifdef CONFIG_DRM_LOONGSON_VGA_PLATFORM
+	if(connector_id == 0){
+		i2c_add_driver(&dvi_eep_driver);
+	}else{
+		i2c_add_driver(&vga_eep_driver);
+	}
+#else
 	i2c_adap = i2c_get_adapter(ldev->connector_vbios[connector_id]->i2c_id);
 	memset(&i2c_info, 0, sizeof(struct i2c_board_info));
 	strlcpy(i2c_info.type, DVO_I2C_NAME, I2C_NAME_SIZE);
@@ -444,6 +514,7 @@ struct drm_connector *loongson_vga_init(struct drm_device *dev,unsigned int conn
 	}else{
 		return NULL;
 	}
+#endif
 	connector = &loongson_connector->base;
 
 	drm_connector_init(dev, connector,
@@ -454,3 +525,4 @@ struct drm_connector *loongson_vga_init(struct drm_device *dev,unsigned int conn
 	drm_connector_register(connector);
 	return connector;
 }
+

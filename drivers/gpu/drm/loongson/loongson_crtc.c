@@ -11,7 +11,11 @@
  */
 
 #include "loongson_drv.h"
+#ifdef CONFIG_CPU_LOONGSON2K
+#include "ls2k.h"
+#else
 #include <loongson-pch.h>
+#endif
 #include <drm/drmP.h>
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_plane_helper.h>
@@ -296,6 +300,47 @@ static void config_pll(unsigned long pll_base, struct pix_pll *pll_cfg)
 {
 	unsigned long val;
 
+#ifdef CONFIG_CPU_LOONGSON2K
+        /* set sel_pll_out0 0 */
+	val = ls_readq(pll_base);
+	val &= ~(1UL << 0);
+	ls_writeq(val, pll_base);
+
+	/* pll_pd 1 */
+	val = ls_readq(pll_base);
+	val |= (1UL << 19);
+	ls_writeq(val, pll_base);
+
+	/* set_pll_param 0 */
+	val = ls_readq(pll_base);
+	val &= ~(1UL << 2);
+	ls_writeq(val, pll_base);
+
+	/* set new div ref, loopc, div out */
+	/* clear old value first*/
+	val = (1 << 7) | (1L << 42) | (3 << 10) |
+		((unsigned long)(pll_cfg->l1_loopc) << 32) |
+		((unsigned long)(pll_cfg->l1_frefc) << 26);
+	ls_writeq(val, pll_base);
+	ls_writeq(pll_cfg->l2_div, pll_base + 8);
+
+	/* set_pll_param 1 */
+	val = ls_readq(pll_base);
+	val |= (1UL << 2);
+	ls_writeq(val, pll_base);
+
+	/* pll_pd 0 */
+	val = ls_readq(pll_base);
+	val &= ~(1UL << 19);
+	ls_writeq(val, pll_base);
+
+	/* wait pll lock */
+	while(!(ls_readl(pll_base) & 0x10000));
+	/* set sel_pll_out0 1 */
+	val = ls_readq(pll_base);
+	val |= (1UL << 0);
+	ls_writeq(val, pll_base);
+#else
 	/* set sel_pll_out0 0 */
 	val = ls_readq(pll_base + LO_OFF);
 	val &= ~(1UL << 40);
@@ -332,6 +377,7 @@ static void config_pll(unsigned long pll_base, struct pix_pll *pll_cfg)
 	val = ls_readq(pll_base + LO_OFF);
 	val |= (1UL << 40);
 	ls_writeq(val, pll_base + LO_OFF);
+#endif
 }
 
 
@@ -616,7 +662,7 @@ static void loongson_crtc_disable(struct drm_crtc *crtc)
 		ret = loongson_bo_reserve(bo, false);
 		if (ret)
 			return;
-		loongson_bo_push_sysram(bo);
+		loongson_bo_unpin(bo);
 		loongson_bo_unreserve(bo);
 	}
 	crtc->primary->fb = NULL;

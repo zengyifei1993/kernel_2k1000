@@ -1110,6 +1110,10 @@ int loongson_gpu_probe(struct platform_device *pdev)
 	}
 #endif
 
+#ifdef CONFIG_CPU_LOONGSON2K
+	device_addr = bus_addr;
+#endif
+
 #ifdef ALL_IN_2H
     if (!dma_declare_coherent_memory(GPU_DEV, bus_addr, device_addr, all_reserved_size, flags))
     {
