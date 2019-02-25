@@ -171,7 +171,6 @@ static void *kvm_mips_build_ret_to_guest(void *addr);
 static void *kvm_mips_build_ret_to_host(void *addr);
 extern void __kvm_save_fpu(struct kvm_vcpu_arch *arch);
 extern void __kvm_restore_fpu(struct kvm_vcpu_arch *arch);
-extern void __kvm_restore_fcsr(struct kvm_vcpu_arch *arch);
 
 /*
  * The version of this function in tlbex.c uses current_cpu_type(), but for KVM
