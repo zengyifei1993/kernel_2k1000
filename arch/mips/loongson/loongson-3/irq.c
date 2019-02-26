@@ -60,8 +60,7 @@ void mach_irq_dispatch(unsigned int pending)
 #endif
 #ifdef CONFIG_KVM_GUEST_LS3A3000
 	if (pending & CAUSEF_IP4) {
-		clear_c0_status(STATUSF_IP4);
-		orderly_poweroff(true);
+		lsvirt_button_poweroff();
 	}
 #endif
 
