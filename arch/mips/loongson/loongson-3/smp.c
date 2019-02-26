@@ -30,6 +30,9 @@
 #include <irq.h>
 #include <workarounds.h>
 #include <loongson-pch.h>
+#ifdef CONFIG_KVM_GUEST_LS3A3000
+#include <linux/workqueue.h>
+#endif
 
 #include "smp.h"
 
@@ -50,28 +53,18 @@ extern int autoplug_verbose;
 #define verbose 1
 #endif
 
-struct cpu_up_info{
-	struct delayed_work work[NR_CPUS];
-	struct cpumask up_mask;
+#ifdef CONFIG_KVM_GUEST_LS3A3000
+struct cpu_hotplug_info{
+	struct delayed_work work;
 };
-static struct cpu_up_info cpu_up_work;
+static struct cpu_hotplug_info cpu_hotplug_work;
+extern struct delayed_work event_scan_work;
 
-void setup_cpu_topology(int cpu);
-struct device *get_cpu_device(unsigned cpu);
-
-static void do_cpu_up_timer(struct work_struct *work)
+static void do_cpu_hotplug_timer(struct work_struct *work)
 {
-	int cpu;
-
-	lock_device_hotplug();
-	cpu = cpumask_first(&cpu_up_work.up_mask);
-	cpumask_clear_cpu(cpu,&cpu_up_work.up_mask);
-	cpu_set(cpu, __node_data[(cpu/cores_per_node)]->cpumask);
-	setup_cpu_topology(cpu);
-	get_cpu_device(cpu)->offline = false;
-	cpu_up(cpu);
-	unlock_device_hotplug();
+	flush_delayed_work(&event_scan_work);
 }
+#endif
 
 
 /* read a 64bit value from ipi register */
@@ -254,14 +247,11 @@ void loongson3_ipi_interrupt(struct pt_regs *regs)
 		__wbflush(); /* Let others see the result ASAP */
 	}
 
-	if(action & SMP_CPU_UP){
-		cpu = irqs;
-		if((!cpumask_test_cpu(cpu,cpu_present_mask))&&(system_state != SYSTEM_BOOTING)){
-			set_cpu_present(cpu,true);
-			cpumask_set_cpu(cpu,&cpu_up_work.up_mask);
-			schedule_delayed_work(&cpu_up_work.work[cpu], msecs_to_jiffies(1000));
-		}
+#ifdef CONFIG_KVM_GUEST_LS3A3000
+	if(action & SMP_CPU_HOTPLUG){
+		schedule_delayed_work(&cpu_hotplug_work.work, msecs_to_jiffies(100));
 	}
+#endif
 
 	if (irqs) {
 		int irq, irq1;
@@ -352,6 +342,9 @@ void __init loongson3_smp_setup(void)
 {
 	int i = 0, num = 0; /* i: physical id, num: logical id */
 
+#ifdef CONFIG_KVM_GUEST_LS3A3000
+	INIT_DEFERRABLE_WORK(&cpu_hotplug_work.work, do_cpu_hotplug_timer);
+#endif
 	init_cpu_possible(cpu_none_mask);
 
 	/* For unified kernel, NR_CPUS is the maximum possible value,
@@ -366,7 +359,6 @@ void __init loongson3_smp_setup(void)
 			set_cpu_possible(num, true);
 			num++;
 		}
-		INIT_DEFERRABLE_WORK(&cpu_up_work.work[i], do_cpu_up_timer);
 		i++;
 	}
 	printk(KERN_INFO "Detected %i available CPU(s)\n", num);
