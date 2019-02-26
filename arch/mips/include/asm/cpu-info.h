@@ -28,6 +28,16 @@ struct cache_desc {
 	unsigned char flags;	/* Flags describing cache properties */
 };
 
+struct guest_info {
+	unsigned long		ases;
+	unsigned long		ases_dyn;
+	unsigned long long	options;
+	unsigned long long	options_dyn;
+	int			tlbsize;
+	u8			conf;
+	u8			kscratch_mask;
+};
+
 /*
  * Flag definitions
  */
@@ -40,6 +50,9 @@ struct cache_desc {
 
 struct cpuinfo_mips {
 	unsigned long		asid_cache;
+#ifdef CONFIG_MIPS_ASID_BITS_VARIABLE
+	unsigned long           asid_mask;
+#endif
 	unsigned int		udelay_val;
 	/*
 	 * Capability and feature descriptor structure for MIPS CPU
@@ -92,6 +105,11 @@ struct cpuinfo_mips {
 #ifdef CONFIG_MIPS_MT_SMTC
 	int			tc_id;	 /* Thread Context number */
 #endif
+	/* VZ & Guest features */
+	struct guest_info	guest;
+	unsigned int		gtoffset_mask;
+	unsigned int		guestid_mask;
+	unsigned int		guestid_cache;
 } __attribute__((aligned(SMP_CACHE_BYTES)));
 
 extern struct cpuinfo_mips cpu_data[];
@@ -106,5 +124,26 @@ extern const char *__cpu_name[];
 extern const char *__cpu_full_name[];
 #define cpu_name_string()	__cpu_name[raw_smp_processor_id()]
 #define cpu_full_name_string()	__cpu_full_name[raw_smp_processor_id()]
+
+static inline unsigned long cpu_asid_inc(void)
+{
+	return 1 << CONFIG_MIPS_ASID_SHIFT;
+}
+
+static inline unsigned long cpu_asid_mask(struct cpuinfo_mips *cpuinfo)
+{
+#ifdef CONFIG_MIPS_ASID_BITS_VARIABLE
+	return cpuinfo->asid_mask;
+#endif
+	return ((1 << CONFIG_MIPS_ASID_BITS) - 1) << CONFIG_MIPS_ASID_SHIFT;
+}
+
+static inline void set_cpu_asid_mask(struct cpuinfo_mips *cpuinfo,
+                                     unsigned long asid_mask)
+{
+#ifdef CONFIG_MIPS_ASID_BITS_VARIABLE
+	cpuinfo->asid_mask = asid_mask;
+#endif
+}
 
 #endif /* __ASM_CPU_INFO_H */

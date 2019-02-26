@@ -1821,11 +1821,31 @@ static int __init ulri_disable(char *s)
 }
 __setup("noulri", ulri_disable);
 
+unsigned int hwrena;
+EXPORT_SYMBOL_GPL(hwrena);
+
+/* configure HWRENA register */
+static void configure_hwrena(void)
+{
+	hwrena = cpu_hwrena_impl_bits;
+
+	if (cpu_has_mips_r2)
+		hwrena |= MIPS_HWRENA_CPUNUM |
+			  MIPS_HWRENA_SYNCISTEP |
+			  MIPS_HWRENA_CC |
+			  MIPS_HWRENA_CCRES;
+
+	if (!noulri && cpu_has_userlocal)
+		hwrena |= MIPS_HWRENA_ULR;
+
+	if (hwrena)
+		write_c0_hwrena(hwrena);
+}
+
 void __cpuinit per_cpu_trap_init(bool is_boot_cpu)
 {
 	unsigned int cpu = smp_processor_id();
 	unsigned int status_set = ST0_CU0;
-	unsigned int hwrena = cpu_hwrena_impl_bits;
 #ifdef CONFIG_MIPS_MT_SMTC
 	int secondaryTC = 0;
 	int bootTC = (cpu == 0);
@@ -1861,14 +1881,7 @@ void __cpuinit per_cpu_trap_init(bool is_boot_cpu)
 	change_c0_status(ST0_CU|ST0_MX|ST0_RE|ST0_FR|ST0_BEV|ST0_TS|ST0_KX|ST0_SX|ST0_UX,
 			 status_set);
 
-	if (cpu_has_mips_r2)
-		hwrena |= 0x0000000f;
-
-	if (!noulri && cpu_has_userlocal)
-		hwrena |= (1 << 29);
-
-	if (hwrena)
-		write_c0_hwrena(hwrena);
+	configure_hwrena();
 
 #ifdef CONFIG_MIPS_MT_SMTC
 	if (!secondaryTC) {

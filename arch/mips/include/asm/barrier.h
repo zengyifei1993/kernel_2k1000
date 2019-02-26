@@ -168,4 +168,10 @@ do {									\
 #define smp_mb__before_atomic()	 __asm__ __volatile__(__WEAK_LLSC_MB : : :"memory")
 #define smp_mb__after_atomic() __asm__ __volatile__(__WEAK_LLSC_MB : : :"memory")
 
+#ifndef __smp_store_mb
+#define __smp_store_mb(var, value)  do { WRITE_ONCE(var, value); smp_mb(); } while (0)
+#endif
+#ifndef smp_store_mb
+#define smp_store_mb(var, value)  __smp_store_mb(var, value)
+#endif
 #endif /* __ASM_BARRIER_H */

@@ -34,10 +34,7 @@
 #include <asm/war.h>
 #include <asm/uasm.h>
 #include <asm/setup.h>
-
-#define MIPS_ENTRYLO_PFN_SHIFT  6
-#define MIPS_ENTRYLO_XI                (_ULCAST_(1) << 62)
-#define MIPS_ENTRYLO_RI                (_ULCAST_(1) << 63)
+#include <asm/tlbex.h>
 
 /*
  * TLB load/store/modify handlers.
@@ -303,12 +300,6 @@ static inline void dump_handler(const char *symbol, const u32 *handler, int coun
 # define GET_CONTEXT(buf, reg) UASM_i_MFC0(buf, reg, C0_CONTEXT)
 #endif
 
-void uasm_i_sync(u32 **buf)
-{
-	**buf = 0xf;
-	(*buf)++;
-}
-
 void uasm_i_synci(u32 **buf)
 {
 	**buf = 0x043f0000; // synci  0(zero)
@@ -362,8 +353,8 @@ static int __cpuinit allocate_kscratch(void)
 	return r;
 }
 
-static int scratch_reg __cpuinitdata;
-static int pgd_reg __cpuinitdata;
+int scratch_reg __cpuinitdata;
+int pgd_reg __cpuinitdata;
 enum vmalloc64_mode {not_refill, refill_scratch, refill_noscratch};
 
 static struct work_registers __cpuinit build_get_work_registers(u32 **p)
@@ -519,9 +510,7 @@ static void __cpuinit __maybe_unused build_tlb_probe_entry(u32 **p)
  * Write random or indexed TLB entry, and care about the hazards from
  * the preceding mtc0 and for the following eret.
  */
-enum tlb_write_entry { tlb_random, tlb_indexed };
-
-static void __cpuinit build_tlb_write_entry(u32 **p, struct uasm_label **l,
+void __cpuinit build_tlb_write_entry(u32 **p, struct uasm_label **l,
 					 struct uasm_reloc **r,
 					 enum tlb_write_entry wmode)
 {
@@ -830,7 +819,7 @@ static __cpuinit void build_huge_handler_tail(u32 **p,
  * TMP and PTR are scratch.
  * TMP will be clobbered, PTR will hold the pmd entry.
  */
-static void __cpuinit
+void __cpuinit
 build_get_pmde64(u32 **p, struct uasm_label **l, struct uasm_reloc **r,
 		 unsigned int tmp, unsigned int ptr)
 {
@@ -964,7 +953,7 @@ build_get_pgd_vmalloc64(u32 **p, struct uasm_label **l, struct uasm_reloc **r,
 		 * fault.
 		 */
 		if (loongson_llsc_war())
-			uasm_i_sync(p);
+			uasm_i_sync(p, 0);
 		UASM_i_LA(p, ptr, (unsigned long)tlb_do_page_fault_0);
 		uasm_i_jr(p, ptr);
 
@@ -1040,7 +1029,7 @@ static void __cpuinit build_adjust_context(u32 **p, unsigned int ctx)
 	uasm_i_andi(p, ctx, ctx, mask);
 }
 
-static void __cpuinit build_get_ptep(u32 **p, unsigned int tmp, unsigned int ptr)
+void __cpuinit build_get_ptep(u32 **p, unsigned int tmp, unsigned int ptr)
 {
 	/*
 	 * Bug workaround for the Nevada. It seems as if under certain
@@ -1065,7 +1054,7 @@ static void __cpuinit build_get_ptep(u32 **p, unsigned int tmp, unsigned int ptr
 	UASM_i_ADDU(p, ptr, ptr, tmp); /* add in offset */
 }
 
-static void __cpuinit build_update_entries(u32 **p, unsigned int tmp,
+void __cpuinit build_update_entries(u32 **p, unsigned int tmp,
 					unsigned int ptep)
 {
 	/*
@@ -1576,7 +1565,7 @@ static void __cpuinit build_loongson3_tlb_refill_handler(void)
 	if(check_for_high_segbits){
 		uasm_l_large_segbits_fault(&l, p);
 		if (loongson_llsc_war())
-			uasm_i_sync(&p);
+			uasm_i_sync(&p, 0);
 		UASM_i_LA(&p, K1, (unsigned long)tlb_do_page_fault_0);
 		uasm_i_jr(&p, K1);
 		uasm_i_nop(&p);
@@ -2036,7 +2025,7 @@ build_r4000_tlbchange_handler_head(u32 **p, struct uasm_label **l,
 	// here just for test, ls2k does not need this
 #if 	!defined(CONFIG_CPU_LOONGSON2K)
 	if (read_c0_prid() >= 0x146305 && read_c0_prid() <= 0x146307) //for 3A1000/2H/2j3/3B1000/3B1500
-		uasm_i_sync(p);
+		uasm_i_sync(p, 0);
 	else if (read_c0_prid() == 0x146308 || read_c0_prid() == 0x146309)  //for 3A2000ABC/3A3000CD
 		uasm_i_synci(p);
 #endif
@@ -2162,7 +2151,7 @@ static void __cpuinit build_r4000_tlb_load_handler(void)
 	uasm_l_tlb_huge_update_pre(&l, p);
 #if 	!defined(CONFIG_CPU_LOONGSON2K)
 	if (read_c0_prid() >= 0x146305 && read_c0_prid() <= 0x146307) //for 3A1000/2H/2j3/3B1000/3B1500
-		uasm_i_sync(&p);
+		uasm_i_sync(&p, 0);
 	else if (read_c0_prid() == 0x146308 || read_c0_prid() == 0x146309)  //for 3A2000ABC/3A3000CD
 		uasm_i_synci(&p);
 #endif
@@ -2236,7 +2225,7 @@ static void __cpuinit build_r4000_tlb_load_handler(void)
 
 	uasm_l_nopage_tlbl(&l, p);
 	if (loongson_llsc_war())
-		uasm_i_sync(&p);
+		uasm_i_sync(&p, 0);
 	build_restore_work_registers(&p);
 #ifdef CONFIG_CPU_MICROMIPS
 	if ((unsigned long)tlb_do_page_fault_0 & 1) {
@@ -2285,7 +2274,7 @@ static void __cpuinit build_r4000_tlb_store_handler(void)
 	uasm_l_tlb_huge_update_pre(&l, p);
 #if 	!defined(CONFIG_CPU_LOONGSON2K)
 	if (read_c0_prid() >= 0x146305 && read_c0_prid() <= 0x146307) //for 3A1000/2H/2j3/3B1000/3B1500
-		uasm_i_sync(&p);
+		uasm_i_sync(&p, 0);
 	else if (read_c0_prid() == 0x146308 || read_c0_prid() == 0x146309)  //for 3A2000ABC/3A3000CD
 		uasm_i_synci(&p);
 #endif
@@ -2300,7 +2289,7 @@ static void __cpuinit build_r4000_tlb_store_handler(void)
 
 	uasm_l_nopage_tlbs(&l, p);
 	if (loongson_llsc_war())
-		uasm_i_sync(&p);
+		uasm_i_sync(&p, 0);
 	build_restore_work_registers(&p);
 #ifdef CONFIG_CPU_MICROMIPS
 	if ((unsigned long)tlb_do_page_fault_1 & 1) {
@@ -2350,7 +2339,7 @@ static void __cpuinit build_r4000_tlb_modify_handler(void)
 	uasm_l_tlb_huge_update_pre(&l, p);
 #if 	!defined(CONFIG_CPU_LOONGSON2K)
 	if (read_c0_prid() >= 0x146305 && read_c0_prid() <= 0x146307) //for 3A1000/2H/2j3/3B1000/3B1500
-		uasm_i_sync(&p);
+		uasm_i_sync(&p, 0);
 	else if (read_c0_prid() == 0x146308 || read_c0_prid() == 0x146309)  //for 3A2000ABC/3A3000CD
 		uasm_i_synci(&p);
 #endif
@@ -2365,7 +2354,7 @@ static void __cpuinit build_r4000_tlb_modify_handler(void)
 
 	uasm_l_nopage_tlbm(&l, p);
 	if (loongson_llsc_war())
-		uasm_i_sync(&p);
+		uasm_i_sync(&p, 0);
 	build_restore_work_registers(&p);
 #ifdef CONFIG_CPU_MICROMIPS
 	if ((unsigned long)tlb_do_page_fault_1 & 1) {
