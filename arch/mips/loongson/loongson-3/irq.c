@@ -26,20 +26,14 @@ int plat_set_irq_affinity(struct irq_data *d, const struct cpumask *affinity,
 			  bool force)
 {
 	unsigned int cpu;
-	struct cpumask new_affinity;
 
 	if ((loongson_pch == &ls7a_pch && ls7a_ipi_irq2pos[d->irq] < 0) || (loongson_pch == &ls2h_pch && ls2h_irq2pos[d->irq - LS2H_PCH_IRQ_BASE] < 0))
 		return -EINVAL;
-	/* I/O devices are connected on package-0 */
-	cpumask_copy(&new_affinity, affinity);
-	for_each_cpu(cpu, affinity)
-		if (cpu_data[cpu].package > 0)
-			cpumask_clear_cpu(cpu, &new_affinity);
 
-	if (cpumask_empty(&new_affinity))
+	if (cpumask_empty(affinity))
 		return -EINVAL;
 
-	cpumask_copy(d->affinity, &new_affinity);
+	cpumask_copy(d->affinity, affinity);
 
 	return IRQ_SET_MASK_OK_NOCOPY;
 }

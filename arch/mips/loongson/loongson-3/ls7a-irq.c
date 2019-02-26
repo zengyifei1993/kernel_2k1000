@@ -128,16 +128,6 @@ static struct irq_chip pch_irq_chip = {
 
 static unsigned int irq_cpu[64] = {[0 ... 63] = -1};
 static unsigned int irq_msi[64] = {[0 ... 63] = -1};
-static unsigned long long local_irq = (1ULL << LS7A_IOAPIC_UART0_OFFSET         ) |
-										(1ULL << LS7A_IOAPIC_I2C0_OFFSET          ) |
-										(1ULL << LS7A_IOAPIC_GMAC0_PMT_OFFSET     ) |
-										(1ULL << LS7A_IOAPIC_GMAC1_PMT_OFFSET     ) |
-										(1ULL << LS7A_IOAPIC_DC_OFFSET            ) |
-										(1ULL << LS7A_IOAPIC_GPU_OFFSET           ) |
-										(1ULL << LS7A_IOAPIC_OHCI0_OFFSET         ) |
-										(1ULL << LS7A_IOAPIC_OHCI1_OFFSET         ) |
-										(1ULL << LS7A_IOAPIC_ACPI_INT_OFFSET      ) |
-										(1ULL << LS7A_IOAPIC_HPET_INT_OFFSET      ) ;
 
 
 void handle_7a_irqs(unsigned long long irqs) {
@@ -158,7 +148,7 @@ void handle_7a_irqs(unsigned long long irqs) {
 		irqs &= ~(1ULL<<irq);
 
 		/* handled by local core */
-		if ((local_irq & (0x1ULL << irq)) || ls7a_ipi_irq2pos[LS7A_IOAPIC_IRQ_BASE + irq] == (unsigned char)-1) {
+		if (ls7a_ipi_irq2pos[LS7A_IOAPIC_IRQ_BASE + irq] == (unsigned char)-1) {
 			do_IRQ(LS7A_IOAPIC_IRQ_BASE + irq);
 			continue;
 		}
