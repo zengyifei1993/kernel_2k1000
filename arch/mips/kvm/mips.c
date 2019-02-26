@@ -1061,8 +1061,6 @@ long kvm_arch_vm_ioctl(struct file *filp, unsigned int ioctl, unsigned long arg)
 		int num_vcpus = kvm->arch.online_vcpus;
 		vcpu_state = kzalloc(sizeof(struct kvm_mips_vcpu_state), GFP_KERNEL);
 
-		vcpu_state->is_migrate = 1;
-		vcpu_state->nodecounter_value =  kvm->arch.nodecounter_value;
 		vcpu_state->online_vcpus = num_vcpus;
 
 	        for (i = 0; i < num_vcpus; i++){
@@ -1086,8 +1084,6 @@ long kvm_arch_vm_ioctl(struct file *filp, unsigned int ioctl, unsigned long arg)
                if (copy_from_user(vcpu_state, vcpu_state_user, sizeof(struct kvm_mips_vcpu_state)))
                        return -EFAULT;
 
-               kvm->arch.is_migrate = vcpu_state->is_migrate;
-               kvm->arch.nodecounter_value = vcpu_state->nodecounter_value;
                kvm->arch.online_vcpus = vcpu_state->online_vcpus;
 
 	        for (i = 0; i < kvm->arch.online_vcpus; i++){
