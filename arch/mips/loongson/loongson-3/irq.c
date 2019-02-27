@@ -25,8 +25,6 @@ extern unsigned int ls2h_irq2pos[];
 int plat_set_irq_affinity(struct irq_data *d, const struct cpumask *affinity,
 			  bool force)
 {
-	unsigned int cpu;
-
 	if ((loongson_pch == &ls7a_pch && ls7a_ipi_irq2pos[d->irq] < 0) || (loongson_pch == &ls2h_pch && ls2h_irq2pos[d->irq - LS2H_PCH_IRQ_BASE] < 0))
 		return -EINVAL;
 
