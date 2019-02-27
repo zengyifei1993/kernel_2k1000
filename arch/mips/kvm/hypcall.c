@@ -11,6 +11,8 @@
 #include <linux/kernel.h>
 #include <linux/kvm_host.h>
 #include <linux/kvm_para.h>
+#include <asm/mmu_context.h>
+#include "ls3a3000.h"
 
 #define MAX_HYPCALL_ARGS	8
 
@@ -21,12 +23,6 @@ enum vmtlbexc {
 	VMTLBRI = 5,
 	VMTLBXI = 6
 };
-
-extern int kvm_lsvz_map_page(struct kvm_vcpu *vcpu, unsigned long gpa,
-				    bool write_fault,unsigned long prot_bits,
-				    pte_t *out_entry, pte_t *out_buddy);
-extern void flush_tlb_all(void);
-
 
 enum emulation_result kvm_mips_emul_hypcall(struct kvm_vcpu *vcpu,
 					    union mips_instruction inst)
@@ -41,6 +37,70 @@ enum emulation_result kvm_mips_emul_hypcall(struct kvm_vcpu *vcpu,
 	default:
 		return EMULATE_FAIL;
 	};
+}
+
+
+/* supposing virtual address XKPHYS is not used by any software */
+#define KVM_UNIQUE_ENTRYHI(idx)					\
+		((XKSSEG + ((idx) << (PAGE_SHIFT + 1))) |	\
+		(cpu_has_tlbinv ? MIPS_ENTRYHI_EHINV : 0))
+
+void kvm_mips_tlbw(struct kvm_mips_tlb *ptlb)
+{
+	unsigned long tmp_entryhi, tmp_entrylo0, tmp_entrylo1;
+	unsigned long page_mask;
+	unsigned int tmp_diag;
+	unsigned long flags;
+	int tmp_index,idx;
+
+	local_irq_save(flags);
+	//Save tmp registers
+	tmp_entryhi  = read_c0_entryhi();
+	tmp_entrylo0 = read_c0_entrylo0();
+	tmp_entrylo1 = read_c0_entrylo1();
+	page_mask = read_c0_pagemask();
+	tmp_index = read_c0_index();
+
+	//Enable diag.MID for guest
+	tmp_diag = read_c0_diag();
+	tmp_diag |= (1<<18);
+	write_c0_diag(tmp_diag);
+
+	write_c0_entryhi(ptlb->tlb_hi);
+	mtc0_tlbw_hazard();
+
+	write_c0_pagemask(ptlb->tlb_mask);
+	write_c0_entrylo0(ptlb->tlb_lo[0]);
+	write_c0_entrylo1(ptlb->tlb_lo[1]);
+	mtc0_tlbw_hazard();
+	tlb_probe();
+	tlb_probe_hazard();
+
+	idx = read_c0_index();
+	mtc0_tlbw_hazard();
+	if (idx >= 0)
+		tlb_write_indexed();
+	else
+		tlb_write_random();
+	tlbw_use_hazard();
+	//Disable diag.MID
+	tmp_diag = read_c0_diag();
+	tmp_diag &= ~(3<<18);
+	write_c0_diag(tmp_diag);
+
+	//Restore tmp registers
+	write_c0_entryhi(tmp_entryhi);
+	write_c0_entrylo0(tmp_entrylo0);
+	write_c0_entrylo1(tmp_entrylo1);
+	write_c0_pagemask(page_mask);
+	write_c0_index(tmp_index);
+
+	//flush ITLB/DTLB
+	tmp_diag = read_c0_diag();
+	tmp_diag |= 0xc;
+	write_c0_diag(tmp_diag);
+
+	local_irq_restore(flags);
 }
 
 static int kvm_mips_hcall_tlb(struct kvm_vcpu *vcpu, unsigned long num,
@@ -70,7 +130,7 @@ static int kvm_mips_hcall_tlb(struct kvm_vcpu *vcpu, unsigned long num,
 	vcpu->arch.host_cp0_badvaddr = args[0];
 
 	if ((args[4] == 0x5001) || (args[4] == 0x5005)) {
-#if 0
+#if 1
 		/*If guest hypcall to flush_tlb_page (0x5001)
 		 *or flush_tlb_one (0x5005)
 		 * TLB probe and then clear the TLB Line
@@ -95,11 +155,10 @@ static int kvm_mips_hcall_tlb(struct kvm_vcpu *vcpu, unsigned long num,
 		tmp_diag |= (1<<18);
 		write_c0_diag(tmp_diag);
 
-		badvaddr = args[0] & PAGE_MASK;
+		badvaddr = (args[0] & 0xc000ffffffffe000) & (PAGE_MASK << 1);
 		if(args[4] == 0x5001)
-			write_c0_entryhi(badvaddr | vcpu->arch.cop0->reg[MIPS_CP0_TLB_HI][0]);
-		else if (args[4] == 0x5005)
-			write_c0_entryhi(badvaddr);
+			badvaddr |=  read_gc0_entryhi() & MIPS_ENTRYHI_ASID;
+		write_c0_entryhi(badvaddr);
 
 		mtc0_tlbw_hazard();
 		tlb_probe();
@@ -108,7 +167,7 @@ static int kvm_mips_hcall_tlb(struct kvm_vcpu *vcpu, unsigned long num,
 		idx = read_c0_index();
 		if (idx >= 0) {
 			/* Make sure all entries differ. */
-			write_c0_entryhi(MIPS_ENTRYHI_EHINV);
+			write_c0_entryhi(KVM_UNIQUE_ENTRYHI(idx));
 			write_c0_entrylo0(0);
 			write_c0_entrylo1(0);
 			mtc0_tlbw_hazard();
@@ -134,10 +193,9 @@ static int kvm_mips_hcall_tlb(struct kvm_vcpu *vcpu, unsigned long num,
 
 		local_irq_restore(flags);
 
-		if ((args[0] & 0xf000000000000000) < XKSSEG)
-			kvm_debug("%lx guest badvaddr %lx  %lx ASID %lx idx %x\n",args[4], args[0],badvaddr, read_gc0_entryhi(),idx);
 #else
-		flush_tlb_all();
+		local_flush_tlb_all();
+#endif
 
 		if (args[4] == 0x5001) {
 			s_index = ((args[0] >> 15) & STLB_WAY_MASK) * STLB_SET;
@@ -152,9 +210,8 @@ static int kvm_mips_hcall_tlb(struct kvm_vcpu *vcpu, unsigned long num,
 				ptlb++;
 			}
 		}
-#endif
 	} else if ((args[4] == 0x5003) || (args[4] == 0x5004)) {
-#if 0
+#if 1
 		/*flush_tlb_range (0x5003) of guest XUSEG address
 		 * or flush_tlb_kernel_range (0x5004)
 		*/
@@ -172,14 +229,16 @@ static int kvm_mips_hcall_tlb(struct kvm_vcpu *vcpu, unsigned long num,
 			int tmp_index, idx;
 			unsigned long gc0_entryhi;
 
-			address = args[0];
+			address = (args[0] & 0xc000ffffffffe000) & (PAGE_MASK << 1); 
 			//Save tmp registers
 			tmp_entryhi  = read_c0_entryhi();
 			tmp_entrylo0 = read_c0_entrylo0();
 			tmp_entrylo1 = read_c0_entrylo1();
 			page_mask = read_c0_pagemask();
 			tmp_index = read_c0_index();
-			gc0_entryhi = vcpu->arch.cop0->reg[MIPS_CP0_TLB_HI][0];
+			gc0_entryhi = (read_gc0_entryhi() & MIPS_ENTRYHI_ASID);
+			if(args[4] == 0x5003)
+				address |= gc0_entryhi;
 
 			//Enable diag.MID for guest
 			tmp_diag = read_c0_diag();
@@ -188,20 +247,16 @@ static int kvm_mips_hcall_tlb(struct kvm_vcpu *vcpu, unsigned long num,
 
 			while(address < args[1]) {
 
-				if(args[4] == 0x5003)
-					write_c0_entryhi(address | gc0_entryhi);
-				else if (args[4] == 0x5004)
-					write_c0_entryhi(address);
-
+				write_c0_entryhi(address);
 				mtc0_tlbw_hazard();
-				address += PAGE_SIZE;
+				address += (PAGE_SIZE << 1);
 				tlb_probe();
 				tlb_probe_hazard();
 
 				idx = read_c0_index();
 				if (idx >= 0) {
 					/* Make sure all entries differ. */
-					write_c0_entryhi(MIPS_ENTRYHI_EHINV);
+					write_c0_entryhi(KVM_UNIQUE_ENTRYHI(idx));
 					write_c0_entrylo0(0);
 					write_c0_entrylo1(0);
 					mtc0_tlbw_hazard();
@@ -229,7 +284,8 @@ static int kvm_mips_hcall_tlb(struct kvm_vcpu *vcpu, unsigned long num,
 		}
 		local_irq_restore(flags);
 #else
-		flush_tlb_all();
+		local_flush_tlb_all();
+#endif
 		if (args[4] == 0x5003) {
 			if (args[2] > 1024) {
 				memset(vcpu->arch.stlb, 0, STLB_BUF_SIZE * sizeof(soft_tlb));
@@ -276,10 +332,9 @@ static int kvm_mips_hcall_tlb(struct kvm_vcpu *vcpu, unsigned long num,
 				}
 			}
 		}
-#endif
 	} else if (args[4] == 0x5002) {
 		/*flush tlb all */
-		flush_tlb_all();
+		local_flush_tlb_all();
 		memset(vcpu->arch.stlb, 0, STLB_BUF_SIZE * sizeof(soft_tlb));
 		memset(vcpu->arch.asid_we, 0, STLB_ASID_SIZE * sizeof(unsigned long));
 	} else if ((args[4] >> 12) < 5) {
@@ -292,11 +347,7 @@ static int kvm_mips_hcall_tlb(struct kvm_vcpu *vcpu, unsigned long num,
 
 		unsigned long cksseg_gva;
 		int offset, cksseg_odd = 0;
-		unsigned long tmp_entryhi, tmp_entrylo0, tmp_entrylo1;
-		unsigned long page_mask;
-		unsigned int tmp_diag;
-		unsigned long flags;
-		int tmp_index,idx;
+		struct kvm_mips_tlb tlb;
 
 		/* Now the prot bits scatter as this
 		CCA D V G RI XI SP PROT S H M A W P
@@ -334,12 +385,13 @@ static int kvm_mips_hcall_tlb(struct kvm_vcpu *vcpu, unsigned long num,
 
 		/*update software tlb
 		*/
-		vcpu->arch.guest_tlb[1].tlb_hi = (args[0] & 0xc000ffffffffe000);
+		tlb.tlb_hi = (args[0] & 0xc000ffffffffe000) & (PAGE_MASK << 1);
+		tlb.tlb_hi = tlb.tlb_hi | (read_gc0_entryhi() & MIPS_ENTRYHI_ASID);
 		/* only normal pagesize is supported now */
-		vcpu->arch.guest_tlb[1].tlb_mask = 0x7800; //normal pagesize 16KB
-
-		vcpu->arch.guest_tlb[1].tlb_lo[0] = pte_to_entrylo(pte_val(pte_gpa));
-		vcpu->arch.guest_tlb[1].tlb_lo[1] = pte_to_entrylo(pte_val(pte_gpa1));
+		tlb.tlb_mask = 0x7800; //normal pagesize 16KB
+		tlb.tlb_lo[0] = pte_to_entrylo(pte_val(pte_gpa));
+		tlb.tlb_lo[1] = pte_to_entrylo(pte_val(pte_gpa1));
+		kvm_mips_tlbw(&tlb);
 
 		if ((args[0] & 0xf000000000000000) == XKUSEG) {
 			/* user space use soft TLB*/
@@ -363,62 +415,13 @@ static int kvm_mips_hcall_tlb(struct kvm_vcpu *vcpu, unsigned long num,
                         }
 
 			ptlb = &vcpu->arch.stlb[s_index + min_set];
-			ptlb->vatag = ((0xffffffff) & (args[0] >> 30));
-			ptlb->lo0 = ((0xffffffff) & (vcpu->arch.guest_tlb[1].tlb_lo[0]));
-			ptlb->lo1 = ((0xffffffff) & (vcpu->arch.guest_tlb[1].tlb_lo[1]));
-			ptlb->rx0 = (vcpu->arch.guest_tlb[1].tlb_lo[0]) >> 56;
-			ptlb->rx1 = (vcpu->arch.guest_tlb[1].tlb_lo[1]) >> 56;
+			ptlb->vatag = 0xffffffff & (args[0] >> 30);
+			ptlb->lo0 = 0xffffffff & tlb.tlb_lo[0];
+			ptlb->lo1 = 0xffffffff & tlb.tlb_lo[1];
+			ptlb->rx0 = tlb.tlb_lo[0] >> 56;
+			ptlb->rx1 = tlb.tlb_lo[1] >> 56;
 			ptlb->asid = s_asid;
 		}
-
-		local_irq_save(flags);
-		//Save tmp registers
-		tmp_entryhi  = read_c0_entryhi();
-		tmp_entrylo0 = read_c0_entrylo0();
-		tmp_entrylo1 = read_c0_entrylo1();
-		page_mask = read_c0_pagemask();
-		tmp_index = read_c0_index();
-
-		//Enable diag.MID for guest
-		tmp_diag = read_c0_diag();
-		tmp_diag |= (1<<18);
-		write_c0_diag(tmp_diag);
-
-		write_c0_entryhi(vcpu->arch.guest_tlb[1].tlb_hi | (read_gc0_entryhi() & MIPS_ENTRYHI_ASID));
-		mtc0_tlbw_hazard();
-
-		write_c0_pagemask(vcpu->arch.guest_tlb[1].tlb_mask);
-		write_c0_entrylo0(vcpu->arch.guest_tlb[1].tlb_lo[0]);
-		write_c0_entrylo1(vcpu->arch.guest_tlb[1].tlb_lo[1]);
-		mtc0_tlbw_hazard();
-		tlb_probe();
-		tlb_probe_hazard();
-
-		idx = read_c0_index();
-		mtc0_tlbw_hazard();
-		if (idx >= 0)
-			tlb_write_indexed();
-		 else
-			tlb_write_random();
-		tlbw_use_hazard();
-		//Disable diag.MID
-		tmp_diag = read_c0_diag();
-		tmp_diag &= ~(3<<18);
-		write_c0_diag(tmp_diag);
-
-		//Restore tmp registers
-		write_c0_entryhi(tmp_entryhi);
-		write_c0_entrylo0(tmp_entrylo0);
-		write_c0_entrylo1(tmp_entrylo1);
-		write_c0_pagemask(page_mask);
-		write_c0_index(tmp_index);
-
-		//flush ITLB/DTLB
-		tmp_diag = read_c0_diag();
-		tmp_diag |= 0xc;
-		write_c0_diag(tmp_diag);
-
-		local_irq_restore(flags);
 
 		/*Save CKSSEG address GVA-->GPA mapping*/
 		if (((args[0] & CKSEG3) == CKSSEG)) {
@@ -439,18 +442,6 @@ static int kvm_mips_hcall_tlb(struct kvm_vcpu *vcpu, unsigned long num,
 			}
 		}
 
-		if ((args[0] & 0xf000000000000000) < XKSSEG)
-			kvm_debug("%lx guest badvaddr %lx entryhi %lx guest pte %lx %lx pte %lx %lx tlb0 %lx tlb1 %lx\n",args[4], args[0],
-					vcpu->arch.guest_tlb[1].tlb_hi, args[2], args[3],
-					pte_val(pte_gpa),pte_val(pte_gpa1),
-					(unsigned long)pte_to_entrylo(pte_val(pte_gpa)),
-					(unsigned long)pte_to_entrylo(pte_val(pte_gpa1)));
-		if((args[4] != 0) && ((args[0] & 0xf000000000000000) < XKSSEG))
-			kvm_debug("%lx guest badvaddr %lx entryhi %lx guest pte %lx %lx pte %lx %lx tlb0 %lx tlb1 %lx\n",args[4], args[0],
-					vcpu->arch.guest_tlb[1].tlb_hi, args[2], args[3],
-					pte_val(pte_gpa),pte_val(pte_gpa1),
-					(unsigned long)pte_to_entrylo(pte_val(pte_gpa)),
-					(unsigned long)pte_to_entrylo(pte_val(pte_gpa1)));
 	} else {
 		/* Report unimplemented hypercall to guest */
 		*hret = -KVM_ENOSYS;
