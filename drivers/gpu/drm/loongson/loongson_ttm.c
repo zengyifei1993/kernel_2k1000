@@ -149,9 +149,14 @@ loongson_bo_init_mem_type(struct ttm_bo_device *bdev, uint32_t type,
 		man->func = &ttm_bo_manager_func;
 		man->flags = TTM_MEMTYPE_FLAG_FIXED |
 			TTM_MEMTYPE_FLAG_MAPPABLE;
+#ifdef CONFIG_DRM_LOONGSON_VGA_PLATFORM
+		man->available_caching = TTM_PL_MASK_CACHING;
+		man->default_caching = TTM_PL_FLAG_CACHED;
+#else
 		man->available_caching = TTM_PL_FLAG_UNCACHED |
 			TTM_PL_FLAG_WC;
 		man->default_caching = TTM_PL_FLAG_WC;
+#endif
 		break;
 	default:
 		DRM_ERROR("Unsupported memory type %u\n", (unsigned)type);
@@ -237,6 +242,9 @@ static int loongson_ttm_io_mem_reserve(struct ttm_bo_device *bdev,
 	struct ttm_mem_type_manager *man = &bdev->man[mem->mem_type];
 	struct loongson_drm_device *ldev = loongson_bdev(bdev);
 
+#ifdef CONFIG_DRM_LOONGSON_VGA_PLATFORM
+        struct resource *r;
+#endif
 	mem->bus.addr = NULL;
 	mem->bus.offset = 0;
 	mem->bus.size = mem->num_pages << PAGE_SHIFT;
@@ -250,7 +258,12 @@ static int loongson_ttm_io_mem_reserve(struct ttm_bo_device *bdev,
 		return 0;
 	case TTM_PL_VRAM:
 		mem->bus.offset = mem->start << PAGE_SHIFT;
+#ifdef CONFIG_DRM_LOONGSON_VGA_PLATFORM
+  		r = platform_get_resource(ldev->dev->platformdev, IORESOURCE_MEM, 1);
+                mem->bus.base = r->start;
+#else
 		mem->bus.base = pci_resource_start(ldev->vram_pdev, 2);
+#endif
 		mem->bus.is_iomem = true;
 		break;
 	default:
@@ -444,8 +457,13 @@ void loongson_ttm_placement(struct loongson_bo *bo, int domain)
 
 	bo->placement.placement = bo->placements;
 	bo->placement.busy_placement = bo->placements;
+#ifdef CONFIG_DRM_LOONGSON_VGA_PLATFORM
+	if (domain & TTM_PL_FLAG_VRAM)
+		bo->placements[c++].flags = TTM_PL_MASK_CACHING | TTM_PL_FLAG_VRAM;
+#else
 	if (domain & TTM_PL_FLAG_VRAM)
 		bo->placements[c++].flags = TTM_PL_FLAG_WC | TTM_PL_FLAG_UNCACHED | TTM_PL_FLAG_VRAM;
+#endif
 	if (domain & TTM_PL_FLAG_SYSTEM)
 		bo->placements[c++].flags = TTM_PL_MASK_CACHING | TTM_PL_FLAG_SYSTEM;
 	if (!c)
@@ -602,7 +620,7 @@ int loongson_bo_push_sysram(struct loongson_bo *bo)
 		bo->placements[i].flags |= TTM_PL_FLAG_NO_EVICT;
 
 	/** Changes placement and caching policy of the buffer object
-      * according proposed placement. */
+      	 * according proposed placement. */
 	ret = ttm_bo_validate(&bo->bo, &bo->placement, false, false);
 	if (ret) {
 		DRM_ERROR("pushing to VRAM failed\n");

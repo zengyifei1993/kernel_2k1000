@@ -16,8 +16,11 @@
 
 #include <linux/i2c.h>
 #include <linux/i2c-algo-bit.h>
+#ifdef CONFIG_CPU_LOONGSON2K
+#include "ls2k.h"
+#else
 #include <loongson-pch.h>
-
+#endif
 
 #include <linux/module.h>
 #include <linux/types.h>
@@ -45,20 +48,37 @@
 
 #define RREG8(reg) ioread8(((void __iomem *)ldev->rmmio) + (reg))
 #define WREG8(reg, v) iowrite8(v, ((void __iomem *)ldev->rmmio) + (reg))
+#ifdef CONFIG_CPU_LOONGSON2K
+#define RREG32(reg) ls2k_readl((void __iomem *)(ldev->rmmio) + (reg))
+#define WREG32(reg, v) ls2k_writel(v, (void __iomem *)(ldev->rmmio) + (reg))
+#else
 #define RREG32(reg) ls7a_readl((void __iomem *)(ldev->rmmio) + (reg))
 #define WREG32(reg, v) ls7a_writel(v, (void __iomem *)(ldev->rmmio) + (reg))
-
+#endif
+#ifdef CONFIG_CPU_LOONGSON2K
+#define PD_DC_PLL					19
+#define LS_PIX0_PLL					LS2K_PIX0_PLL
+#define LS_PIX1_PLL					LS2K_PIX1_PLL
+#else
 #define HT1LO_PCICFG_BASE			0x1a000000
 #define LS7A_PCH_CFG_SPACE_REG		(TO_UNCAC(HT1LO_PCICFG_BASE)|0x0000a810)
 #define LS7A_PCH_CFG_REG_BASE		((*(volatile unsigned int *)(LS7A_PCH_CFG_SPACE_REG))&0xfffffff0)
 
 #define LS_PIX0_PLL				(LS7A_PCH_CFG_REG_BASE + 0x04b0)
 #define LS_PIX1_PLL				(LS7A_PCH_CFG_REG_BASE + 0x04c0)
+#endif
 
+#ifdef CONFIG_CPU_LOONGSON2K
+#define ls_readl					ls2k_readl
+#define ls_readq					ls2k_readq
+#define ls_writel					ls2k_writel
+#define ls_writeq					ls2k_writeq
+#else
 #define ls_readl					ls7a_readl
 #define ls_readq					ls7a_readq
 #define ls_writel					ls7a_writel
 #define ls_writeq					ls7a_writeq
+#endif
 
 #define CURIOSET_CORLOR		0x4607
 #define CURIOSET_POSITION	0x4608
@@ -195,7 +215,11 @@ struct loongson_drm_device {
 	struct loongson_cursor cursor;
 
 
+#ifdef CONFIG_DRM_LOONGSON_VGA_PLATFORM
+	struct platform_device *vram_pdev;		/**< PCI device structure */
+#else
 	struct pci_dev *vram_pdev;		/**< PCI device structure */
+#endif
 
 	bool				suspended;
 	int				num_crtc;

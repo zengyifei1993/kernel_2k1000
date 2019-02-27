@@ -61,7 +61,7 @@
 		dc@0x400c0000 {
 			compatible = "loongson,ls-fb";
 			reg = <0x400c0000 0xffff
-				   0x0d000000 0x2000000>;
+				0x20000000 0x8000000>;
 			interrupt-parent = <&icu>;
 			interrupts = <36>;
 		};
@@ -70,7 +70,7 @@
 		gpu@0x40080000 {
 			compatible = "loongson,galcore";
 			reg = <0x40080000 0x3ffff
-				0x20000000 0x1f000000>;
+				0x2a000000 0x15000000>;
 			interrupt-parent = <&icu>;
 			interrupts = <37>;
 		};
