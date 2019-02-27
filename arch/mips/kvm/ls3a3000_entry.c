@@ -763,19 +763,19 @@ void *kvm_mips_ls3a3000_build_tlb_refill_target(void *addr, void *handler)
 	/* Is badvaddr userspace or kernel mapped */
 	UASM_i_MFC0(&p, K0, C0_BADVADDR);
 
-	uasm_i_lui(&p, A0, 0xc000);
+	UASM_i_LA(&p, A0, (unsigned long)0xffffffffc0000000);
 	uasm_i_sltu(&p, A0, K0, A0);
 	/* A0 == 0 means (badvaddr >= 0xffffffffc0000000) */
 	uasm_il_beqz(&p, &r, A0, label_mapped);
 	uasm_i_nop(&p);
 
-	uasm_i_lui(&p, A0, 0x8000);
+	UASM_i_LA(&p, A0, (unsigned long)0xffffffff80000000);
 	uasm_i_sltu(&p, A0, K0, A0);
 	/* A0 == 0 means (badvaddr >= 0xffffffff80000000) */
 	uasm_il_beqz(&p, &r, A0, label_not_mapped);
 	uasm_i_nop(&p);
 
-	UASM_i_ADDIU(&p, A1, ZERO, 0xc000);
+	uasm_i_ori(&p, A1, ZERO, 0xc000);
 	uasm_i_dsll32(&p, A1, A1, 16);
 	uasm_i_sltu(&p, A1, K0, A1);
 	uasm_i_xori(&p, A1, A1, 1);
@@ -921,7 +921,7 @@ void *kvm_mips_ls3a3000_build_tlb_refill_target(void *addr, void *handler)
 
 	UASM_i_MFC0(&p, K0, C0_BADVADDR);
 
-	uasm_i_lui(&p, A0, 0x8000);
+	UASM_i_LA(&p, A0, (unsigned long)0xffffffff80000000);
 	uasm_i_sltu(&p, A0, K0, A0);
 	/* A0 == 0 means (badvaddr >= 0xffffffff80000000) */
 	uasm_il_beqz(&p, &r, A0, label_get_gpa);
@@ -1252,18 +1252,18 @@ void *kvm_mips_ls3a3000_build_tlb_general_exception(void *addr, void *handler)
 //	UASM_i_MFC0(&p, T1, C0_BADVADDR);
 	UASM_i_LW(&p, T1, offsetof(struct kvm_vcpu_arch, host_cp0_badvaddr), K1);
 
-	uasm_i_lui(&p, T0, 0xc000);
+	UASM_i_LA(&p, T0, (unsigned long)0xffffffffc0000000);
 	uasm_i_sltu(&p, T0, T1, T0);
 	/* T0 == 0 means (badvaddr >= 0xffffffffc0000000) */
 	uasm_il_beqz(&p, &r, T0, label_ignore_tlb_general);
 	uasm_i_nop(&p);
 
-	UASM_i_ADDIU(&p, T0, ZERO, 0xf000);
+	uasm_i_ori(&p, T0, ZERO, 0xf000);
 	uasm_i_dsll32(&p, T0, T0, 16);
 	uasm_i_and(&p, T2, T1, T0);
 
 	//Check for XKSEG address
-	UASM_i_ADDIU(&p, T0, ZERO, 0xc000);
+	uasm_i_ori(&p, T0, ZERO, 0xc000);
 	uasm_i_dsll32(&p, T0, T0, 16);
 
 	uasm_il_beq(&p, &r, T2, T0, label_ignore_tlb_general);
