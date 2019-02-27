@@ -29,6 +29,7 @@ static int __init topology_init(void)
 	return 0;
 }
 
+#ifdef CONFIG_HOTPLUG_CPU
 void setup_cpu_topology(int cpu)
 {
 	int ret;
@@ -46,5 +47,5 @@ void clear_cpu_topology(int cpu)
 	c->hotpluggable = 0;
 	unregister_cpu(c);
 }
-
+#endif
 subsys_initcall(topology_init);
