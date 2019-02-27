@@ -99,7 +99,7 @@ module_param(fastClear, int, 0644);
 static int compression = -1;
 module_param(compression, int, 0644);
 
-static int powerManagement = 0;
+static int powerManagement = 1;
 module_param(powerManagement, int, 0644);
 
 static int signal = 48;
@@ -1195,12 +1195,10 @@ int loongson_gpu_suspend(struct platform_device *dev, pm_message_t state)
         }
     }
 
-    if (vram_type == VRAM_TYPE_SP) {
-        shadow_vram = vmalloc(all_reserved_size);
-        if (shadow_vram) {
-            real_vram = GPU_DEV->dma_mem->virt_base;
-            memcpy_fromio(shadow_vram, real_vram, all_reserved_size);
-        }
+    shadow_vram = vmalloc(all_reserved_size);
+    if (shadow_vram) {
+        real_vram = TO_CAC(bus_addr);
+        memcpy_fromio(shadow_vram, real_vram, all_reserved_size);
     }
 
     return 0;
@@ -1215,12 +1213,10 @@ int loongson_gpu_resume(struct platform_device *dev)
 
     device = platform_get_drvdata(dev);
 
-    if (vram_type == VRAM_TYPE_SP) {
-        if (shadow_vram) {
-            real_vram = GPU_DEV->dma_mem->virt_base;
-            memcpy_toio(real_vram, shadow_vram, all_reserved_size);
-            vfree(shadow_vram);
-        }
+    if (shadow_vram) {
+        real_vram = TO_CAC(bus_addr);
+        memcpy_toio(real_vram, shadow_vram, all_reserved_size);
+        vfree(shadow_vram);
     }
 
     for (i = 0; i < gcdMAX_GPU_COUNT; i++)
