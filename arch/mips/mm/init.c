@@ -44,8 +44,9 @@
 #include <asm/pgalloc.h>
 #include <asm/tlb.h>
 #include <asm/fixmap.h>
+#ifndef CONFIG_CPU_LOONGSON2K
 #include <asm/mmzone.h>
-
+#endif
 /* Atomicity and interruptability */
 #ifdef CONFIG_MIPS_MT_SMTC
 
