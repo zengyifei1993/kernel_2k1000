@@ -178,6 +178,10 @@ void __init check_wait(void)
 			cpu_wait = r4k_wait;
 		break;
 
+	case CPU_LOONGSON3_COMP:
+		cpu_wait = r4k_wait;
+		break;
+
 	case CPU_RM7000:
 		cpu_wait = rm7k_wait_irqoff;
 		break;

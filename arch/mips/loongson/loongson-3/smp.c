@@ -680,21 +680,29 @@ void play_dead(void)
 	void (*play_dead_at_ckseg1)(int *);
 
 	idle_task_exit();
-	switch (read_c0_prid() & 0xf) {
-	case PRID_REV_LOONGSON3A_R1:
-	default:
-		play_dead_at_ckseg1 = (void *)CKSEG1ADDR((unsigned long)loongson3a_r1_play_dead);
+	switch (current_cpu_type()) {
+	case CPU_LOONGSON3:
+		switch (read_c0_prid() & 0xf) {
+		case PRID_REV_LOONGSON3A_R1:
+		default:
+			play_dead_at_ckseg1 = (void *)CKSEG1ADDR((unsigned long)loongson3a_r1_play_dead);
+			break;
+		case PRID_REV_LOONGSON3A_R2:
+		case PRID_REV_LOONGSON3A_R3_0:
+		case PRID_REV_LOONGSON3A_R3_1:
+			play_dead_at_ckseg1 = (void *)CKSEG1ADDR((unsigned long)loongson3a_r2r3_play_dead);
 		break;
-	case PRID_REV_LOONGSON3A_R2:
-	case PRID_REV_LOONGSON3A_R3_0:
-	case PRID_REV_LOONGSON3A_R3_1:
+		case PRID_REV_LOONGSON3B_R1:
+		case PRID_REV_LOONGSON3B_R2:
+			play_dead_at_ckseg1 = (void *)CKSEG1ADDR((unsigned long)loongson3b_play_dead);
+			break;
+	}
+	case CPU_LOONGSON3_COMP:
+	default:
 		play_dead_at_ckseg1 = (void *)CKSEG1ADDR((unsigned long)loongson3a_r2r3_play_dead);
 		break;
-	case PRID_REV_LOONGSON3B_R1:
-	case PRID_REV_LOONGSON3B_R2:
-		play_dead_at_ckseg1 = (void *)CKSEG1ADDR((unsigned long)loongson3b_play_dead);
-		break;
 	}
+
 	state_addr = &per_cpu(cpu_state, cpu);
 	mb();
 	play_dead_at_ckseg1(state_addr);

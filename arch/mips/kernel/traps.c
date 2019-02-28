@@ -2105,7 +2105,8 @@ void __init trap_init(void)
 	else {
 		if (cpu_has_vtag_icache)
 			set_except_vector(10, handle_ri_rdhwr_tlbp);
-		else if (current_cpu_type() == CPU_LOONGSON3)
+		else if (current_cpu_type() == CPU_LOONGSON3 ||
+			 current_cpu_type() == CPU_LOONGSON3_COMP)
 #ifdef CONFIG_KVM_GUEST_LS3A3000
 			set_except_vector(EXCCODE_RI, handle_ri);
 #else

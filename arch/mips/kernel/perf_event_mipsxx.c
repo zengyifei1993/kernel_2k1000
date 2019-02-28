@@ -185,8 +185,12 @@ static int mipsxx_pmu_handle_shared_irq(void);
 
 static inline bool cpu_is_new_loongson3(void)
 {
-	return ((boot_cpu_type() == CPU_LOONGSON3) &&
-			((boot_cpu_data.processor_id & PRID_REV_MASK) >= PRID_REV_LOONGSON3A_R2));
+	if (boot_cpu_type() == CPU_LOONGSON3)
+		return  ((boot_cpu_data.processor_id & PRID_REV_MASK) >= PRID_REV_LOONGSON3A_R2);
+	else if (boot_cpu_type() == CPU_LOONGSON3_COMP)
+		return 1;
+	else 
+		return 0;
 }
 
 static unsigned int mipsxx_pmu_swizzle_perf_idx(unsigned int idx)
@@ -1809,6 +1813,7 @@ static const struct mips_perf_event *mipsxx_pmu_map_raw_event(u64 config)
 				raw_id > 127 ? CNTR_ODD : CNTR_EVEN;
 		break;
 	case CPU_LOONGSON3:
+	case CPU_LOONGSON3_COMP:
 		raw_event.cntr_mask = raw_id > 127 ? CNTR_ODD : CNTR_EVEN;
 	break;
 	}
@@ -1948,6 +1953,7 @@ init_hw_perf_events(void)
 		mipspmu.cache_event_map = &mipsxxcore_cache_map;
 		break;
 	case CPU_LOONGSON3:
+	case CPU_LOONGSON3_COMP:
 		mipspmu.name = "mips/loongson3";
 		if (!cpu_is_new_loongson3()) {
 			counters = 2;
