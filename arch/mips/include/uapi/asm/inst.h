@@ -655,32 +655,32 @@ struct r_format {			/* Register format */
 };
 
 struct c0r_format {			/* C0 register format */
-	BITFIELD_FIELD(unsigned int opcode : 6,
-	BITFIELD_FIELD(unsigned int rs : 5,
-	BITFIELD_FIELD(unsigned int rt : 5,
-	BITFIELD_FIELD(unsigned int rd : 5,
-	BITFIELD_FIELD(unsigned int z: 8,
-	BITFIELD_FIELD(unsigned int sel : 3,
+	__BITFIELD_FIELD(unsigned int opcode : 6,
+	__BITFIELD_FIELD(unsigned int rs : 5,
+	__BITFIELD_FIELD(unsigned int rt : 5,
+	__BITFIELD_FIELD(unsigned int rd : 5,
+	__BITFIELD_FIELD(unsigned int z: 8,
+	__BITFIELD_FIELD(unsigned int sel : 3,
 	;))))))
 };
 
 struct mfmc0_format {			/* MFMC0 register format */
-	BITFIELD_FIELD(unsigned int opcode : 6,
-	BITFIELD_FIELD(unsigned int rs : 5,
-	BITFIELD_FIELD(unsigned int rt : 5,
-	BITFIELD_FIELD(unsigned int rd : 5,
-	BITFIELD_FIELD(unsigned int re : 5,
-	BITFIELD_FIELD(unsigned int sc : 1,
-	BITFIELD_FIELD(unsigned int : 2,
-	BITFIELD_FIELD(unsigned int sel : 3,
+	__BITFIELD_FIELD(unsigned int opcode : 6,
+	__BITFIELD_FIELD(unsigned int rs : 5,
+	__BITFIELD_FIELD(unsigned int rt : 5,
+	__BITFIELD_FIELD(unsigned int rd : 5,
+	__BITFIELD_FIELD(unsigned int re : 5,
+	__BITFIELD_FIELD(unsigned int sc : 1,
+	__BITFIELD_FIELD(unsigned int : 2,
+	__BITFIELD_FIELD(unsigned int sel : 3,
 	;))))))))
 };
 
 struct co_format {			/* C0 CO format */
-	BITFIELD_FIELD(unsigned int opcode : 6,
-	BITFIELD_FIELD(unsigned int co : 1,
-	BITFIELD_FIELD(unsigned int code : 19,
-	BITFIELD_FIELD(unsigned int func : 6,
+	__BITFIELD_FIELD(unsigned int opcode : 6,
+	__BITFIELD_FIELD(unsigned int co : 1,
+	__BITFIELD_FIELD(unsigned int code : 19,
+	__BITFIELD_FIELD(unsigned int func : 6,
 	;))))
 };
 
@@ -755,11 +755,11 @@ struct msa_mi10_format {		/* MSA MI10 */
 };
 
 struct spec3_format {   /* SPEC3 */
-	BITFIELD_FIELD(unsigned int opcode:6,
-	BITFIELD_FIELD(unsigned int rs:5,
-	BITFIELD_FIELD(unsigned int rt:5,
-	BITFIELD_FIELD(signed int simmediate:9,
-	BITFIELD_FIELD(unsigned int func:7,
+	__BITFIELD_FIELD(unsigned int opcode:6,
+	__BITFIELD_FIELD(unsigned int rs:5,
+	__BITFIELD_FIELD(unsigned int rt:5,
+	__BITFIELD_FIELD(signed int simmediate:9,
+	__BITFIELD_FIELD(unsigned int func:7,
 	;)))))
 };
 
