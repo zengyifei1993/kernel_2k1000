@@ -273,6 +273,7 @@ static int kvm_trap_vz_handle_tlb_ld_miss(struct kvm_vcpu *vcpu)
 		ret = RESUME_HOST;
 	}
 
+	vcpu->arch.host_cp0_badvaddr = badvaddr;
 	return ret;
 }
 
@@ -321,6 +322,7 @@ static int kvm_trap_vz_handle_tlb_st_miss(struct kvm_vcpu *vcpu)
 		ret = RESUME_HOST;
 	}
 
+	vcpu->arch.host_cp0_badvaddr = badvaddr;
 	return ret;
 }
 
@@ -1122,12 +1124,6 @@ static void kvm_vz_flush_shadow_memslot(struct kvm *kvm,
 static gpa_t kvm_vz_gva_to_gpa_cb(gva_t gva)
 {
 	/* VZ guest has already converted gva to gpa */
-	if((gva & CKSSEG) == CKSEG0)
-		return CPHYSADDR(gva);
-	else if((gva & XKSEG) == XKPHYS)
-		gva = XPHYSADDR(gva);
-	else
-		gva = KVM_INVALID_ADDR;
 	return gva;
 }
 
@@ -2699,8 +2695,6 @@ int handle_ignore_tlb_general_exception(struct kvm_run *run, struct kvm_vcpu *vc
 	int guest_exc = 0;
 	u32 gsexccode = (vcpu->arch.host_cp0_gscause >> CAUSEB_EXCCODE) & 0x1f;
 	int ret = RESUME_GUEST;
-	u32 start_count,end_count,compare;
-	vcpu->mode = OUTSIDE_GUEST_MODE;
 
 	if ((kvm_read_c0_guest_status(cop0) & ST0_EXL) == 0) {
 		/* save old pc */
@@ -2724,20 +2718,16 @@ int handle_ignore_tlb_general_exception(struct kvm_run *run, struct kvm_vcpu *vc
 	else if(gsexccode == 4)
 		guest_exc = EXCCODE_MOD;
 
-	start_count = read_gc0_count();
 	kvm_change_c0_guest_cause(cop0, (0xff),
 				  (guest_exc << CAUSEB_EXCCODE));
-	end_count = read_gc0_count();
-	compare = read_gc0_compare();
-	if ((end_count - start_count) > (compare - start_count - 1)) {
-		set_gc0_cause(CAUSEF_TI);
-	}
 
 	/* setup badvaddr, context and entryhi registers for the guest */
 	kvm_write_c0_guest_badvaddr(cop0, vcpu->arch.host_cp0_badvaddr);
+	#if 0
 	set_c0_status(ST0_CU1 | ST0_FR);
 	__kvm_restore_fcsr(&vcpu->arch);
 	clear_c0_status(ST0_CU1 | ST0_FR);
+	#endif
 
 	return ret;
 }
@@ -3119,9 +3109,11 @@ int kvm_mips_handle_ls3a3000_vz_root_tlb_fault(unsigned long badvaddr,
 	int ret;
 	unsigned long gpa;
 	pte_t pte_gpa[2];
-	int idx;
+	int idx, index;
 	struct kvm_mips_tlb tlb;
 
+	ret = RESUME_GUEST;
+	gpa = KVM_INVALID_ADDR;
 	/*the badvaddr we get maybe guest unmmaped or mmapped address,
 	  but not a GPA */
 
@@ -3137,28 +3129,51 @@ int kvm_mips_handle_ls3a3000_vz_root_tlb_fault(unsigned long badvaddr,
 
 		if (kvm_is_visible_gfn(vcpu->kvm, gpa >> PAGE_SHIFT) == 0) {
 			ret = RESUME_HOST;
-			return ret;
+		} else {
+
+			idx = (badvaddr >> PAGE_SHIFT) & 1;
+			ret = kvm_lsvz_map_page(vcpu, gpa, write_fault, 0, &pte_gpa[idx], &pte_gpa[!idx]);
+			if (ret == RESUME_GUEST) {
+				pte_gpa[!idx].pte |= _PAGE_GLOBAL;
+				tlb.tlb_hi = (badvaddr & 0xc000ffffffffe000) & (PAGE_MASK << 1);
+				tlb.tlb_mask = 0x7800;
+				tlb.tlb_lo[0] = pte_to_entrylo(pte_val(pte_gpa[0]));
+				tlb.tlb_lo[1] = pte_to_entrylo(pte_val(pte_gpa[1]));
+				kvm_mips_tlbw(&tlb);
+			}
+		}
+	} else if ((badvaddr & CKSSEG) == CKSSEG) {
+		/* mapped kernel space address
+		 * return to guest and let guest fill guest tlb
+		 */
+		handle_ignore_tlb_general_exception(vcpu->run, vcpu);
+	} else if ((badvaddr & XKSEG) == XKUSEG) {
+		/* mappped user space address */
+		tlb.tlb_hi = (badvaddr & 0xc000ffffffffe000) & (PAGE_MASK << 1);
+		tlb.tlb_hi |=  read_gc0_entryhi() & MIPS_ENTRYHI_ASID;
+		index = kvm_mips_guesttlb_lookup(vcpu, tlb.tlb_hi);
+		if (index >= 0) {
+			idx = (badvaddr >> PAGE_SHIFT) & 1;
+			gpa = vcpu->arch.guest_tlb[index].tlb_lo[idx];
+			if (gpa & ENTRYLO_V) {
+				gpa = ((gpa & 0x3ffffffffff) >> 6) << 12;
+				gpa |= badvaddr & ~PAGE_MASK;
+				if (kvm_is_visible_gfn(vcpu->kvm, gpa >> PAGE_SHIFT) == 0)
+					ret = RESUME_HOST;
+			}
 		}
 
-		idx = (badvaddr >> PAGE_SHIFT) & 1;
-		ret = kvm_lsvz_map_page(vcpu, gpa, write_fault, 0, &pte_gpa[idx], &pte_gpa[!idx]);
-		if (ret)
-			return ret;
-
-		pte_gpa[!idx].pte |= _PAGE_GLOBAL;
-
-		tlb.tlb_hi = (badvaddr & 0xc000ffffffffe000) & (PAGE_MASK << 1);
-		tlb.tlb_mask = 0x7800;
-		tlb.tlb_lo[0] = pte_to_entrylo(pte_val(pte_gpa[0]));
-		tlb.tlb_lo[1] = pte_to_entrylo(pte_val(pte_gpa[1]));
-		kvm_mips_tlbw(&tlb);
-		return RESUME_GUEST;
+		if (ret == RESUME_GUEST)
+			handle_ignore_tlb_general_exception(vcpu->run, vcpu);
 	} else {
 		printk("unhandled guest addr %lx\n", badvaddr);
-		return RESUME_HOST;
+		ret = RESUME_HOST;
 	}
 
-	return RESUME_GUEST;
+	if (ret != RESUME_GUEST)
+		vcpu->arch.host_cp0_badvaddr = gpa;
+		
+	return ret;
 }
 
 int kvm_ls3a3000_get_inst(u32 *opc, struct kvm_vcpu *vcpu, u32 *out)
@@ -3177,14 +3192,23 @@ int kvm_ls3a3000_get_inst(u32 *opc, struct kvm_vcpu *vcpu, u32 *out)
 	//1. get the pte of the instruction
 	if(((unsigned long) opc & XKSEG) == XKPHYS)
 		gpa = XKPHYS_TO_PHYS((unsigned long)opc);
-	else if((((unsigned long) opc & CKSEG3) == CKSEG0) ||
-		(((unsigned long) opc & CKSEG3) == CKSEG1))
+	else if (((unsigned long) opc & CKSSEG) == CKSEG0)
 		gpa = CPHYSADDR((unsigned long)opc);
 	else if(((unsigned long) opc & CKSEG3) == CKSSEG) {
 		//Should use the saved CKSSEG GVA-->GPA map to find the GPA
 		int offset;
 		offset = ((((unsigned long) opc)- CKSSEG) & 0x3fffffff ) >> 14;
 		gpa = vcpu->kvm->arch.cksseg_map[offset][1];
+	} else if (((unsigned long) opc & XKSEG) == XKUSEG) {
+		/* instruction at user space */
+		err = kvm_mips_gva_to_hpa(vcpu, (unsigned long)opc, &hpa);
+		if (err == 0) {
+			return -EFAULT;
+		} else {
+			*out = *(u32 *)( hpa | CAC_BASE);
+			return 0;
+		}
+
 	} else {
 		gpa = CPHYSADDR((unsigned long)opc);
 		kvm_err("get pc %lx not supported now\n", (ulong)opc);

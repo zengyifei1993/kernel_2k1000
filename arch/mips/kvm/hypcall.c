@@ -11,7 +11,9 @@
 #include <linux/kernel.h>
 #include <linux/kvm_host.h>
 #include <linux/kvm_para.h>
+#include <linux/random.h>
 #include <asm/mmu_context.h>
+
 #include "ls3a3000.h"
 
 #define MAX_HYPCALL_ARGS	8
@@ -101,6 +103,53 @@ void kvm_mips_tlbw(struct kvm_mips_tlb *ptlb)
 	write_c0_diag(tmp_diag);
 
 	local_irq_restore(flags);
+}
+
+int kvm_mips_guesttlb_lookup(struct kvm_vcpu *vcpu, unsigned long entryhi)
+{
+	int i;
+	int index = -1;
+	struct kvm_mips_tlb *tlb = vcpu->arch.guest_tlb;
+
+	for_each_set_bit(i, vcpu->arch.tlbmap, KVM_MIPS_GUEST_TLB_SIZE) {
+		if (TLB_HI_VPN2_HIT(tlb[i], entryhi) &&
+				TLB_HI_ASID_HIT(tlb[i], entryhi)) {
+			index = i;
+			break;
+		}
+	}
+
+	return index;
+}
+
+int kvm_mips_gva_to_hpa(struct kvm_vcpu *vcpu, unsigned long gva, unsigned long  *phpa) {
+	unsigned int s_index, s_asid;
+	soft_tlb *ptlb;
+	int i, idx;
+	unsigned int vatag;
+	unsigned long hpa;
+
+	/* user space use soft TLB*/
+	s_index = ((gva >> 15) & STLB_WAY_MASK) * STLB_SET;
+	s_asid = read_gc0_entryhi() & MIPS_ENTRYHI_ASID;
+	ptlb = &vcpu->arch.stlb[s_index];
+	vatag = (gva >> 30) & 0xffffffff;
+	for (i=0; i<STLB_SET; i++) {
+		if ((ptlb->asid == s_asid) && (ptlb->vatag == vatag)) {
+			/* found it */
+			idx = (gva >> PAGE_SHIFT) & 1;
+			if (idx == 0)
+				hpa = ptlb->lo0;
+			else
+				hpa = ptlb->lo1;
+			hpa = ((hpa >> 6) << 12) | (gva & ~PAGE_MASK);
+			*phpa = hpa;
+			return 1;
+		}
+		ptlb++;
+	}
+
+	return 0;
 }
 
 static int kvm_mips_hcall_tlb(struct kvm_vcpu *vcpu, unsigned long num,
@@ -337,13 +386,16 @@ static int kvm_mips_hcall_tlb(struct kvm_vcpu *vcpu, unsigned long num,
 		local_flush_tlb_all();
 		memset(vcpu->arch.stlb, 0, STLB_BUF_SIZE * sizeof(soft_tlb));
 		memset(vcpu->arch.asid_we, 0, STLB_ASID_SIZE * sizeof(unsigned long));
+
+		memset(vcpu->arch.guest_tlb, 0, sizeof(struct kvm_mips_tlb) * KVM_MIPS_GUEST_TLB_SIZE);
+		memset(vcpu->arch.tlbmap, 0, KVM_MIPS_GUEST_TLB_SIZE/sizeof(unsigned char));
 	} else if ((args[4] >> 12) < 5) {
 		unsigned long prot_bits = 0;
 		unsigned long gpa;
 		int write_fault = 0;
 		pte_t pte_gpa;
 		pte_t pte_gpa1;
-		int ret = 0;
+		int ret = 0, mmio = 0, index;
 
 		unsigned long cksseg_gva;
 		int offset, cksseg_odd = 0;
@@ -366,7 +418,7 @@ static int kvm_mips_hcall_tlb(struct kvm_vcpu *vcpu, unsigned long num,
 				/* NI/RI attribute does not support now */
 				//pte_val(pte_gpa) = (pte_val(pte_gpa) & _PFN_MASK) | ((_PAGE_NO_EXEC | _PAGE_NO_READ) & prot_bits & ~_PFN_MASK);
 			} else
-				kvm_err("gpa %lx not in guest memory area gva %lx hypercall num %lx\n", gpa, args[0], num);
+				mmio = 1;
 		}
 
 		if (args[3] & _PAGE_VALID) {
@@ -380,7 +432,7 @@ static int kvm_mips_hcall_tlb(struct kvm_vcpu *vcpu, unsigned long num,
 				/* NI/RI attribute does not support now */
 				//pte_val(pte_gpa1) = (pte_val(pte_gpa1) & _PFN_MASK) | ((_PAGE_NO_EXEC|_PAGE_NO_READ) & prot_bits & ~_PFN_MASK);
 			} else
-				kvm_err("gpa %lx not in guest memory area gva %lx hypercall num %lx\n", gpa, args[0], num);
+				mmio = 1;
 		}
 
 		/*update software tlb
@@ -394,6 +446,22 @@ static int kvm_mips_hcall_tlb(struct kvm_vcpu *vcpu, unsigned long num,
 		kvm_mips_tlbw(&tlb);
 
 		if ((args[0] & 0xf000000000000000) == XKUSEG) {
+			if (mmio == 1) {
+				index = kvm_mips_guesttlb_lookup(vcpu, tlb.tlb_hi);
+				if (index < 0) {
+					index = find_first_zero_bit(vcpu->arch.tlbmap, KVM_MIPS_GUEST_TLB_SIZE);
+					if (index < 0) {
+						get_random_bytes(&index, sizeof(index));
+						index &= (KVM_MIPS_GUEST_TLB_SIZE - 1);
+					}
+				}
+				vcpu->arch.guest_tlb[index].tlb_hi = tlb.tlb_hi;
+				vcpu->arch.guest_tlb[index].tlb_mask = 0x7800;
+				vcpu->arch.guest_tlb[index].tlb_lo[0] = pte_to_entrylo(args[2]);
+				vcpu->arch.guest_tlb[index].tlb_lo[1] = pte_to_entrylo(args[3]);
+				set_bit(index, vcpu->arch.tlbmap);
+			}
+
 			/* user space use soft TLB*/
 			s_index = ((args[0] >> 15) & STLB_WAY_MASK) * STLB_SET;
 			s_asid = (0xff) & read_gc0_entryhi();
