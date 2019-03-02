@@ -3901,6 +3901,7 @@ void ptlock_free(struct page *page)
 #endif
 
 #ifndef CONFIG_ARCH_HAS_ADD_PAGES
+#ifdef CONFIG_MEMORY_HOTPLUG
 int add_pages(int nid, unsigned long start,
 	      unsigned long size, bool for_device)
 {
@@ -3915,4 +3916,5 @@ int add_pages(int nid, unsigned long start,
 
 	return __add_pages(nid, zone, start >> PAGE_SHIFT, size >> PAGE_SHIFT);
 }
+#endif
 #endif /* ARCH_HAS_ADD_PAGES */

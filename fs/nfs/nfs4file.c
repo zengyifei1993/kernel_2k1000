@@ -293,6 +293,8 @@ const struct file_operations_extend nfs4_file_operations = {
 		.llseek		= nfs_file_llseek,
 #endif
 	},
+#ifdef CONFIG_NFS_V4_2
 	.copy_file_range = nfs4_copy_file_range,
 	.clone_file_range = nfs42_clone_file_range,
+#endif
 };

@@ -8,7 +8,7 @@
 struct proc_dir_entry *proc_efi;
 extern unsigned int has_systab;
 extern unsigned long systab_addr;
-static struct kobject *efi_kobj;
+static struct kobject *ls_efi_kobj;
 unsigned long loongson_efi_facility=0;
 
 /*
@@ -73,8 +73,8 @@ static const struct file_operations proc_systab_operations = {
 int __init efi_init_procfs(void)
 {
 	if (loongson_efi_enabled(EFI_BOOT)){
-	    efi_kobj = kobject_create_and_add("efi", firmware_kobj);
-	    if (!efi_kobj) {
+	    ls_efi_kobj = kobject_create_and_add("efi", firmware_kobj);
+	    if (!ls_efi_kobj) {
 		    pr_err("efi: Firmware registration failed.\n");
 		    return -ENOMEM;
         }

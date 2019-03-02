@@ -277,20 +277,17 @@ static int nfs41_setup_state_renewal(struct nfs_client *clp)
 {
 	int status;
 	struct nfs_fsinfo fsinfo;
+	unsigned long now;
 
 	if (!test_bit(NFS_CS_CHECK_LEASE_TIME, &clp->cl_res_state)) {
 		nfs4_schedule_state_renewal(clp);
 		return 0;
 	}
 
+	now = jiffies;
 	status = nfs4_proc_get_lease_time(clp, &fsinfo);
 	if (status == 0) {
-		/* Update lease time and schedule renewal */
-		spin_lock(&clp->cl_lock);
-		clp->cl_lease_time = fsinfo.lease_time * HZ;
-		clp->cl_last_renewal = jiffies;
-		spin_unlock(&clp->cl_lock);
-
+		nfs4_set_lease_period(clp, fsinfo.lease_time * HZ, now);
 		nfs4_schedule_state_renewal(clp);
 	}
 
@@ -497,21 +494,18 @@ nfs4_alloc_state_owner(struct nfs_server *server,
 }
 
 static void
-nfs4_drop_state_owner(struct nfs4_state_owner *sp)
+nfs4_reset_state_owner(struct nfs4_state_owner *sp)
 {
-	struct rb_node *rb_node = &sp->so_server_node;
-
-	if (!RB_EMPTY_NODE(rb_node)) {
-		struct nfs_server *server = sp->so_server;
-		struct nfs_client *clp = server->nfs_client;
-
-		spin_lock(&clp->cl_lock);
-		if (!RB_EMPTY_NODE(rb_node)) {
-			rb_erase(rb_node, &server->state_owners);
-			RB_CLEAR_NODE(rb_node);
-		}
-		spin_unlock(&clp->cl_lock);
-	}
+	/* This state_owner is no longer usable, but must
+	 * remain in place so that state recovery can find it
+	 * and the opens associated with it.
+	 * It may also be used for new 'open' request to
+	 * return a delegation to the server.
+	 * So update the 'create_time' so that it looks like
+	 * a new state_owner.  This will cause the server to
+	 * request an OPEN_CONFIRM to start a new sequence.
+	 */
+	sp->so_seqid.create_time = ktime_get();
 }
 
 static void nfs4_free_state_owner(struct nfs4_state_owner *sp)
@@ -1099,7 +1093,7 @@ void nfs_increment_open_seqid(int status, struct nfs_seqid *seqid)
 
 	sp = container_of(seqid->sequence, struct nfs4_state_owner, so_seqid);
 	if (status == -NFS4ERR_BAD_SEQID)
-		nfs4_drop_state_owner(sp);
+		nfs4_reset_state_owner(sp);
 	if (!nfs4_has_session(sp->so_server->nfs_client))
 		nfs_increment_seqid(status, seqid);
 }
@@ -1340,6 +1334,35 @@ int nfs4_schedule_stateid_recovery(const struct nfs_server *server, struct nfs4_
 }
 EXPORT_SYMBOL_GPL(nfs4_schedule_stateid_recovery);
 
+static struct nfs4_lock_state *
+nfs_state_find_lock_state_by_stateid(struct nfs4_state *state,
+		const nfs4_stateid *stateid)
+{
+	struct nfs4_lock_state *pos;
+
+	list_for_each_entry(pos, &state->lock_states, ls_locks) {
+		if (!test_bit(NFS_LOCK_INITIALIZED, &pos->ls_flags))
+			continue;
+		if (nfs4_stateid_match_other(&pos->ls_stateid, stateid))
+			return pos;
+	}
+	return NULL;
+}
+
+static bool nfs_state_lock_state_matches_stateid(struct nfs4_state *state,
+		const nfs4_stateid *stateid)
+{
+	bool found = false;
+
+	if (test_bit(LK_STATE_IN_USE, &state->flags)) {
+		spin_lock(&state->state_lock);
+		if (nfs_state_find_lock_state_by_stateid(state, stateid))
+			found = true;
+		spin_unlock(&state->state_lock);
+	}
+	return found;
+}
+
 void nfs_inode_find_state_and_recover(struct inode *inode,
 		const nfs4_stateid *stateid)
 {
@@ -1354,14 +1377,19 @@ void nfs_inode_find_state_and_recover(struct inode *inode,
 		state = ctx->state;
 		if (state == NULL)
 			continue;
-		if (!test_bit(NFS_DELEGATED_STATE, &state->flags))
+		if (nfs4_stateid_match_other(&state->stateid, stateid)) {
+			nfs4_state_mark_reclaim_nograce(clp, state);
+			found = true;
 			continue;
-		if (!nfs4_stateid_match(&state->stateid, stateid))
-			continue;
-		nfs4_state_mark_reclaim_nograce(clp, state);
-		found = true;
+		}
+		if (nfs_state_lock_state_matches_stateid(state, stateid)) {
+			nfs4_state_mark_reclaim_nograce(clp, state);
+			found = true;
+		}
 	}
 	spin_unlock(&inode->i_lock);
+
+	nfs_inode_find_delegation_state_and_recover(inode, stateid);
 	if (found)
 		nfs4_schedule_state_manager(clp);
 }
@@ -1485,6 +1513,8 @@ restart:
 				clear_bit(NFS_STATE_RECLAIM_NOGRACE,
 					&state->flags);
 				nfs4_put_open_state(state);
+				clear_bit(NFS4CLNT_RECLAIM_NOGRACE,
+					&state->flags);
 				spin_lock(&sp->so_lock);
 				goto restart;
 			}
@@ -1503,6 +1533,7 @@ restart:
 				ssleep(1);
 			case -NFS4ERR_ADMIN_REVOKED:
 			case -NFS4ERR_STALE_STATEID:
+			case -NFS4ERR_OLD_STATEID:
 			case -NFS4ERR_BAD_STATEID:
 			case -NFS4ERR_RECLAIM_BAD:
 			case -NFS4ERR_RECLAIM_CONFLICT:
@@ -1653,15 +1684,9 @@ static void nfs4_state_end_reclaim_reboot(struct nfs_client *clp)
 	put_rpccred(cred);
 }
 
-static void nfs_delegation_clear_all(struct nfs_client *clp)
-{
-	nfs_delegation_mark_reclaim(clp);
-	nfs_delegation_reap_unclaimed(clp);
-}
-
 static void nfs4_state_start_reclaim_nograce(struct nfs_client *clp)
 {
-	nfs_delegation_clear_all(clp);
+	nfs_mark_test_expired_all_delegations(clp);
 	nfs4_state_mark_reclaim_helper(clp, nfs4_state_mark_reclaim_nograce);
 }
 
@@ -2192,7 +2217,7 @@ static void nfs41_handle_all_state_revoked(struct nfs_client *clp)
 
 static void nfs41_handle_some_state_revoked(struct nfs_client *clp)
 {
-	nfs4_state_mark_reclaim_helper(clp, nfs4_state_mark_reclaim_nograce);
+	nfs4_state_start_reclaim_nograce(clp);
 	nfs4_schedule_state_manager(clp);
 
 	dprintk("%s: state revoked on server %s\n", __func__, clp->cl_hostname);
@@ -2224,13 +2249,22 @@ static void nfs41_handle_cb_path_down(struct nfs_client *clp)
 		nfs4_schedule_state_manager(clp);
 }
 
-void nfs41_handle_sequence_flag_errors(struct nfs_client *clp, u32 flags)
+void nfs41_handle_sequence_flag_errors(struct nfs_client *clp, u32 flags,
+		bool recovery)
 {
 	if (!flags)
 		return;
 
 	dprintk("%s: \"%s\" (client ID %llx) flags=0x%08x\n",
 		__func__, clp->cl_hostname, clp->cl_clientid, flags);
+	/*
+	 * If we're called from the state manager thread, then assume we're
+	 * already handling the RECLAIM_NEEDED and/or STATE_REVOKED.
+	 * Those flags are expected to remain set until we're done
+	 * recovering (see RFC5661, section 18.46.3).
+	 */
+	if (recovery)
+		goto out_recovery;
 
 	if (flags & SEQ4_STATUS_RESTART_RECLAIM_NEEDED)
 		nfs41_handle_server_reboot(clp);
@@ -2243,6 +2277,7 @@ void nfs41_handle_sequence_flag_errors(struct nfs_client *clp, u32 flags)
 		nfs4_schedule_lease_moved_recovery(clp);
 	if (flags & SEQ4_STATUS_RECALLABLE_STATE_REVOKED)
 		nfs41_handle_recallable_state_revoked(clp);
+out_recovery:
 	if (flags & SEQ4_STATUS_BACKCHANNEL_FAULT)
 		nfs41_handle_backchannel_fault(clp);
 	else if (flags & (SEQ4_STATUS_CB_PATH_DOWN |
@@ -2405,6 +2440,13 @@ static void nfs4_state_manager(struct nfs_client *clp)
 			if (status < 0)
 				goto out_error;
 			nfs4_state_end_reclaim_reboot(clp);
+		}
+
+		/* Detect expired delegations... */
+		if (test_and_clear_bit(NFS4CLNT_DELEGATION_EXPIRED, &clp->cl_state)) {
+			section = "detect expired delegations";
+			nfs_reap_expired_delegations(clp);
+			continue;
 		}
 
 		/* Now recover expired state... */

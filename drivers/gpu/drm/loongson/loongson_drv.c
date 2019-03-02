@@ -119,7 +119,7 @@ loongson_user_framebuffer_create(struct drm_device *dev,
 	struct loongson_framebuffer *loongson_fb;
 	int ret;
 
-	obj = drm_gem_object_lookup(dev, filp, mode_cmd->handles[0]);
+	obj = drm_gem_object_lookup(filp, mode_cmd->handles[0]);
 	if (obj == NULL)
 		return ERR_PTR(-ENOENT);
 
@@ -458,7 +458,7 @@ static int ioctl_get_bo_vram_base(struct drm_device *dev, void *data,
 	int ret;
 	unsigned long gpu_addr;
 
-	obj = drm_gem_object_lookup(dev, file_priv, args->value);
+	obj = drm_gem_object_lookup(file_priv, args->value);
 	if (obj == NULL)
 		return -ENOENT;
 	bo = gem_to_loongson_bo(obj);
@@ -651,7 +651,7 @@ loongson_dumb_mmap_offset(struct drm_file *file,
 	struct drm_gem_object *obj;
 	struct loongson_bo *bo;
 
-	obj = drm_gem_object_lookup(dev, file, handle);
+	obj = drm_gem_object_lookup(file, handle);
 	if (obj == NULL)
 		return -ENOENT;
 

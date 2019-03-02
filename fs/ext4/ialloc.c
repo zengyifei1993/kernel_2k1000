@@ -1126,7 +1126,8 @@ struct inode *ext4_orphan_get(struct super_block *sb, unsigned long ino)
 	 * truncated, otherwise it won't be removed from the orphan list
 	 * during processing and an infinite loop will result.
 	 */
-	if (inode->i_nlink && !ext4_can_truncate(inode))
+	if ((inode->i_nlink && !ext4_can_truncate(inode)) ||
+	    is_bad_inode(inode))
 		goto bad_orphan;
 
 	if (NEXT_ORPHAN(inode) > max_ino)

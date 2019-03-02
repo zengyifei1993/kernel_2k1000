@@ -19,6 +19,7 @@
 #include <asm/mipsregs.h>
 #include <asm/asm-offsets.h>
 #include <asm/regdef.h>
+#include <linux/compiler.h>
 
 /* preprocessor replaces the fp in ".set fp=64" with $30 otherwise */
 #undef fp

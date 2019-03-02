@@ -215,9 +215,9 @@ static int loongson_vga_get_modes(struct drm_connector *connector)
         }
 	ledid_method = ldev->connector_vbios[drm_connector_index(connector)]->edid_method;
 
-	DRM_DEBUG("connecotro_id = %d\n",connector->connector_id);
+	DRM_DEBUG("connecotro_id = %d\n",connector->index);
 	if (ledid_method == edid_method_i2c) {
-                dret = loongson_i2c_connector(connector->connector_id, buf);
+                dret = loongson_i2c_connector(connector->index, buf);
                 if (dret) {
                         edid = (struct edid *)buf;
                         drm_mode_connector_update_edid_property(connector, edid);
@@ -241,7 +241,7 @@ static int loongson_vga_mode_valid(struct drm_connector *connector,
 {
 	struct drm_device *dev = connector->dev;
 	struct loongson_drm_device *ldev = (struct loongson_drm_device*)dev->dev_private;
-	int id = connector->connector_id;
+	int id = connector->index;
 	int bpp = 32;
         if(mode->hdisplay % 64)
 		return MODE_BAD;
@@ -334,9 +334,9 @@ static enum drm_connector_status loongson_vga_detect(struct drm_connector
 	enum drm_connector_status status;
 	status = connector->status;
 
-	ledid_method = ldev->connector_vbios[connector->connector_id]->edid_method;
+	ledid_method = ldev->connector_vbios[connector->index]->edid_method;
 
-	DRM_DEBUG("loongson_vga_detect connect_id=%d, ledid_method=%d\n", connector->connector_id, ledid_method);
+	DRM_DEBUG("loongson_vga_detect connect_id=%d, ledid_method=%d\n", connector->index, ledid_method);
 
 	if (ledid_method == edid_method_i2c) {
 	        r = pm_runtime_get_sync(connector->dev->dev);

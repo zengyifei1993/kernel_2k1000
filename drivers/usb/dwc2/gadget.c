@@ -3805,29 +3805,6 @@ static void dwc2_hsotg_ep_stop_xfr(struct dwc2_hsotg *hsotg,
 	}
 }
 
-
-#define USB_ENDPOINT_MAXP_MASK  0x07ff
-#define USB_EP_MAXP_MULT_SHIFT  11
-#define USB_EP_MAXP_MULT_MASK   (3 << USB_EP_MAXP_MULT_SHIFT)
-#define USB_EP_MAXP_MULT(m) \
-        (((m) & USB_EP_MAXP_MULT_MASK) >> USB_EP_MAXP_MULT_SHIFT)
-
-
-/**
- *  * usb_endpoint_maxp_mult - get endpoint's transactional opportunities
- *   * @epd: endpoint to be checked
- *    *
- *     * Return @epd's wMaxPacketSize[12:11] + 1
- *      */
-static inline int
-usb_endpoint_maxp_mult(const struct usb_endpoint_descriptor *epd)
-{
-        int maxp = __le16_to_cpu(epd->wMaxPacketSize);
-
-        return USB_EP_MAXP_MULT(maxp) + 1;
-}
-
-
 /**
  * dwc2_hsotg_ep_enable - enable the given endpoint
  * @ep: The USB endpint to configure

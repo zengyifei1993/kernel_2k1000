@@ -23,7 +23,7 @@ struct rw_semaphore;
 
 #ifdef CONFIG_RWSEM_GENERIC_SPINLOCK
 #include <linux/rwsem-spinlock.h> /* use a generic implementation */
-#define __RWSEM_INIT_COUNT(name)	.count = RWSEM_UNLOCKED_VALUE
+#define __RWSEM_INIT_COUNT(name)	.activity = RWSEM_UNLOCKED_VALUE
 #else
 
 #ifdef CONFIG_RWSEM_SPIN_ON_OWNER
@@ -100,7 +100,7 @@ static inline int rwsem_is_locked(struct rw_semaphore *sem)
 
 #define __RWSEM_INITIALIZER(name)				\
 	{ __RWSEM_INIT_COUNT(name),				\
-	  .wait_list = SLIST_HEAD_INIT((name).wait_list),	\
+	  .wait_list = LIST_HEAD_INIT((name).wait_list),	\
 	  .wait_lock = __RAW_SPIN_LOCK_UNLOCKED(name.wait_lock)	\
 	  __RWSEM_OPT_INIT(name)				\
 	  __RWSEM_DEP_MAP_INIT(name) }
@@ -126,7 +126,7 @@ do {								\
  */
 static inline int rwsem_is_contended(struct rw_semaphore *sem)
 {
-	return !slist_empty(&sem->wait_list);
+	return !list_empty(&sem->wait_list);
 }
 
 /*
