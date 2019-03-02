@@ -1851,6 +1851,7 @@ enum emulation_result kvm_mips_emulate_store(union mips_instruction inst,
 	default:
 		kvm_err("Store not yet supported (inst=0x%08x)\n",
 			inst.word);
+		kvm_arch_vcpu_dump_regs(vcpu);
 		goto out_fail;
 	}
 
@@ -2066,10 +2067,52 @@ enum emulation_result kvm_mips_emulate_load(union mips_instruction inst,
 		break;
 
 		break;
+#ifdef CONFIG_CPU_LOONGSON3
+	case ldc2_op:
+		rt = inst.loongson3_lsdc2_format.rt;
+		switch (inst.loongson3_lsdc2_format.opcode1) {
+		/*
+		 * Loongson-3 overridden ldc2 instructions.
+		 * opcode1              instruction
+		 *   0x0          gslbx: store 1 bytes from GPR
+		 *   0x1          gslhx: store 2 bytes from GPR
+		 *   0x2          gslwx: store 4 bytes from GPR
+		 *   0x3          gsldx: store 8 bytes from GPR
+		 *   0x6          gslwxc1: store 4 bytes from FPR
+		 *   0x7          gsldxc1: store 8 bytes from FPR
+		 */
+		case 0x0:
+			run->mmio.len = 1;
+			vcpu->mmio_needed = 27;	/* signed */
+
+			break;
+		case 0x1:
+			run->mmio.len = 2;
+			vcpu->mmio_needed = 28;	/* signed */
+
+			break;
+		case 0x2:
+			run->mmio.len = 4;
+			vcpu->mmio_needed = 29;	/* signed */
+
+			break;
+		case 0x3:
+			run->mmio.len = 8;
+			vcpu->mmio_needed = 30;	/* signed */
+
+			break;
+		default:
+			kvm_err("Godson Exteneded GS-Load for float not yet supported (inst=0x%08x)\n",
+				inst.word);
+			break;
+		}
+		break;
+#endif
 
 	default:
 		kvm_err("Load not yet supported (inst=0x%08x)\n",
 			inst.word);
+		kvm_arch_vcpu_dump_regs(vcpu);
 		vcpu->mmio_needed = 0;
 		return EMULATE_FAIL;
 	}
@@ -2954,6 +2997,8 @@ enum emulation_result kvm_mips_complete_mmio_load(struct kvm_vcpu *vcpu,
 			*gpr = (vcpu->arch.gprs[vcpu->arch.io_gpr] & 0xffffffffffff0000) | ((((*(s64*)run->mmio.data)) >> 48) & 0xffff);
 		} else if(vcpu->mmio_needed == 26) {
 			*gpr = (vcpu->arch.gprs[vcpu->arch.io_gpr] & 0xffffffffffffff00) | ((((*(s64*)run->mmio.data)) >> 56)& 0xff);
+		} else if(vcpu->mmio_needed == 30) {
+			*gpr = *(s64 *)run->mmio.data;
 		} else
 			*gpr = *(s64 *)run->mmio.data;
 		break;
@@ -2977,6 +3022,8 @@ enum emulation_result kvm_mips_complete_mmio_load(struct kvm_vcpu *vcpu,
 			*gpr = (vcpu->arch.gprs[vcpu->arch.io_gpr] & 0xffff0000 ) | ((((*(s32*)run->mmio.data)) >> 16) & 0xffff);
 		} else if(vcpu->mmio_needed == 10) {
 			*gpr = (vcpu->arch.gprs[vcpu->arch.io_gpr] & 0xffffff00 ) | ((((*(s32*)run->mmio.data)) >> 24) & 0xff);
+		} else if(vcpu->mmio_needed == 29) {
+			*gpr = *(s32 *)run->mmio.data;
 		} else
 			*gpr = *(u32 *)run->mmio.data;
 		break;
@@ -2984,12 +3031,16 @@ enum emulation_result kvm_mips_complete_mmio_load(struct kvm_vcpu *vcpu,
 	case 2:
 		if (vcpu->mmio_needed == 2)
 			*gpr = *(s16 *) run->mmio.data;
+		else if (vcpu->mmio_needed == 28)
+			*gpr = *(s16 *) run->mmio.data;
 		else
 			*gpr = *(u16 *)run->mmio.data;
 
 		break;
 	case 1:
 		if (vcpu->mmio_needed == 2)
+			*gpr = *(s8 *) run->mmio.data;
+		else if (vcpu->mmio_needed == 27)
 			*gpr = *(s8 *) run->mmio.data;
 		else
 			*gpr = *(u8 *) run->mmio.data;
