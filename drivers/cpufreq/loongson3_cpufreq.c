@@ -111,7 +111,8 @@ static int loongson3_cpufreq_cpu_init(struct cpufreq_policy *policy)
 	policy->cpuinfo.transition_latency = 1000;
 
 	/* Loongson-3A: all cores in a package share one clock */
-	if ((read_c0_prid() & 0xf) == PRID_REV_LOONGSON3A_R1)
+	if ((current_cpu_type() == CPU_LOONGSON3) &&
+		((read_c0_prid() & 0xf) == PRID_REV_LOONGSON3A_R1))
 		cpumask_copy(policy->cpus, topology_core_cpumask(policy->cpu));
 
 	return cpufreq_table_validate_and_show(policy,
@@ -169,7 +170,8 @@ void loongson3_cpu_wait(void)
 	if (shared_cpus > 1)
 		goto out;
 
-	if ((read_c0_prid() & 0xf) == PRID_REV_LOONGSON3A_R1) {
+	if ((current_cpu_type() == CPU_LOONGSON3) &&
+		((read_c0_prid() & 0xf) == PRID_REV_LOONGSON3A_R1)) {
 		cpu_freq = LOONGSON_CHIPCFG(package_id);
 		LOONGSON_CHIPCFG(package_id) &= ~0x7;    /* Put CPU into wait mode */
 		LOONGSON_CHIPCFG(package_id) = cpu_freq; /* Restore CPU state */

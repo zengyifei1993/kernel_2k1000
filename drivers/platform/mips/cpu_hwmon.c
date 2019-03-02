@@ -33,29 +33,35 @@ int loongson_cpu_temp(int cpu)
 	int cputemp;
 	u32 reg, prid_rev;
 
-	reg = LOONGSON_CHIPTEMP(cpu);
-	prid_rev = read_c0_prid() & PRID_REV_MASK;
-	switch (prid_rev) {
-	case PRID_REV_LOONGSON3A_R1:
-		reg = (reg >> 8) & 0xff;
-		break;
-	case PRID_REV_LOONGSON3A_R2:
-	case PRID_REV_LOONGSON3B_R1:
-	case PRID_REV_LOONGSON3B_R2:
-		reg = ((reg >> 8) & 0xff) - 100;
-		break;
-	case PRID_REV_LOONGSON3A_R3_0:
-	case PRID_REV_LOONGSON3A_R3_1:
-		reg = (reg & 0xffff)*731/0x4000 - 273;
-		break;
-	case PRID_REV_LOONGSON2K_R1:
-	case PRID_REV_LOONGSON2K_R2:
-		reg = (reg & 0xff) - 100;
-		break;
+	switch(current_cpu_type()){
+	case CPU_LOONGSON3:
+		reg = LOONGSON_CHIPTEMP(cpu);
+		prid_rev = read_c0_prid() & PRID_REV_MASK;
+		switch (prid_rev) {
+		case PRID_REV_LOONGSON3A_R1:
+			reg = (reg >> 8) & 0xff;
+			break;
+		case PRID_REV_LOONGSON3A_R2:
+		case PRID_REV_LOONGSON3B_R1:
+		case PRID_REV_LOONGSON3B_R2:
+			reg = ((reg >> 8) & 0xff) - 100;
+			break;
+		case PRID_REV_LOONGSON3A_R3_0:
+		case PRID_REV_LOONGSON3A_R3_1:
+			reg = (reg & 0xffff)*731/0x4000 - 273;
+			break;
+		case PRID_REV_LOONGSON2K_R1:
+		case PRID_REV_LOONGSON2K_R2:
+			reg = (reg & 0xff) - 100;
+			break;
+		}
+		cputemp = (int)reg * 1000;
+		return fixup_cpu_temp(cpu, cputemp);
+	case CPU_LOONGSON3_COMP:
+	default:
+		return 50;
 	}
 
-	cputemp = (int)reg * 1000;
-	return fixup_cpu_temp(cpu, cputemp);
 }
 EXPORT_SYMBOL(loongson_cpu_temp);
 

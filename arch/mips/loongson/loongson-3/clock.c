@@ -134,7 +134,8 @@ int clk_set_rate(struct clk *clk, unsigned long rate)
 
 	clk->rate = rate;
 
-	if ((read_c0_prid() & 0xf) == PRID_REV_LOONGSON3A_R1) {
+	if ((current_cpu_type() == CPU_LOONGSON3) &&
+		((read_c0_prid() & 0xf) == PRID_REV_LOONGSON3A_R1)) {
 		regval = LOONGSON_CHIPCFG(package_id);
 		regval = (regval & ~0x7) | (pos->driver_data - 1);
 		LOONGSON_CHIPCFG(package_id) = regval;

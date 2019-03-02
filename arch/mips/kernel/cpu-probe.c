@@ -228,7 +228,7 @@ static void set_ftlb_enable(struct cpuinfo_mips *c, int enable)
 			write_c0_config6(config6 &  ~MIPS_CONF6_FTLBEN);
 		back_to_back_c0_hazard();
 	}
-	if (c->cputype == CPU_LOONGSON3) {
+	if ((c->cputype == CPU_LOONGSON3) || (c->cputype == CPU_LOONGSON3_COMP)) {
 		/* Flush ITLB, DTLB, VTLB and FTLB */
 		change_c0_diag(0x300c, 0x300c);
 		/* Loongson-3 cores use Config6 to enable the FTLB */
@@ -1383,7 +1383,14 @@ static inline void cpu_probe_loongson(struct cpuinfo_mips *c, unsigned int cpu)
 		}
 		break;
 	default:
-		panic("Unknown Loongson Processor ID!");
+		c->cputype = CPU_LOONGSON3_COMP;
+		__cpu_name[cpu] = "ICT Loongson-3";
+		set_elf_platform(cpu, "loongson3a");
+		set_isa(c, MIPS_CPU_ISA_M64R2);
+		__cpu_full_name[cpu] = "ICT Loongson-3 Compatible Processor";
+
+		decode_configs(c);
+		c->options |= MIPS_CPU_FTLB | MIPS_CPU_TLBINV | MIPS_CPU_LDPTE;
 		break;
 	}
 }

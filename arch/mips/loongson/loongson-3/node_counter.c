@@ -64,18 +64,24 @@ int __init init_node_counter_clocksource(void)
 		return -ENXIO;
 
 	/* Loongson3A2000 and Loongson3A3000 has node counter */
-	switch (read_c0_prid() & 0xF) {
-	case PRID_REV_LOONGSON3A_R2:
-	case PRID_REV_LOONGSON3A_R3_0:
-	case PRID_REV_LOONGSON3A_R3_1:
-		break;
-	case PRID_REV_LOONGSON3A_R1:
-	case PRID_REV_LOONGSON3B_R1:
-	case PRID_REV_LOONGSON3B_R2:
-	default:
+	switch(current_cpu_type()){
+	case CPU_LOONGSON3:	
+		switch (read_c0_prid() & 0xF) {
+		case PRID_REV_LOONGSON3A_R2:
+		case PRID_REV_LOONGSON3A_R3_0:
+		case PRID_REV_LOONGSON3A_R3_1:
+			break;
+		case PRID_REV_LOONGSON3A_R1:
+		case PRID_REV_LOONGSON3B_R1:
+		case PRID_REV_LOONGSON3B_R2:
+		default:
+			return 0;
+		}
+	case CPU_LOONGSON3_COMP:
 		return 0;
+	default:
+		break;
 	}
-
 	csrc_node_counter.mult =
 		clocksource_hz2mult(NODE_COUNTER_FREQ, csrc_node_counter.shift);
 	res = clocksource_register_hz(&csrc_node_counter, NODE_COUNTER_FREQ);

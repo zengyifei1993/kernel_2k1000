@@ -1015,6 +1015,7 @@ static void __cpuinit probe_pcache(void)
 		break;
 
 	case CPU_LOONGSON3:
+	case CPU_LOONGSON3_COMP:
 		config1 = read_c0_config1();
 		if ((lsize = ((config1 >> 19) & 7)))
 			c->icache.linesz = 2 << lsize;
@@ -1193,7 +1194,8 @@ static void __cpuinit probe_vcache(void)
 	struct cpuinfo_mips *c = &current_cpu_data;
 	unsigned int config2, lsize;
 
-	if (current_cpu_type() != CPU_LOONGSON3)
+	if ((current_cpu_type() != CPU_LOONGSON3) &&
+		(current_cpu_type() != CPU_LOONGSON3_COMP))
 		return;
 
 	config2 = read_c0_config2();
@@ -1384,6 +1386,7 @@ static void __cpuinit setup_scache(void)
 		return;
 
 	case CPU_LOONGSON3:
+	case CPU_LOONGSON3_COMP:
 	case CPU_LOONGSON2K:
 
 		loongson3_sc_init();
@@ -1622,7 +1625,8 @@ void __cpuinit r4k_cache_init(void)
 	coherency_setup();
 	board_cache_error_setup = r4k_cache_error_setup;
 
-	if (current_cpu_type() == CPU_LOONGSON3) {
+	if ((current_cpu_type() == CPU_LOONGSON3) ||
+		(current_cpu_type() == CPU_LOONGSON3_COMP)) {
 		/* Loongson-3 maintains cache coherency by hardware */
 		__flush_cache_all	= cache_noop;
 		__flush_cache_vmap	= cache_noop;
