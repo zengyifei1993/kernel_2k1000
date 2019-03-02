@@ -43,6 +43,7 @@
 #include "commpage.h"
 
 #include "trace.h"
+#include "ls3a3000.h"
 
 
 /* Pointers to last VCPU loaded on each physical CPU */
@@ -2080,17 +2081,13 @@ static void kvm_vz_vcpu_change_vpid(struct kvm_vcpu *vcpu, int cpu)
 	/*
 	 *
 	 */
-#if 1
-	if (
-	    (vcpu->arch.vpid[cpu] ^ vpid_cache(cpu)) &
-				VPID_VERSION_MASK) {
+	if (migrated || ((vcpu->arch.vpid[cpu] ^ vpid_cache(cpu)) & VPID_VERSION_MASK)) {
 		kvm_vz_get_new_vpid(cpu, vcpu);
 		vcpu->arch.vpid[cpu] = vpid_cache(cpu);
 //		trace_kvm_guestid_change(vcpu,
 //					 vcpu->arch.vpid[cpu]);
 	}
 	write_c0_vpid((read_c0_vpid() &0xff00) | (vcpu->arch.vpid[cpu] & 0xff));
-#endif
 }
 
 
@@ -2519,9 +2516,6 @@ enum vmtlbexc {
 volatile unsigned int lsvz_vcpu_dump0 = 0;
 volatile unsigned int lsvz_vcpu_dump1 = 0;
 volatile unsigned long lsvz_gpa_trans = 0;
-extern int _kvm_mips_map_page_fast(struct kvm_vcpu *vcpu, unsigned long gpa,
-				   bool write_fault,
-				   pte_t *out_entry, pte_t *out_buddy);
 int handle_tlb_general_exception(struct kvm_run *run, struct kvm_vcpu *vcpu)
 {
 	u32 cause = vcpu->arch.host_cp0_cause;
@@ -2976,10 +2970,6 @@ void build_lsvz_guest_mode_reenter(void)
 #define KVM_MMU_CACHE_MIN_PAGES 2
 #endif
 
-extern pte_t *kvm_mips_pte_for_gpa(struct kvm *kvm,
-				   struct kvm_mmu_memory_cache *cache,
-				   unsigned long addr);
-
 int mmu_topup_memory_cache(struct kvm_mmu_memory_cache *cache,
 				  int min, int max);
 
@@ -3130,6 +3120,7 @@ int kvm_mips_handle_ls3a3000_vz_root_tlb_fault(unsigned long badvaddr,
 	unsigned long gpa;
 	pte_t pte_gpa[2];
 	int idx;
+	struct kvm_mips_tlb tlb;
 
 	/*the badvaddr we get maybe guest unmmaped or mmapped address,
 	  but not a GPA */
@@ -3156,10 +3147,12 @@ int kvm_mips_handle_ls3a3000_vz_root_tlb_fault(unsigned long badvaddr,
 
 		pte_gpa[!idx].pte |= _PAGE_GLOBAL;
 
-		vcpu->arch.guest_tlb[0].tlb_hi = badvaddr & 0xc000ffffffffe000;
-		vcpu->arch.guest_tlb[0].tlb_mask = 0x7800;
-		vcpu->arch.guest_tlb[0].tlb_lo[0] = pte_to_entrylo(pte_val(pte_gpa[0]));
-		vcpu->arch.guest_tlb[0].tlb_lo[1] = pte_to_entrylo(pte_val(pte_gpa[1]));
+		tlb.tlb_hi = (badvaddr & 0xc000ffffffffe000) & (PAGE_MASK << 1);
+		tlb.tlb_mask = 0x7800;
+		tlb.tlb_lo[0] = pte_to_entrylo(pte_val(pte_gpa[0]));
+		tlb.tlb_lo[1] = pte_to_entrylo(pte_val(pte_gpa[1]));
+		kvm_mips_tlbw(&tlb);
+		return RESUME_GUEST;
 	} else {
 		printk("unhandled guest addr %lx\n", badvaddr);
 		return RESUME_HOST;

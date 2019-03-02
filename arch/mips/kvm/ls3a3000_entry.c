@@ -1293,7 +1293,7 @@ void *kvm_mips_ls3a3000_build_tlb_general_exception(void *addr, void *handler)
 	uasm_i_jalr(&p, RA, T9);
 	UASM_i_ADDIU(&p, SP, SP, -CALLFRAME_SIZ);
 
-	p = kvm_mips_build_ret_from_exit(p, 1);
+	p = kvm_mips_build_ret_from_exit(p, 0);
 
 #if 1
 	uasm_l_ignore_tlb_general(&l, p);
