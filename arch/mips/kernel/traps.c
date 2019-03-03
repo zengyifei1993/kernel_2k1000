@@ -708,30 +708,63 @@ asmlinkage void do_ov(struct pt_regs *regs)
 	exception_exit(prev_state);
 }
 
-int process_fpemu_return(int sig, void __user *fault_addr)
+int process_fpemu_return(int sig, void __user *fault_addr, unsigned long fcr31)
 {
-	if (sig == SIGSEGV || sig == SIGBUS) {
-		struct siginfo si = {0};
+	struct siginfo si = { 0 };
+
+	switch (sig) {
+	case 0:
+		return 0;
+
+	case SIGFPE:
 		si.si_addr = fault_addr;
 		si.si_signo = sig;
-		if (sig == SIGSEGV) {
-			down_read(&current->mm->mmap_sem);
-			if (find_vma(current->mm, (unsigned long)fault_addr))
-				si.si_code = SEGV_ACCERR;
-			else
-				si.si_code = SEGV_MAPERR;
-			up_read(&current->mm->mmap_sem);
-		} else {
-			si.si_code = BUS_ADRERR;
-		}
+		/*
+		 * Inexact can happen together with Overflow or Underflow.
+		 * Respect the mask to deliver the correct exception.
+		 */
+		fcr31 &= (fcr31 & FPU_CSR_ALL_E) <<
+			 (ffs(FPU_CSR_ALL_X) - ffs(FPU_CSR_ALL_E));
+		if (fcr31 & FPU_CSR_INV_X)
+			si.si_code = FPE_FLTINV;
+		else if (fcr31 & FPU_CSR_DIV_X)
+			si.si_code = FPE_FLTDIV;
+		else if (fcr31 & FPU_CSR_OVF_X)
+			si.si_code = FPE_FLTOVF;
+		else if (fcr31 & FPU_CSR_UDF_X)
+			si.si_code = FPE_FLTUND;
+		else if (fcr31 & FPU_CSR_INE_X)
+			si.si_code = FPE_FLTRES;
+		else
+			si.si_code = __SI_FAULT;
 		force_sig_info(sig, &si, current);
 		return 1;
-	} else if (sig) {
-		force_sig(sig, current);
+
+	case SIGBUS:
+		si.si_addr = fault_addr;
+		si.si_signo = sig;
+		si.si_code = BUS_ADRERR;
+		force_sig_info(sig, &si, current);
 		return 1;
-	} else {
+
+	case SIGSEGV:
+		si.si_addr = fault_addr;
+		si.si_signo = sig;
+		down_read(&current->mm->mmap_sem);
+		if (find_vma(current->mm, (unsigned long)fault_addr))
+			si.si_code = SEGV_ACCERR;
+		else
+			si.si_code = SEGV_MAPERR;
+		up_read(&current->mm->mmap_sem);
+		force_sig_info(sig, &si, current);
+		return 1;
+
+	default:
+		force_sig(sig, current);
 		return 0;
+
 	}
+
 }
 
 /*
@@ -740,7 +773,8 @@ int process_fpemu_return(int sig, void __user *fault_addr)
 asmlinkage void do_fpe(struct pt_regs *regs, unsigned long fcr31)
 {
 	enum ctx_state prev_state;
-	siginfo_t info = {0};
+	void __user *fault_addr;
+	int sig;
 
 	prev_state = exception_enter();
 	if (notify_die(DIE_FP, "FP exception", regs, 0, regs_to_trapnr(regs),
@@ -749,9 +783,6 @@ asmlinkage void do_fpe(struct pt_regs *regs, unsigned long fcr31)
 	die_if_kernel("FP exception in kernel code", regs);
 
 	if (fcr31 & FPU_CSR_UNI_X) {
-		int sig;
-		void __user *fault_addr = NULL;
-
 		/*
 		 * Unimplemented operation exception.  If we've got the full
 		 * software emulator on-board, let's use it...
@@ -768,6 +799,7 @@ asmlinkage void do_fpe(struct pt_regs *regs, unsigned long fcr31)
 		/* Run the emulator */
 		sig = fpu_emulator_cop1Handler(regs, &current->thread.fpu, 1,
 					       &fault_addr);
+		fcr31 = current->thread.fpu.fcr31;
 
 		/*
 		 * We can't allow the emulated instruction to leave any of
@@ -777,28 +809,13 @@ asmlinkage void do_fpe(struct pt_regs *regs, unsigned long fcr31)
 
 		/* Restore the hardware register state */
 		own_fpu(1);	/* Using the FPU again.	 */
+	} else {
+		sig = SIGFPE;
+		fault_addr = (void __user *) regs->cp0_epc;
+	}
 
-		/* If something went wrong, signal */
-		process_fpemu_return(sig, fault_addr);
-
-		goto out;
-	} else if (fcr31 & FPU_CSR_INV_X)
-		info.si_code = FPE_FLTINV;
-	else if (fcr31 & FPU_CSR_DIV_X)
-		info.si_code = FPE_FLTDIV;
-	else if (fcr31 & FPU_CSR_OVF_X)
-		info.si_code = FPE_FLTOVF;
-	else if (fcr31 & FPU_CSR_UDF_X)
-		info.si_code = FPE_FLTUND;
-	else if (fcr31 & FPU_CSR_INE_X)
-		info.si_code = FPE_FLTRES;
-	else
-		info.si_code = __SI_FAULT;
-	info.si_signo = SIGFPE;
-	info.si_errno = 0;
-	info.si_addr = (void __user *) regs->cp0_epc;
-	force_sig_info(SIGFPE, &info, current);
-
+	/* Send a signal if required.  */
+	process_fpemu_return(sig, fault_addr, fcr31);
 out:
 	exception_exit(prev_state);
 }
@@ -1202,10 +1219,13 @@ asmlinkage void do_cpu(struct pt_regs *regs)
 	enum ctx_state prev_state;
 	unsigned int __user *epc;
 	unsigned long old_epc, old31;
+	void __user *fault_addr;
 	unsigned int opcode;
+	unsigned long fcr31;
 	unsigned int cpid;
 	int status, err;
 	unsigned long __maybe_unused flags;
+	int sig;
 
 	prev_state = exception_enter();
 	die_if_kernel("do_cpu invoked from kernel context!", regs);
@@ -1221,7 +1241,7 @@ asmlinkage void do_cpu(struct pt_regs *regs)
 		status = -1;
 
 		if (unlikely(compute_return_epc(regs) < 0))
-			goto out;
+			break;
 
 		if (get_isa16_mode(regs->cp0_epc)) {
 			unsigned short mmop[2] = { 0 };
@@ -1254,7 +1274,7 @@ asmlinkage void do_cpu(struct pt_regs *regs)
 			force_sig(status, current);
 		}
 
-		goto out;
+		break;
 
 	case 3:
 		/*
@@ -1270,33 +1290,38 @@ asmlinkage void do_cpu(struct pt_regs *regs)
 		 * erroneously too, so they are covered by this choice
 		 * as well.
 		 */
-		if (raw_cpu_has_fpu)
+		if (raw_cpu_has_fpu) {
+			force_sig(SIGKILL, current);
 			break;
+		}
 		/* Fall through.  */
 
 	case 1:
 		err = enable_restore_fp_context(0);
 
-		if (!raw_cpu_has_fpu || err) {
-			int sig;
-			void __user *fault_addr = NULL;
-			sig = fpu_emulator_cop1Handler(regs,
-						       &current->thread.fpu,
-						       0, &fault_addr);
-			if (!process_fpemu_return(sig, fault_addr) && !err)
-				mt_ase_fp_affinity();
-		}
+		if (raw_cpu_has_fpu && !err)
+			break;
+		sig = fpu_emulator_cop1Handler(regs, &current->thread.fpu, 0,
+						&fault_addr);
 
-		goto out;
+		fcr31 = current->thread.fpu.fcr31;
 
+		/*
+		 * We can't allow the emulated instruction to leave
+		 * andy of the cause bits set in $fcr31
+		 */
+		current->thread.fpu.fcr31 &= ~FPU_CSR_ALL_X;
+
+		/* Send a signal if required.  */
+		if (!process_fpemu_return(sig, fault_addr, fcr31) && !err)
+			mt_ase_fp_affinity();
+
+		break;
 	case 2:
 		raw_notifier_call_chain(&cu2_chain, CU2_EXCEPTION, regs);
-		goto out;
+		break;
 	}
 
-	force_sig(SIGILL, current);
-
-out:
 	exception_exit(prev_state);
 }
 
