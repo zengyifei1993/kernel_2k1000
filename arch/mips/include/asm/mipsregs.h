@@ -1233,6 +1233,70 @@ __asm__(".macro parse_r var r\n\t"
 #endif
 
 /*
+ *read/write csr register
+ *
+ */
+#ifdef CONFIG_CPU_LOONGSON3
+static inline unsigned int read_csr(int reg)
+{
+	unsigned int __res;
+
+	__asm__ __volatile__(
+		"parse_r __res,%0\n\t"
+		"parse_r reg,%1\n\t"
+		".insn \n\t"
+		".word (0xc8000118 | (reg << 21) | (__res << 11))\n\t"
+		:"=r"(__res)
+		:"r"(reg)
+		:
+		);
+	return __res;
+}
+
+static inline unsigned long long dread_csr(int reg)
+{
+	unsigned long long __res;
+
+	__asm__ __volatile__(
+		"parse_r __res,%0\n\t"
+		"parse_r reg,%1\n\t"
+		".insn \n\t"
+		".word (0xc8020118 | (reg << 21) | (__res << 11))\n\t"
+		:"=r"(__res)
+		:"r"(reg)
+		:
+		);
+	return __res;
+}
+
+static inline void write_csr(int reg,unsigned int val)
+{
+	__asm__ __volatile__(
+		"parse_r reg,%0\n\t"
+		"parse_r val,%1\n\t"
+		".insn \n\t"
+		".word (0xc8010118 | (reg << 21) | (val << 11))\n\t"
+		:
+		:"r"(reg),"r"(val)
+		:
+		);
+}
+
+static inline void dwrite_csr(int reg,unsigned long long val)
+{
+	__asm__ __volatile__(
+		"parse_r reg,%0\n\t"
+		"parse_r val,%1\n\t"
+		".insn \n\t"
+		".word (0xc8030118 | (reg << 21) | (val << 11))\n\t"
+		:
+		:"r"(reg),"r"(val)
+		:
+		);
+}
+#endif
+
+/*
  * TLB Invalidate Flush
  */
 static inline void tlbinvf(void)
