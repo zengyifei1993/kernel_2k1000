@@ -334,7 +334,6 @@ static void ls_nand_cmdfunc(struct mtd_info *mtd, unsigned command,
 	oobsize = mtd->oobsize;
 	pagesize = mtd->writesize;
 	chip_cap = get_chip_capa_num(info->nand_chip.chipsize, pagesize);
-
 	spin_lock_irqsave(&info->nand_lock, flags);
 	switch (command) {
 	case NAND_CMD_READOOB:
@@ -396,8 +395,9 @@ static void ls_nand_cmdfunc(struct mtd_info *mtd, unsigned command,
 	case NAND_CMD_ERASE1:
 		addrc = 0;
 		addrr = page_addr;
-		op_num = 0;
-		param = 0;
+		op_num = 1;
+		param = ((pagesize + oobsize) << OP_SCOPE_SHIFT)
+			| (chip_cap << CHIP_CAP_SHIFT);
 		cmd = CMD_ER_OP | CMD_VALID;
 		nand_setup(info, cmd, addrc, addrr, param, op_num);
 		wait_nand_done(info, STATUS_TIME_LOOP_E);
@@ -416,6 +416,9 @@ static void ls_nand_cmdfunc(struct mtd_info *mtd, unsigned command,
 	case NAND_CMD_ERASE2:
 	case NAND_CMD_READ1:
 		break;
+        case NAND_CMD_RNDOUT:
+                info->buf_start = column;
+                break;
 	default:
 		printk(KERN_ERR "non-supported command.\n");
 		break;
@@ -505,8 +508,8 @@ static void ls_nand_init_mtd(struct mtd_info *mtd,
 	this->ecc.hwctl		= ls_nand_ecc_hwctl;
 	this->ecc.calculate	= ls_nand_ecc_calculate;
 	this->ecc.correct	= ls_nand_ecc_correct;
-	this->ecc.size		= 2048;
-	this->ecc.bytes		= 24;
+	this->ecc.size		= 256;
+	this->ecc.bytes		= 3;
 	mtd->owner = THIS_MODULE;
 }
 
@@ -591,7 +594,7 @@ static int ls_nand_probe(struct platform_device *pdev)
 
 	pdata->chip_ver = LS2K_VER3;
 	pdata->cs = 2;
-	pdata->csrdy = 0x11<<(2*9);
+	pdata->csrdy = 88442200;
 	pdata->nr_parts = data;
 	pdata->enable_arbiter = 1;
 
