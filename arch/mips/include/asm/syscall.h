@@ -26,6 +26,15 @@
 #define __NR_syscall 4000
 #endif
 
+static inline bool mips_syscall_is_indirect(struct task_struct *task,
+					    struct pt_regs *regs)
+{
+	/* O32 ABI syscall() - Either 64-bit with O32 or 32-bit */
+	return (IS_ENABLED(CONFIG_32BIT) ||
+		test_tsk_thread_flag(task, TIF_32BIT_REGS)) &&
+		(regs->regs[2] == __NR_syscall);
+}
+
 static inline long syscall_get_nr(struct task_struct *task,
 				  struct pt_regs *regs)
 {
@@ -92,16 +101,27 @@ static inline void syscall_set_return_value(struct task_struct *task,
 	}
 }
 
+static inline void mips_syscall_update_nr(struct task_struct *task,
+					  struct pt_regs *regs)
+{
+	/*
+	 * v0 is the system call number, except for O32 ABI syscall(), where it
+	 * ends up in a0.
+	 */
+	if (mips_syscall_is_indirect(task, regs))
+		task_thread_info(task)->syscall = regs->regs[4];
+	else
+		task_thread_info(task)->syscall = regs->regs[2];
+}
+
 static inline void syscall_get_arguments(struct task_struct *task,
 					 struct pt_regs *regs,
 					 unsigned int i, unsigned int n,
 					 unsigned long *args)
 {
 	int ret;
-	/* O32 ABI syscall() - Either 64-bit with O32 or 32-bit */
-	if ((config_enabled(CONFIG_32BIT) ||
-	    test_tsk_thread_flag(task, TIF_32BIT_REGS)) &&
-	    (regs->regs[2] == __NR_syscall))
+	/* O32 ABI syscall() */
+	if (mips_syscall_is_indirect(task, regs))
 		i++;
 
 	while (n--)
