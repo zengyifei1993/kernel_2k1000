@@ -178,6 +178,9 @@ typedef elf_greg_t elf_gregset_t[ELF_NGREG];
 typedef double elf_fpreg_t;
 typedef elf_fpreg_t elf_fpregset_t[ELF_NFPREG];
 
+void mips_dump_regs32(u32 *uregs, const struct pt_regs *regs);
+void mips_dump_regs64(u64 *uregs, const struct pt_regs *regs);
+
 #ifdef CONFIG_32BIT
 
 /*
@@ -269,9 +272,6 @@ struct mips_abi;
 extern struct mips_abi mips_abi;
 extern struct mips_abi mips_abi_32;
 extern struct mips_abi mips_abi_n32;
-
-void mips_dump_regs32(u32 *uregs, const struct pt_regs *regs);
-void mips_dump_regs64(u64 *uregs, const struct pt_regs *regs);
 
 #ifdef CONFIG_32BIT
 
