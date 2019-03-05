@@ -16,16 +16,17 @@
 #include <linux/of.h>
 #include <linux/of_dma.h>
 #include <ls2k.h>
+#include <linux/mtd/nand_bch.h>
 
 #define DRIVER_NAME	"ls-nand"
 #define ALIGN_DMA(x) 	((x + 3)/4)
 #define REG(reg)	(info->mmio_base + reg)
 
-#define MAX_BUFF_SIZE		4096
-#define STATUS_TIME_LOOP_R	30
+#define MAX_BUFF_SIZE		0x10000
+#define STATUS_TIME_LOOP_R	300
 #define STATUS_TIME_LOOP_WS	100
 #define STATUS_TIME_LOOP_WM	60
-#define STATUS_TIME_LOOP_E	1000
+#define STATUS_TIME_LOOP_E	10000
 
 /* Register offset */
 #define NAND_CMD_REG		0x00
@@ -127,7 +128,12 @@ struct ls_nand_info {
 	int			cs;
 	u32			csrdy;
 };
+static unsigned int bch = 4;
+module_param(bch,	     uint, 0400);
+MODULE_PARM_DESC(bch,		 "Enable BCH ecc and set how many bits should "
+				 "be correctable in 512-byte blocks");
 
+static void wait_nand_done(struct ls_nand_info *info, int timeout);
 static int ls_nand_init_buff(struct ls_nand_info *info)
 {
 	struct platform_device *pdev = info->pdev;
@@ -166,10 +172,22 @@ static void ls_nand_ecc_hwctl(struct mtd_info *mtd, int mode)
 	return;
 }
 
+static int ls_nand_get_ready(struct mtd_info *mtd)
+{
+	struct ls_nand_info *info = mtd->priv;
+	unsigned char status;
+	writel(CMD_RD_STATUS | CMD_VALID, REG(NAND_CMD_REG));
+	wait_nand_done(info, STATUS_TIME_LOOP_R);
+	status = readl(REG(NAND_IDH_REG))>>16;
+	return status;
+}
+
 static int ls_nand_waitfunc(struct mtd_info *mtd, struct nand_chip *this)
 {
-	udelay(50);
-	return 0;
+	struct ls_nand_info *info = mtd->priv;
+	unsigned char status;
+	status = readl(REG(NAND_IDH_REG))>>16;
+	return status;
 }
 
 static void ls_nand_select_chip(struct mtd_info *mtd, int chip)
@@ -179,16 +197,20 @@ static void ls_nand_select_chip(struct mtd_info *mtd, int chip)
 
 static int ls_nand_dev_ready(struct mtd_info *mtd)
 {
-	return 1;
+	struct ls_nand_info *info = mtd->priv;
+	return 	!!(readl(REG(NAND_CMD_REG)) & (1<<(info->cs+16)));
 }
+
+static const char cap2cs[16] = {[0]=16,[1]=17,[2]=18,[3]=19,[4]=19,[5]=19,[6]=20,[7]=21,[9]=14,[10]=15,[11]=16,[12]=17,[13]=18};
 
 static void nand_setup(struct ls_nand_info *info,
 		int cmd, int addr_c, int addr_r, int param, int op_num)
 {
+	unsigned int addr_cs = info->cs*(1UL<<cap2cs[(param>>CHIP_CAP_SHIFT)&0xf]);
 	writel(param, REG(NAND_PARAM_REG));
 	writel(op_num, REG(NAND_OP_NUM_REG));
 	writel(addr_c, REG(NAND_ADDRC_REG));
-	writel(addr_r|(info->cs*0x10000), REG(NAND_ADDRR_REG));
+	writel(addr_r|addr_cs, REG(NAND_ADDRR_REG));
 	writel(0, REG(NAND_CMD_REG));
 	writel(0, REG(NAND_CMD_REG));
 	writel(cmd, REG(NAND_CMD_REG));
@@ -268,38 +290,46 @@ static void dma_setup(struct ls_nand_info *info, int dma_cmd, int dma_cnt)
 static int get_chip_capa_num(uint64_t  chipsize, int pagesize)
 {
 	int size_mb = chipsize >> 20;
-
-	switch (size_mb) {
-	case (1 << 7):		/* 1Gb */
-		if (pagesize == 512)
-			return 0xd;
-		else
-			return 0;
-	case (1 << 8):		/* 2Gb */
-		return 1;
-	case (1 << 9):		/* 4Gb */
-		return 2;
-	case (1 << 10):		/* 8Gb */
-		return 3;
-	case (1 << 11):		/* 16Gb */
+	if(pagesize == 4096)
 		return 4;
-	case (1 << 12):		/* 32Gb */
-		return 5;
-	case (1 << 13):		/* 64Gb */
-		return 6;
-	case (1 << 14):		/* 128Gb */
-		return 7;
-	case (1 << 3):		/* 64Mb */
-		return 9;
-	case (1 << 4):		/* 128Mb */
-		return 0xa;
-	case (1 << 5):		/* 256Mb */
-		return 0xb;
-	case (1 << 6):		/* 512Mb */
-		return 0xc;
-	default:		/* 64Mb */
-		return 0;
-	}
+	else if(pagesize == 2048)
+		switch (size_mb) {
+			case (1 << 7):		/* 1Gb */
+				return 0;
+			case (1 << 8):		/* 2Gb */
+				return 1;
+			case (1 << 9):		/* 4Gb */
+				return 2;
+			case (1 << 10):		/* 8Gb */
+			default:
+				return 3;
+		}
+	else if(pagesize == 8192)
+
+		switch (size_mb) {
+			case (1 << 12):		/* 32Gb */
+				return 5;
+			case (1 << 13):		/* 64Gb */
+				return 6;
+			case (1 << 14):		/* 128Gb */
+			default:
+				return 7;
+		}
+	else if(pagesize == 512)
+
+		switch (size_mb) {
+			case (1 << 3):		/* 64Mb */
+				return 9;
+			case (1 << 4):		/* 128Mb */
+				return 0xa;
+			case (1 << 5):		/* 256Mb */
+				return 0xb;
+			case (1 << 6):		/* 512Mb */
+			default:
+				return 0xc;
+		}
+	else
+	      return 0;
 }
 
 static void ls_read_id(struct ls_nand_info *info)
@@ -308,6 +338,7 @@ static void ls_read_id(struct ls_nand_info *info)
 	unsigned char *data = (unsigned char *)(info->data_buff);
 
 	writel((5 << ID_NUM_SHIFT), REG(NAND_PARAM_REG));
+	writel(0x10000*info->cs, REG(NAND_ADDRR_REG));
 	writel((CMD_RD_ID | CMD_VALID), REG(NAND_CMD_REG));
 	wait_nand_done(info, 100);
 	id_l = readl(REG(NAND_IDL_REG));
@@ -406,7 +437,7 @@ static void ls_nand_cmdfunc(struct mtd_info *mtd, unsigned command,
 		info->buf_count = 0x1;
 		info->buf_start = 0x0;
 		*(unsigned char *)info->data_buff =
-			(readl(REG(NAND_CMD_REG)) & CMD_DONE) | (CMD_RD_STATUS);
+			ls_nand_get_ready(mtd);
 		break;
 	case NAND_CMD_READID:
 		info->buf_count = 0x4;
@@ -504,7 +535,7 @@ static void ls_nand_init_mtd(struct mtd_info *mtd,
 	this->read_buf		= ls_nand_read_buf;
 	this->write_buf		= ls_nand_write_buf;
 
-	this->ecc.mode		= NAND_ECC_NONE;
+	this->ecc.mode		= NAND_ECC_SOFT;
 	this->ecc.hwctl		= ls_nand_ecc_hwctl;
 	this->ecc.calculate	= ls_nand_ecc_calculate;
 	this->ecc.correct	= ls_nand_ecc_correct;
@@ -542,11 +573,6 @@ static void ls_nand_init_info(struct ls_nand_info *info)
 	info->test_timer.data = (unsigned long)info;
 }
 
-static int ls_nand_detect(struct mtd_info *mtd)
-{
-	return (mtd->erasesize != 1 << 17 || mtd->writesize != 1 << 11
-		|| mtd->oobsize != 1 << 6);
-}
 
 static int ls_nand_probe(struct platform_device *pdev)
 {
@@ -590,13 +616,20 @@ static int ls_nand_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	of_property_read_u32(pdev->dev.of_node, "number-of-parts", &data);
-
 	pdata->chip_ver = LS2K_VER3;
 	pdata->cs = 2;
 	pdata->csrdy = 88442200;
-	pdata->nr_parts = data;
+	pdata->nr_parts = 2;
 	pdata->enable_arbiter = 1;
+
+	if (pdev->dev.of_node) {
+			if (!of_property_read_u32(pdev->dev.of_node, "nand-cs", &data))
+				pdata->cs = data;
+
+			if (!of_property_read_u32(pdev->dev.of_node, "number-of-parts", &data))
+				pdata->nr_parts = data;
+	}
+
 
 	mtd = kzalloc(sizeof(struct mtd_info) + sizeof(struct ls_nand_info),
 		      GFP_KERNEL);
@@ -682,23 +715,72 @@ static int ls_nand_probe(struct platform_device *pdev)
 	info->irq = irq;
 
 	ls_nand_init_mtd(mtd, info);
+	if (pdev->dev.of_node) {
+		const char *pm;
+		struct nand_chip *this = &info->nand_chip;
+			if (of_property_read_string(pdev->dev.of_node, "nand-ecc-algo", &pm))
+			{
+				if(!strcmp(pm, "none"))
+				{
+					bch = 0;
+					this->ecc.mode		= NAND_ECC_NONE;
+				}
+				else if(!strcmp(pm, "bch"))
+			 	{
+					if(!of_property_read_u32(pdev->dev.of_node, "nand-ecc-strength", &data))
+						bch = data;
+				}
+				else
+					bch = 0;
+			}
+	}
+
 	ls_nand_init_info(info);
 	dma_desc_init(info);
 	platform_set_drvdata(pdev, mtd);
 
-	if (nand_scan(mtd, 1)) {
+	if (nand_scan_ident(mtd, 1, NULL)) {
 		dev_err(&pdev->dev, "failed to scan nand\n");
 		ret = -ENXIO;
 		goto fail_free_io;
 	}
+#define BCH_BUG(a...) printk(a);while(1);
+	if(bch)
+	{
+		unsigned int eccsteps, eccbytes;
+		struct nand_chip *this = &info->nand_chip;
+		if (!mtd_nand_has_bch()) {
+			BCH_BUG("BCH ECC support is disabled\n");
+		}
 
-	if (ls_nand_detect(mtd)) {
+		/* use 512-byte ecc blocks */
+		eccsteps = mtd->writesize/512;
+		eccbytes = (bch*13+7)/8;
+		/* do not bother supporting small page devices */
+		if ((mtd->oobsize < 64) || !eccsteps) {
+			BCH_BUG("bch not available on small page devices\n");
+		}
+		if ((eccbytes*eccsteps+2) > mtd->oobsize) {
+			//BCH_BUG("invalid bch value \n", bch);
+			bch = 4;
+			eccbytes = (bch*13+7)/8;
+		}
+
+		this->ecc.mode = NAND_ECC_SOFT_BCH;
+		this->ecc.size = 512;
+		this->ecc.strength = bch;
+		this->ecc.bytes = eccbytes;
+		printk("using %u-bit/%u bytes BCH ECC\n", bch, this->ecc.size);
+	}
+
+	if(nand_scan_tail(mtd)) {
 		dev_err(&pdev->dev, "driver don't support the Flash!\n");
 		ret = -ENXIO;
 		goto fail_free_io;
 	}
+
 #ifdef CONFIG_MTD_CMDLINE_PARTS
-	mtd->name = "mtd0";
+	mtd->name = "nand-flash";
 	num_partitions = parse_mtd_partitions(mtd, part_probes, &partitions, 0);
 #endif
 	ppdata.of_node = pdev->dev.of_node;
