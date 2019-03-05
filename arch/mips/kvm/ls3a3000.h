@@ -27,4 +27,9 @@ pte_t *kvm_mips_pte_for_gpa(struct kvm *kvm,
 				struct kvm_mmu_memory_cache *cache,
 				unsigned long addr);
 
+int kvm_mips_guesttlb_lookup(struct kvm_vcpu *vcpu, unsigned long entryhi);
+int kvm_mips_gva_to_hpa(struct kvm_vcpu *vcpu, unsigned long gva, unsigned long  *phpa);
+int kvm_mips_handle_ls3a3000_vz_root_tlb_fault(unsigned long badvaddr,
+                                      struct kvm_vcpu *vcpu, bool write_fault);
+
 #endif

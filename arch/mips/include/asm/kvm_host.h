@@ -406,6 +406,8 @@ struct kvm_vcpu_arch {
 
 	/* S/W Based TLB for guest */
 	struct kvm_mips_tlb guest_tlb[KVM_MIPS_GUEST_TLB_SIZE];
+	/* bitmap for guest TLB */
+	unsigned long tlbmap[KVM_MIPS_GUEST_TLB_SIZE/sizeof(unsigned long)];
 
 	/* Guest kernel/user [partial] mm */
 	struct mm_struct guest_kernel_mm, guest_user_mm;
@@ -908,8 +910,6 @@ u32 kvm_get_commpage_asid (struct kvm_vcpu *vcpu);
 
 #ifdef CONFIG_KVM_MIPS_VZ
 int kvm_mips_handle_vz_root_tlb_fault(unsigned long badvaddr,
-				      struct kvm_vcpu *vcpu, bool write_fault);
-int kvm_mips_handle_ls3a3000_vz_root_tlb_fault(unsigned long badvaddr,
 				      struct kvm_vcpu *vcpu, bool write_fault);
 #endif
 extern int kvm_mips_handle_kseg0_tlb_fault(unsigned long badbaddr,

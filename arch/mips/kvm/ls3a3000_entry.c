@@ -1248,7 +1248,7 @@ void *kvm_mips_ls3a3000_build_tlb_general_exception(void *addr, void *handler)
 	/*If we meet XKSEG/XUSEG address,we ignore the invalid exception
 	 * process and jump back to guest_ebase+0x180
 	*/
-#if 1
+#if 0
 //	UASM_i_MFC0(&p, T1, C0_BADVADDR);
 	UASM_i_LW(&p, T1, offsetof(struct kvm_vcpu_arch, host_cp0_badvaddr), K1);
 
