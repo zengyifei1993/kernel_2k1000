@@ -1461,14 +1461,16 @@ static int init_sub_crq_irqs(struct ibmvnic_adapter *adapter)
 	return rc;
 
 req_rx_irq_failed:
-	for (j = 0; j < i; j++)
+	for (j = 0; j < i; j++) {
 		free_irq(adapter->rx_scrq[j]->irq, adapter->rx_scrq[j]);
 		irq_dispose_mapping(adapter->rx_scrq[j]->irq);
+	}
 	i = adapter->req_tx_queues;
 req_tx_irq_failed:
-	for (j = 0; j < i; j++)
+	for (j = 0; j < i; j++) {
 		free_irq(adapter->tx_scrq[j]->irq, adapter->tx_scrq[j]);
 		irq_dispose_mapping(adapter->rx_scrq[j]->irq);
+	}
 	release_sub_crqs_no_irqs(adapter);
 	return rc;
 }
@@ -3758,6 +3760,7 @@ static int ibmvnic_probe(struct vio_dev *dev, const struct vio_device_id *id)
 	if (dma_mapping_error(&dev->dev, adapter->stats_token)) {
 		if (!firmware_has_feature(FW_FEATURE_CMO))
 			dev_err(&dev->dev, "Couldn't map stats buffer\n");
+		rc = -ENOMEM;
 		goto free_crq;
 	}
 
