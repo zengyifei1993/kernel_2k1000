@@ -49,14 +49,12 @@
 #define UV_NET_ENDPOINT_INTD		(is_uv1_hub() ?			\
 			UV1_NET_ENDPOINT_INTD : UV2_NET_ENDPOINT_INTD)
 #define UV_DESC_PSHIFT			49
-#define UV_PAYLOADQ_PNODE_SHIFT		49
+#define UV_PAYLOADQ_GNODE_SHIFT		49
 #define UV_PTC_BASENAME			"sgi_uv/ptc_statistics"
 #define UV_BAU_BASENAME			"sgi_uv/bau_tunables"
 #define UV_BAU_TUNABLES_DIR		"sgi_uv"
 #define UV_BAU_TUNABLES_FILE		"bau_tunables"
 #define WHITESPACE			" \t\n"
-#define uv_mmask			((1UL << uv_hub_info->m_val) - 1)
-#define uv_physnodeaddr(x)		((__pa((unsigned long)(x)) & uv_mmask))
 #define cpubit_isset(cpu, bau_local_cpumask) \
 	test_bit((cpu), (bau_local_cpumask).bits)
 
