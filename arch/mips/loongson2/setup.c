@@ -1,4 +1,4 @@
-/*
+pci_add_flags(PCI_PROBE_ONLY);/*
  * =====================================================================================
  *
  *       Filename:  mem.c
@@ -24,6 +24,7 @@
 #include <asm/prom.h>
 #include <asm/dma-coherence.h>
 #include <linux/libfdt.h>
+#include <linux/pci.h>
 
 #include <ls2k.h>
 #include <linux/spinlock.h>
@@ -131,6 +132,10 @@ static int __init setup_dma_ops(void)
 		 /*it should not be called from any formal release kernel,*/
 		 /*since it should be called from bootloader*/
 		/*set_io_noncoherent();*/
+	}
+
+	if (of_property_read_bool(np, "pci-probe-only")) {
+		pci_add_flags(PCI_PROBE_ONLY);
 	}
 
 	of_node_put(np);
