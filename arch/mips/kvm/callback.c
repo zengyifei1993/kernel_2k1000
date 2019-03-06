@@ -28,7 +28,6 @@ EXPORT_SYMBOL(ebase);
 extern void (*flush_icache_range)(unsigned long start, unsigned long end);
 extern void (*local_flush_icache_range)(unsigned long start, unsigned long end);
 EXPORT_SYMBOL(local_flush_icache_range);
-EXPORT_SYMBOL(flush_icache_range);
 #ifndef __PAGETABLE_PMD_FOLDED
 extern pmd_t invalid_pmd_table[PTRS_PER_PMD];
 EXPORT_SYMBOL(invalid_pmd_table);
