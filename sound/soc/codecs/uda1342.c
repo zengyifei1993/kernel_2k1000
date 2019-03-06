@@ -273,6 +273,7 @@ static int uda1342_resume(struct snd_soc_codec *codec)
 static int uda1342_probe(struct snd_soc_codec *codec)
 {
 	struct uda1342_priv *uda1342 = snd_soc_codec_get_drvdata(codec);
+	int ret;
 
 	uda1342->codec = codec;
 
@@ -281,6 +282,13 @@ static int uda1342_probe(struct snd_soc_codec *codec)
 
 	uda1342_reset(codec);
 
+	ret = snd_soc_add_codec_controls(codec, uda1342_snd_controls,
+					ARRAY_SIZE(uda1342_snd_controls));
+
+	if (ret < 0) {
+		printk(KERN_ERR "UDA1342: failed to register controls\n");
+		return ret;
+	}
 	INIT_WORK(&uda1342->work, uda1342_flush_work);
 
 	return 0;
@@ -302,9 +310,6 @@ static struct snd_soc_codec_driver soc_codec_dev_uda1342 = {
 	.reg_word_size = sizeof(u16),
 	.reg_cache_default = uda1342_reg,
 	.reg_cache_step = 1,
-
-	.controls = uda1342_snd_controls,
-	.num_controls = ARRAY_SIZE(uda1342_snd_controls),
 };
 
 #if defined(CONFIG_I2C) || defined(CONFIG_I2C_MODULE)
