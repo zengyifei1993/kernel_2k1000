@@ -259,27 +259,25 @@ void  loongson3_inst_fixup(void)
 {
 	unsigned int cpu_type = read_c0_prid() & 0xF;
 
-	if(current_cpu_type() == CPU_LOONGSON3) {
-		/* GS464 do not support synci, and sync is just enough for GS464. */
-		if (cpu_type == PRID_REV_LOONGSON3A_R1) {
-			unsigned int *inst_ptr = (unsigned int *)&_text;
-			unsigned int *inst_ptr_init = (unsigned int *)&__init_begin;
-			while(inst_ptr <= (unsigned int *)&_etext) {
-				if (*inst_ptr == SYNCI)
-					*inst_ptr = SYNC;
-				inst_ptr++;
-			}
-
-			while(inst_ptr_init <= (unsigned int *)&__init_end) {
-				if (*inst_ptr_init == SYNCI)
-					*inst_ptr_init = SYNC;
-				inst_ptr_init++;
-			}
+	/* GS464 do not support synci, and sync is just enough for GS464. */
+	if (cpu_type == PRID_REV_LOONGSON3A_R1) {
+		unsigned int *inst_ptr = (unsigned int *)&_text;
+		unsigned int *inst_ptr_init = (unsigned int *)&__init_begin;
+		while(inst_ptr <= (unsigned int *)&_etext) {
+			if (*inst_ptr == SYNCI)
+				*inst_ptr = SYNC;
+			inst_ptr++;
 		}
 
-#ifndef CONFIG_KVM_GUEST_LS3A3000
-		loongson3_arch_func_optimize(cpu_type);
-#endif
+		while(inst_ptr_init <= (unsigned int *)&__init_end) {
+			if (*inst_ptr_init == SYNCI)
+				*inst_ptr_init = SYNC;
+			inst_ptr_init++;
+		}
 	}
+
+#ifndef CONFIG_KVM_GUEST_LS3A3000
+	loongson3_arch_func_optimize(cpu_type);
+#endif
 }
 EXPORT_SYMBOL(loongson3_inst_fixup);
