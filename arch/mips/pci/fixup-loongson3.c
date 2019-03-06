@@ -233,7 +233,7 @@ int __init ls2h_pcibios_map_irq(const struct pci_dev *dev, u8 slot, u8 pin)
 	return LS2H_PCH_PCIE_PORT0_IRQ + LS2H_PCIE_GET_PORTNUM(dev->sysdata);;
 }
 
-int __init pcibios_map_irq(const struct pci_dev *dev, u8 slot, u8 pin)
+int pcibios_map_irq(const struct pci_dev *dev, u8 slot, u8 pin)
 {
 	if(plat_device_is_ls3a_pci(&dev->dev))
 		return ls3a_pci_map_irq(dev, slot, pin);
