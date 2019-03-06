@@ -585,8 +585,15 @@ EXPORT(sys_call_table)
 	PTR	sys_kcmp
 	PTR	sys_finit_module
 	PTR	sys_sched_setattr
-	PTR	sys_sched_getattr
+	PTR	sys_sched_getattr		/* 4350 */
 	PTR	sys_renameat2
 	PTR	sys_seccomp
+	PTR	sys_getrandom
 	PTR	sys_memfd_create
+	PTR	sys_ni_syscall			/* was bfp */
+	PTR	sys_ni_syscall			/* 4355 was execveat */
+	PTR	sys_userfaultfd
+	PTR	sys_ni_syscall			/* was membarrier */
+	PTR	sys_ni_syscall			/* was mlock2 */
+	PTR	sys_copy_file_range
 	.size	sys_call_table,.-sys_call_table

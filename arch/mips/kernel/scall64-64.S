@@ -428,4 +428,10 @@ EXPORT(sys_call_table)
 	PTR	sys_seccomp
 	PTR	sys_getrandom
 	PTR	sys_memfd_create
+	PTR	sys_ni_syscall			/* 5315 was bfp */
+	PTR	sys_ni_syscall			/* was execveat */
+	PTR	sys_userfaultfd
+	PTR	sys_ni_syscall			/* was membarrier */
+	PTR	sys_ni_syscall			/* was mlock2 */
+	PTR	sys_copy_file_range
 	.size	sys_call_table,.-sys_call_table

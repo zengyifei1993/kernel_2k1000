@@ -374,11 +374,13 @@
 #define __NR_seccomp			(__NR_Linux + 352)
 #define __NR_getrandom			(__NR_Linux + 353)
 #define __NR_memfd_create		(__NR_Linux + 354)
+#define __NR_userfaultfd		(__NR_Linux + 357)
+#define __NR_copy_file_range		(__NR_Linux + 360)
 
 /*
  * Offset of the last Linux o32 flavoured syscall
  */
-#define __NR_Linux_syscalls		354
+#define __NR_Linux_syscalls		360
 
 #endif /* Want O32 || _MIPS_SIM == _MIPS_SIM_ABI32  */
 
@@ -708,11 +710,13 @@
 #define __NR_seccomp			(__NR_Linux + 312)
 #define __NR_getrandom			(__NR_Linux + 313)
 #define __NR_memfd_create		(__NR_Linux + 314)
+#define __NR_userfaultfd		(__NR_Linux + 317)
+#define __NR_copy_file_range		(__NR_Linux + 320)
 
 /*
  * Offset of the last Linux 64-bit flavoured syscall
  */
-#define __NR_Linux_syscalls		314
+#define __NR_Linux_syscalls		320
 
 #endif /* Want N64 || _MIPS_SIM == _MIPS_SIM_ABI64  */
 
@@ -1046,11 +1050,13 @@
 #define __NR_seccomp			(__NR_Linux + 316)
 #define __NR_getrandom			(__NR_Linux + 317)
 #define __NR_memfd_create		(__NR_Linux + 318)
+#define __NR_userfaultfd		(__NR_Linux + 321)
+#define __NR_copy_file_range		(__NR_Linux + 324)
 
 /*
  * Offset of the last N32 flavoured syscall
  */
-#define __NR_Linux_syscalls		318
+#define __NR_Linux_syscalls		324
 
 #endif /* Want N32 || _MIPS_SIM == _MIPS_SIM_NABI32  */
 
