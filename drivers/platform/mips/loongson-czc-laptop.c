@@ -126,7 +126,7 @@ struct sci_device
 	unsigned char name[10];
 };
 
-const char *version = "1.11";
+const static char *version = "1.11";
 
 extern void prom_printf(char *fmt, ...);
 extern int ec985x_query_get_event_num(void);

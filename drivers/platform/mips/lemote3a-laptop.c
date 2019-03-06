@@ -80,7 +80,7 @@ enum /* bat_reg_flag */
 #define EC_SCI_DEV		"sci"	/* < 10 bytes. */
 #define GPIO_SIZE		256
 
-const char *version = EC_VERSION;
+const static char *version = EC_VERSION;
 
 /* Power information structure */
 struct lemote3a_power_info
