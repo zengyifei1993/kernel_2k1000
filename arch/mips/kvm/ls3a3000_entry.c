@@ -12,13 +12,17 @@
 
 #include <linux/kvm_host.h>
 #include <linux/log2.h>
+#include <linux/moduleparam.h>
 #include <asm/mmu_context.h>
 #include <asm/setup.h>
 #include <asm/tlbex.h>
 #include <asm/uasm.h>
 
 #define issidepass 0
-#define softwaretlb 1
+unsigned int stlb = 0;
+module_param(stlb, uint, S_IRUGO | S_IWUSR);
+EXPORT_SYMBOL_GPL(stlb);
+
 //#define LSVZ_TLB_ISOLATE_DEBUG
 #ifdef LSVZ_TLB_ISOLATE_DEBUG
 int guest_vtlb_index = 0;
@@ -788,133 +792,133 @@ void *kvm_mips_ls3a3000_build_tlb_refill_target(void *addr, void *handler)
 	uasm_i_dsll32(&p, A1, A1, 16);
 	uasm_i_sltu(&p, A1, K0, A1);
 	/* A1 == 1 means (badvaddr < 0x4000000000000000) */
-#ifdef softwaretlb
-	uasm_il_beqz(&p, &r, A1, label_not_mapped);
-	uasm_i_nop(&p);
+	if (stlb == 1) {
+		uasm_il_beqz(&p, &r, A1, label_not_mapped);
+		uasm_i_nop(&p);
 
-	/* use soft TLB */
+		/* use soft TLB */
 
-	UASM_i_LW(&p, A0, offsetof(struct kvm_vcpu, arch.asid_we), K1);
-	//++weight
-	UASM_i_MFGC0(&p, A1, C0_ENTRYHI);
-	uasm_i_dsll(&p, A1, A1, 3);	// A1 = offset
-	UASM_i_ADDU(&p, A0, A0, A1);	// A0 = &asid_we[asid]
-	UASM_i_LW(&p, A1, 0, A0);
-	uasm_i_daddiu(&p, A1, A1, 1);
-	UASM_i_SW(&p, A1, 0, A0);
-	//find index
-	uasm_i_dsrl(&p, A1, K0, 15);	//A1 = badv >> 15
-	uasm_i_andi(&p, A1, A1, 0x7fff);//A1 = index
-	uasm_i_dsll(&p, A1, A1, 5);	//A1 = offset
-	UASM_i_LW(&p, A0, offsetof(struct kvm_vcpu, arch.stlb), K1);
-	UASM_i_ADDU(&p, A1, A1, A0);	//A1 = &stlb[s_index]
+		UASM_i_LW(&p, A0, offsetof(struct kvm_vcpu, arch.asid_we), K1);
+		//++weight
+		UASM_i_MFGC0(&p, A1, C0_ENTRYHI);
+		uasm_i_dsll(&p, A1, A1, 3);	// A1 = offset
+		UASM_i_ADDU(&p, A0, A0, A1);	// A0 = &asid_we[asid]
+		UASM_i_LW(&p, A1, 0, A0);
+		uasm_i_daddiu(&p, A1, A1, 1);
+		UASM_i_SW(&p, A1, 0, A0);
+		//find index
+		uasm_i_dsrl(&p, A1, K0, 15);	//A1 = badv >> 15
+		uasm_i_andi(&p, A1, A1, 0x7fff);//A1 = index
+		uasm_i_dsll(&p, A1, A1, 5);	//A1 = offset
+		UASM_i_LW(&p, A0, offsetof(struct kvm_vcpu, arch.stlb), K1);
+		UASM_i_ADDU(&p, A1, A1, A0);	//A1 = &stlb[s_index]
 
-	UASM_i_LW(&p, A0, 0, A1);	//A0 = lo0 x tag
-	uasm_i_dsrl(&p, A2, K0, 30);	//A2 = badv >> 31
-	UASM_i_LA(&p, A3, 0xffffffff);
-	uasm_i_and(&p, A2, A2, A3);
-	uasm_i_and(&p, A3, A0, A3);
-	uasm_il_bne(&p, &r, A2, A3, label_soft_asid2);	//vatag not match
-	uasm_i_nop(&p);
+		UASM_i_LW(&p, A0, 0, A1);	//A0 = lo0 x tag
+		uasm_i_dsrl(&p, A2, K0, 30);	//A2 = badv >> 31
+		UASM_i_LA(&p, A3, 0xffffffff);
+		uasm_i_and(&p, A2, A2, A3);
+		uasm_i_and(&p, A3, A0, A3);
+		uasm_il_bne(&p, &r, A2, A3, label_soft_asid2);	//vatag not match
+		uasm_i_nop(&p);
 
-	UASM_i_LW(&p, A2, offsetof(soft_tlb, lo1), A1);	//A2 = ? x asid x rx1 x rx0 x lo1
-	UASM_i_MFGC0(&p, A1, C0_ENTRYHI);
-	uasm_i_dsrl32(&p, A3, A2, 16);
-	uasm_i_andi(&p, A3, A3, 0xff);
-	uasm_il_bne(&p, &r, A1, A3, label_soft_asid2);
-	uasm_i_nop(&p);
-	//vatag match, asid match, check if Entrylo = 0, data in A0, A2
-	uasm_i_dsrl32(&p, A1, A0, 0);	//A1 = lo0
-	uasm_il_beqz(&p, &r, A1, label_mapped);
-	uasm_i_nop(&p);
-	uasm_i_dsrl32(&p, A3, A2, 0);
-	uasm_i_dsll32(&p, A3, A3, 24);	//move rx to top 8 bit
-	uasm_i_or(&p, A0, A3, A1);
-	UASM_i_MTC0(&p, A0, C0_ENTRYLO0);
+		UASM_i_LW(&p, A2, offsetof(soft_tlb, lo1), A1);	//A2 = ? x asid x rx1 x rx0 x lo1
+		UASM_i_MFGC0(&p, A1, C0_ENTRYHI);
+		uasm_i_dsrl32(&p, A3, A2, 16);
+		uasm_i_andi(&p, A3, A3, 0xff);
+		uasm_il_bne(&p, &r, A1, A3, label_soft_asid2);
+		uasm_i_nop(&p);
+		//vatag match, asid match, check if Entrylo = 0, data in A0, A2
+		uasm_i_dsrl32(&p, A1, A0, 0);	//A1 = lo0
+		uasm_il_beqz(&p, &r, A1, label_mapped);
+		uasm_i_nop(&p);
+		uasm_i_dsrl32(&p, A3, A2, 0);
+		uasm_i_dsll32(&p, A3, A3, 24);	//move rx to top 8 bit
+		uasm_i_or(&p, A0, A3, A1);
+		UASM_i_MTC0(&p, A0, C0_ENTRYLO0);
 
-	UASM_i_LA(&p, A3, 0xffffffff);
-	uasm_i_and(&p, A3, A2, A3);	//A3 = lo1
-	uasm_il_beqz(&p, &r, A3, label_mapped);
-	uasm_i_nop(&p);
-	uasm_i_dsrl32(&p, A0, A2, 8);
-	uasm_i_dsll32(&p, A0, A0, 24);
-	uasm_i_or(&p, A0, A0, A3);
-	UASM_i_MTC0(&p, A0, C0_ENTRYLO1);
+		UASM_i_LA(&p, A3, 0xffffffff);
+		uasm_i_and(&p, A3, A2, A3);	//A3 = lo1
+		uasm_il_beqz(&p, &r, A3, label_mapped);
+		uasm_i_nop(&p);
+		uasm_i_dsrl32(&p, A0, A2, 8);
+		uasm_i_dsll32(&p, A0, A0, 24);
+		uasm_i_or(&p, A0, A0, A3);
+		UASM_i_MTC0(&p, A0, C0_ENTRYLO1);
 
-	UASM_i_MFC0(&p, A0, C0_ENTRYHI);//save root entryhi
-	uasm_i_dsrl(&p, A3, A0, 8);
-	uasm_i_dsll(&p, A3, A3, 8);	//A3 = hi & ~0xff
-	UASM_i_MFGC0(&p, A2, C0_ENTRYHI);
-	uasm_i_or(&p, A2, A3, A2);
-	UASM_i_MTC0(&p, A2, C0_ENTRYHI);//write entryhi
-	//lo0, lo1 and entryhi ready
-	uasm_i_tlbwr(&p);
-	UASM_i_MTC0(&p, A0, C0_ENTRYHI);//restore root entryhi
+		UASM_i_MFC0(&p, A0, C0_ENTRYHI);//save root entryhi
+		uasm_i_dsrl(&p, A3, A0, 8);
+		uasm_i_dsll(&p, A3, A3, 8);	//A3 = hi & ~0xff
+		UASM_i_MFGC0(&p, A2, C0_ENTRYHI);
+		uasm_i_or(&p, A2, A3, A2);
+		UASM_i_MTC0(&p, A2, C0_ENTRYHI);//write entryhi
+		//lo0, lo1 and entryhi ready
+		uasm_i_tlbwr(&p);
+		UASM_i_MTC0(&p, A0, C0_ENTRYHI);//restore root entryhi
 
-	uasm_il_b(&p, &r, label_refill_exit);
-	uasm_i_nop(&p);
+		uasm_il_b(&p, &r, label_refill_exit);
+		uasm_i_nop(&p);
 
-	uasm_l_soft_asid2(&l, p);
+		uasm_l_soft_asid2(&l, p);
 
-	//asid1 match failed, match asid2
-	uasm_i_dsrl(&p, A1, K0, 15);	//A1 = badv >> 15
-	uasm_i_andi(&p, A1, A1, 0x7fff);//A1 = index
-	uasm_i_dsll(&p, A1, A1, 5);	//A1 = offset
-	UASM_i_LW(&p, A0, offsetof(struct kvm_vcpu, arch.stlb), K1);
-	UASM_i_ADDU(&p, A1, A1, A0);	//A1 = &stlb[s_index]
-	UASM_i_ADDIU(&p, A1, A1, sizeof(soft_tlb));	//A1 = &asid2
+		//asid1 match failed, match asid2
+		uasm_i_dsrl(&p, A1, K0, 15);	//A1 = badv >> 15
+		uasm_i_andi(&p, A1, A1, 0x7fff);//A1 = index
+		uasm_i_dsll(&p, A1, A1, 5);	//A1 = offset
+		UASM_i_LW(&p, A0, offsetof(struct kvm_vcpu, arch.stlb), K1);
+		UASM_i_ADDU(&p, A1, A1, A0);	//A1 = &stlb[s_index]
+		UASM_i_ADDIU(&p, A1, A1, sizeof(soft_tlb));	//A1 = &asid2
 
-	UASM_i_LW(&p, A0, 0, A1);	//A0 = lo0 x tag
-	uasm_i_dsrl(&p, A2, K0, 30);	//A2 = badv >> 31
-	UASM_i_LA(&p, A3, 0xffffffff);
-	uasm_i_and(&p, A2, A2, A3);
-	uasm_i_and(&p, A3, A0, A3);
-	uasm_il_bne(&p, &r, A2, A3, label_mapped);	//vatag not match
-	uasm_i_nop(&p);
+		UASM_i_LW(&p, A0, 0, A1);	//A0 = lo0 x tag
+		uasm_i_dsrl(&p, A2, K0, 30);	//A2 = badv >> 31
+		UASM_i_LA(&p, A3, 0xffffffff);
+		uasm_i_and(&p, A2, A2, A3);
+		uasm_i_and(&p, A3, A0, A3);
+		uasm_il_bne(&p, &r, A2, A3, label_mapped);	//vatag not match
+		uasm_i_nop(&p);
 
-	UASM_i_LW(&p, A2, offsetof(soft_tlb, lo1), A1);	//A2 = ? x asid x rx1 x rx0 x lo1
-	UASM_i_MFGC0(&p, A1, C0_ENTRYHI);
-	uasm_i_dsrl32(&p, A3, A2, 16);
-	uasm_i_andi(&p, A3, A3, 0xff);
-	uasm_il_bne(&p, &r, A1, A3, label_mapped);
-	uasm_i_nop(&p);
-	//vatag match, asid match, check if Entrylo = 0, data in A0, A2
-	uasm_i_dsrl32(&p, A1, A0, 0);	//A1 = lo0
-	uasm_il_beqz(&p, &r, A1, label_mapped);
-	uasm_i_nop(&p);
-	uasm_i_dsrl32(&p, A3, A2, 0);
-	uasm_i_dsll32(&p, A3, A3, 24);	//move rx to top 8 bit
-	uasm_i_or(&p, A0, A3, A1);
-	UASM_i_MTC0(&p, A0, C0_ENTRYLO0);
+		UASM_i_LW(&p, A2, offsetof(soft_tlb, lo1), A1);	//A2 = ? x asid x rx1 x rx0 x lo1
+		UASM_i_MFGC0(&p, A1, C0_ENTRYHI);
+		uasm_i_dsrl32(&p, A3, A2, 16);
+		uasm_i_andi(&p, A3, A3, 0xff);
+		uasm_il_bne(&p, &r, A1, A3, label_mapped);
+		uasm_i_nop(&p);
+		//vatag match, asid match, check if Entrylo = 0, data in A0, A2
+		uasm_i_dsrl32(&p, A1, A0, 0);	//A1 = lo0
+		uasm_il_beqz(&p, &r, A1, label_mapped);
+		uasm_i_nop(&p);
+		uasm_i_dsrl32(&p, A3, A2, 0);
+		uasm_i_dsll32(&p, A3, A3, 24);	//move rx to top 8 bit
+		uasm_i_or(&p, A0, A3, A1);
+		UASM_i_MTC0(&p, A0, C0_ENTRYLO0);
 
-	UASM_i_LA(&p, A3, 0xffffffff);
-	uasm_i_and(&p, A3, A2, A3);	//A3 = lo1
-	uasm_il_beqz(&p, &r, A3, label_mapped);
-	uasm_i_nop(&p);
-	uasm_i_dsrl32(&p, A0, A2, 8);
-	uasm_i_dsll32(&p, A0, A0, 24);
-	uasm_i_or(&p, A0, A0, A3);
-	UASM_i_MTC0(&p, A0, C0_ENTRYLO1);
+		UASM_i_LA(&p, A3, 0xffffffff);
+		uasm_i_and(&p, A3, A2, A3);	//A3 = lo1
+		uasm_il_beqz(&p, &r, A3, label_mapped);
+		uasm_i_nop(&p);
+		uasm_i_dsrl32(&p, A0, A2, 8);
+		uasm_i_dsll32(&p, A0, A0, 24);
+		uasm_i_or(&p, A0, A0, A3);
+		UASM_i_MTC0(&p, A0, C0_ENTRYLO1);
 
-	UASM_i_MFC0(&p, A0, C0_ENTRYHI);//save root entryhi
-	uasm_i_dsrl(&p, A3, A0, 8);
-	uasm_i_dsll(&p, A3, A3, 8);	//A3 = hi & ~0xff
-	UASM_i_MFGC0(&p, A2, C0_ENTRYHI);
-	uasm_i_or(&p, A2, A3, A2);
-	UASM_i_MTC0(&p, A2, C0_ENTRYHI);//write entryhi
-	//lo0, lo1 and entryhi ready
-	uasm_i_tlbwr(&p);
-	UASM_i_MTC0(&p, A0, C0_ENTRYHI);//restore root entryhi
-	//Flush ITLB to workaround read wrong root.entryhi.asid bug
-	uasm_i_ori(&p, A1, ZERO, 1);
-	uasm_i_mfc0(&p, A0, C0_DIAG);
-	uasm_i_ins(&p, A0, A1, LS_ITLB_SHIFT, 1);
-	uasm_i_mtc0(&p, A0, C0_DIAG);
+		UASM_i_MFC0(&p, A0, C0_ENTRYHI);//save root entryhi
+		uasm_i_dsrl(&p, A3, A0, 8);
+		uasm_i_dsll(&p, A3, A3, 8);	//A3 = hi & ~0xff
+		UASM_i_MFGC0(&p, A2, C0_ENTRYHI);
+		uasm_i_or(&p, A2, A3, A2);
+		UASM_i_MTC0(&p, A2, C0_ENTRYHI);//write entryhi
+		//lo0, lo1 and entryhi ready
+		uasm_i_tlbwr(&p);
+		UASM_i_MTC0(&p, A0, C0_ENTRYHI);//restore root entryhi
+		//Flush ITLB to workaround read wrong root.entryhi.asid bug
+		uasm_i_ori(&p, A1, ZERO, 1);
+		uasm_i_mfc0(&p, A0, C0_DIAG);
+		uasm_i_ins(&p, A0, A1, LS_ITLB_SHIFT, 1);
+		uasm_i_mtc0(&p, A0, C0_DIAG);
 
-	uasm_il_b(&p, &r, label_refill_exit);
-#else
-	uasm_il_bnez(&p, &r, A1, label_mapped);
-#endif
+		uasm_il_b(&p, &r, label_refill_exit);
+	} else {
+		uasm_il_bnez(&p, &r, A1, label_mapped);
+	}
 	uasm_i_nop(&p);
 
 	uasm_l_not_mapped(&l, p);
@@ -2124,3 +2128,18 @@ static void *kvm_mips_build_ret_to_host(void *addr)
 
 	return p;
 }
+
+int stlb_setup(char *str)
+{
+	if (strcmp(str, "on") == 0) {
+		stlb = 1;
+		printk("ls3a3000 STLB is enabled \n");
+	}
+	else if (strcmp(str, "off") == 0) {
+		stlb = 0;
+		printk("ls3a3000 STLB is disabled \n");
+	}
+
+	return 1;
+}
+__setup("stlb=", stlb_setup);
