@@ -29,6 +29,15 @@
 #include <asm/spram.h>
 #include <asm/uaccess.h>
 
+
+#ifdef CONFIG_CPU_LOONGSON3
+static void decode_cfg(struct cpuinfo_mips *c)
+{
+	unsigned int cfg1 = read_cfg(LS_CFG1);
+	if (cfg1 & LS_CFG1_LASX)
+		c->ases |= MIPS_ASE_LASX;
+}
+#endif
  /*
  * Determine the FCSR mask for FPU hardware.
  */
@@ -1426,6 +1435,9 @@ static inline void cpu_probe_loongson(struct cpuinfo_mips *c, unsigned int cpu)
 
 		decode_configs(c);
 		c->options |= MIPS_CPU_FTLB | MIPS_CPU_TLBINV | MIPS_CPU_LDPTE;
+
+		decode_cfg(c);
+
 		break;
 	}
 }

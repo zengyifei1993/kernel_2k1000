@@ -1237,6 +1237,26 @@ __asm__(".macro parse_r var r\n\t"
  *
  */
 #ifdef CONFIG_CPU_LOONGSON3
+#define LS_CFG1		(1)
+
+#define LS_CFG1_LASX	(1 << 12)
+
+static inline unsigned int read_cfg(int reg)
+{
+	unsigned int __res;
+
+	__asm__ __volatile__(
+		"parse_r __res,%0\n\t"
+		"parse_r reg,%1\n\t"
+		".insn \n\t"
+		".word (0xc8080118 | (reg << 21) | (__res << 11))\n\t"
+		:"=r"(__res)
+		:"r"(reg)
+		:
+		);
+	return __res;
+}
+
 static inline unsigned int read_csr(int reg)
 {
 	unsigned int __res;

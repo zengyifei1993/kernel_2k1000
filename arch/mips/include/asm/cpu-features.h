@@ -347,6 +347,13 @@
 #elif !defined(cpu_has_msa)
 # define cpu_has_msa		0
 #endif
+
+#if defined(CONFIG_CPU_HAS_LASX) && !defined(cpu_has_lasx)
+# define cpu_has_lasx		(cpu_data[0].ases & MIPS_ASE_LASX)
+#elif !defined(cpu_has_lasx)
+# define cpu_has_lasx		0
+#endif
+
 #ifndef cpu_guest_has_rw_llb
 #define cpu_guest_has_rw_llb    (cpu_has_mips_r6 || (cpu_data[0].guest.options & MIPS_CPU_RW_LLB))
 #endif
