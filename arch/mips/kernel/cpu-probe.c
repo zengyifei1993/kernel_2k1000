@@ -29,7 +29,6 @@
 #include <asm/spram.h>
 #include <asm/uaccess.h>
 
-
 #ifdef CONFIG_CPU_LOONGSON3
 static void decode_cfg(struct cpuinfo_mips *c)
 {
@@ -1426,6 +1425,7 @@ static inline void cpu_probe_loongson(struct cpuinfo_mips *c, unsigned int cpu)
 				break;
 		}
 		break;
+#ifdef CONFIG_CPU_LOONGSON3
 	default:
 		c->cputype = CPU_LOONGSON3_COMP;
 		__cpu_name[cpu] = "ICT Loongson-3";
@@ -1439,6 +1439,7 @@ static inline void cpu_probe_loongson(struct cpuinfo_mips *c, unsigned int cpu)
 		decode_cfg(c);
 
 		break;
+#endif
 	}
 }
 
