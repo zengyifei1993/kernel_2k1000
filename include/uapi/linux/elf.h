@@ -414,6 +414,7 @@ typedef struct elf64_shdr {
 #define NT_METAG_RPIPE	0x501		/* Metag read pipeline state */
 #define NT_METAG_TLS	0x502		/* Metag TLS pointer */
 #define NT_MIPS_MSA	0x802		/* MIPS SIMD registers */
+#define NT_MIPS_LASX	0x840		/* Loongson Advanced SIMD eXtenstion registers */
 
 
 /* Note header in a PT_NOTE section */
