@@ -30,6 +30,7 @@ static inline int __pure __get_cpu_type(const int cpu_type)
 
 #ifdef CONFIG_SYS_HAS_CPU_LOONGSON3
 	case CPU_LOONGSON3:
+	case CPU_LOONGSON3_COMP:
 #endif
 
 #ifdef CONFIG_SYS_HAS_CPU_MIPS32_R1
