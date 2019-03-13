@@ -16,7 +16,7 @@
  * userspace to avoid code changes.
  */
 #ifndef __KERNEL__
-# if _MIPS_SZLONG == 64 !defined(__SANE_USERSPACE_TYPES__)
+# if _MIPS_SZLONG == 64 && !defined(__SANE_USERSPACE_TYPES__)
 #  include <asm-generic/int-l64.h>
 # else
 #  include <asm-generic/int-ll64.h>
