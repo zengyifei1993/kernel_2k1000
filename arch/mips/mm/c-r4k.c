@@ -376,7 +376,9 @@ static void  r4k_blast_scache_node_setup(void)
 static inline void local_r4k___flush_cache_all(void * args)
 {
 #if defined(CONFIG_CPU_LOONGSON3)
+#ifndef CONFIG_KVM_GUEST_LS3A3000
 	r4k_blast_scache_node(((read_c0_ebase() & 0x3FF)) >> 2);
+#endif
 	return;
 #endif
 
