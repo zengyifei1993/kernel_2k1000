@@ -17,6 +17,30 @@
 #include <asm/cevt-r4k.h>
 #include <asm/gic.h>
 
+#if defined(CONFIG_LOONGSON3_ENHANCEMENT) && !defined(CONFIG_KVM_GUEST_LS3A3000)
+
+#include <loongson.h>
+
+#define CPU_TO_CONF(x)	(0x900000003ff00000 | (((unsigned long)x & 0x3) << 8) \
+		| (((unsigned long)x & 0xc) << 42))
+#define OFF_TIMER	0x1060
+
+static int loongson3_next_event(unsigned long delta,
+				struct clock_event_device *evt)
+{
+	unsigned long addr;
+	unsigned long cnt;
+	unsigned int raw_cpuid;
+
+	raw_cpuid = (read_c0_ebase() & 0x3ff);
+	addr = CPU_TO_CONF(raw_cpuid) + OFF_TIMER;
+
+	cnt = (delta | (0x5UL << 61));
+	ls64_conf_write64(cnt, (void *)addr);
+	return 0;
+}
+#endif
+
 /*
  * The SMTC Kernel for the 34K, 1004K, et. al. replaces several
  * of these routines with SMTC-specific variants.
@@ -210,17 +234,35 @@ int  r4k_clockevent_init(void)
 	cd->set_mode		= mips_set_clock_mode;
 	cd->event_handler	= mips_event_handler;
 
+#if !defined(CONFIG_LOONGSON3_ENHANCEMENT) && !defined(CONFIG_KVM_GUEST_LS3A3000)
 #ifdef CONFIG_CEVT_GIC
 	if (!gic_present)
 #endif
 	clockevents_config_and_register(cd, mips_hpt_frequency, 0x300, 0x7fffffff);
+#else
 
+	cd->name		= "loongson3";
+	cd->features		= CLOCK_EVT_FEAT_ONESHOT;
+
+	cd->rating		= 300;
+	cd->irq			= irq;
+	cd->cpumask		= cpumask_of(cpu);
+	cd->set_next_event	= loongson3_next_event;
+	cd->set_mode		= mips_set_clock_mode;
+	cd->event_handler	= mips_event_handler;
+
+	clockevents_config_and_register(cd, mips_hpt_frequency * 2, 0x600, ((1UL << 48) - 1));
+	irq = read_c0_config6();
+	irq &= ~MIPS_CONF6_INNTIMER;
+	irq |= MIPS_CONF6_EXTIMER;
+	write_c0_config6(irq);
+#endif
 	if (cp0_timer_irq_installed)
 		return 0;
 
 	cp0_timer_irq_installed = 1;
 
-	setup_irq(irq, &c0_compare_irqaction);
+	setup_irq(cd->irq, &c0_compare_irqaction);
 
 	return 0;
 }

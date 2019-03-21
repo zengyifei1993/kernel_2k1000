@@ -402,7 +402,9 @@ void  loongson3_smp_finish(void)
 {
 	int cpu = smp_processor_id();
 
+#ifndef CONFIG_LOONGSON3_ENHANCEMENT
 	write_c0_compare(read_c0_count() + mips_hpt_frequency/HZ);
+#endif
 	local_irq_enable();
 	if (csr_ipi_enabled)
 		loongson3_ipi_write64_csr(0, LOONGSON_MAIL_BUF_OFFSET);
