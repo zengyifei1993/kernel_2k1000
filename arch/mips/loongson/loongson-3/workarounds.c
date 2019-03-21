@@ -157,12 +157,9 @@ static inline int loongson3_ccnuma_platform(void)
 extern u32 nr_nodes_loongson;
 void loongson3_arch_func_optimize(unsigned int cpu_type)
 {
-	unsigned int *p;
-	unsigned int delay_slot_inst;
-	struct uasm_label labels[3];
-	struct uasm_reloc relocs[3];
-	struct uasm_label *l = labels;
-	struct uasm_reloc *r = relocs;
+	unsigned int *p __maybe_unused;
+	struct uasm_label labels[3] __maybe_unused;
+	struct uasm_reloc relocs[3] __maybe_unused;
 
 	if (!loongson3_ccnuma_platform()) {
 #ifdef CONFIG_PHASE_LOCK
@@ -185,6 +182,10 @@ void loongson3_arch_func_optimize(unsigned int cpu_type)
 	/* do noting for legacy processors. */
 		break;
 	default:
+#if !defined(CONFIG_LOONGSON3_ENHANCEMENT)
+		struct uasm_label *l = labels;
+		struct uasm_reloc *r = relocs;
+		unsigned int delay_slot_inst;
 		memset(labels, 0, sizeof(labels));
 		memset(relocs, 0, sizeof(relocs));
 
@@ -247,6 +248,7 @@ void loongson3_arch_func_optimize(unsigned int cpu_type)
 		uasm_i_nop(&p);
 
 		uasm_resolve_relocs(relocs, labels);
+#endif
 		break;
 	}
 }
@@ -255,7 +257,7 @@ void loongson3_arch_func_optimize(unsigned int cpu_type)
  * for 3A1000 synci will lead to crash, so use the sync intead of synci
  * in the vmlinux range
  */
-void  loongson3_inst_fixup(void)
+asmlinkage void loongson3_inst_fixup(void)
 {
 	unsigned int cpu_type = read_c0_prid() & 0xF;
 
@@ -280,4 +282,3 @@ void  loongson3_inst_fixup(void)
 	loongson3_arch_func_optimize(cpu_type);
 #endif
 }
-EXPORT_SYMBOL(loongson3_inst_fixup);
