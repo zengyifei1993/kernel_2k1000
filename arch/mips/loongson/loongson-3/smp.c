@@ -67,33 +67,6 @@ static void do_cpu_hotplug_timer(struct work_struct *work)
 }
 #endif
 
-
-/* read a 64bit value from ipi register */
-uint64_t loongson3_ipi_read64(void * addr)
-{
-	return *((volatile uint64_t *)addr);
-};
-
-/* write a 64bit value to ipi register */
-void loongson3_ipi_write64(uint64_t action, void * addr)
-{
-	*((volatile uint64_t *)addr) = action;
-	__wbflush();
-};
-
-/* read a 32bit value from ipi register */
-uint32_t loongson3_ipi_read32(void * addr)
-{
-	return *((volatile uint32_t *)addr);
-};
-
-/* write a 32bit value to ipi register */
-void loongson3_ipi_write32(uint32_t action, void * addr)
-{
-	*((volatile uint32_t *)addr) = action;
-	__wbflush();
-};
-
 /* read a 32bit value from ipi register through CSR */
 uint32_t loongson3_ipi_read32_csr(int reg)
 {
@@ -255,7 +228,7 @@ static void loongson3_send_ipi_single(int cpu, unsigned int action)
 	if (csr_ipi_enabled) {
 		loongson3_ipi_send_csr(action, cpu_logical_map(cpu));
 	} else {
-		loongson3_ipi_write32((u32)action, ipi_set0_regs[cpu_logical_map(cpu)]);
+		ls64_conf_write32((u32)action, ipi_set0_regs[cpu_logical_map(cpu)]);
 	}
 }
 
@@ -267,7 +240,7 @@ static void loongson3_send_ipi_mask(const struct cpumask *mask, unsigned int act
 			loongson3_ipi_send_csr(action, cpu_logical_map(i));
 	} else {
 		for_each_cpu(i, mask)
-			loongson3_ipi_write32((u32)action, ipi_set0_regs[cpu_logical_map(i)]);
+			ls64_conf_write32((u32)action, ipi_set0_regs[cpu_logical_map(i)]);
 	}
 }
 
@@ -280,7 +253,7 @@ void loongson3_send_irq_by_ipi(int cpu, int irqs)
 	if (csr_ipi_enabled) {
 		loongson3_ipi_send_csr(irqs << IPI_IRQ_OFFSET, cpu_logical_map(cpu));
 	} else {
-		loongson3_ipi_write32(irqs << IPI_IRQ_OFFSET, ipi_set0_regs[cpu_logical_map(cpu)]);
+		ls64_conf_write32(irqs << IPI_IRQ_OFFSET, ipi_set0_regs[cpu_logical_map(cpu)]);
 	}
 }
 
@@ -296,10 +269,10 @@ void loongson3_ipi_interrupt(struct pt_regs *regs)
 		/* Clear the ipi register to clear the interrupt */
 		loongson3_ipi_write32_csr((u32)action, LOONGSON_IPI_CLEAR_OFFSET);
 	} else {
-		action = loongson3_ipi_read32(ipi_status0_regs[cpu_logical_map(cpu)]);
+		action = ls64_conf_read32(ipi_status0_regs[cpu_logical_map(cpu)]);
 		irqs = action >> IPI_IRQ_OFFSET;
 		/* Clear the ipi register to clear the interrupt */
-		loongson3_ipi_write32((u32)action, ipi_clear0_regs[cpu_logical_map(cpu)]);
+		ls64_conf_write32((u32)action, ipi_clear0_regs[cpu_logical_map(cpu)]);
 	}
 
 	if (action & SMP_RESCHEDULE_YOURSELF) {
@@ -374,7 +347,7 @@ void  loongson3_init_secondary(void)
 	if (csr_ipi_enabled)
 		loongson3_ipi_write32_csr(0xffffffff, LOONGSON_IPI_EN_OFFSET);
 	else
-		loongson3_ipi_write32(0xffffffff, ipi_en0_regs[cpu_logical_map(cpu)]);		
+		ls64_conf_write32(0xffffffff, ipi_en0_regs[cpu_logical_map(cpu)]);
 
 	per_cpu(cpu_state, cpu) = CPU_ONLINE;
 	cpu_data[cpu].core = cpu_logical_map(cpu) % cores_per_package;
@@ -407,7 +380,7 @@ void  loongson3_smp_finish(void)
 	if (csr_ipi_enabled)
 		loongson3_ipi_write64_csr(0, LOONGSON_MAIL_BUF_OFFSET);
 	else 
-		loongson3_ipi_write64(0, (void *)(ipi_mailbox_buf[cpu_logical_map(cpu)]+0x0));
+		ls64_conf_write64(0, (void *)(ipi_mailbox_buf[cpu_logical_map(cpu)]+0x0));
 	if (verbose || system_state == SYSTEM_BOOTING)
 		printk(KERN_INFO "CPU#%d finished, CP0_ST=%x\n",
 			smp_processor_id(), read_c0_status());
@@ -457,9 +430,9 @@ void __init loongson3_smp_setup(void)
 			loongson3_mail_send_csr(0, i, 0);
 	} else {
 		/* Enable ipi interrupt on boot cpu */
-		loongson3_ipi_write32(0xffffffff, ipi_en0_regs[cpu_logical_map(0)]);		
+		ls64_conf_write32(0xffffffff, ipi_en0_regs[cpu_logical_map(0)]);
 		for (i = 0; i < possible_cpus_loongson; i++)
-			loongson3_ipi_write64(0, (void *)(ipi_mailbox_buf[i]+0x0));
+			ls64_conf_write64(0, (void *)(ipi_mailbox_buf[i]+0x0));
 	}	
 
 	cpu_data[0].core = cpu_logical_map(0) % cores_per_package;
@@ -504,10 +477,10 @@ void  loongson3_boot_secondary(int cpu, struct task_struct *idle)
 		loongson3_mail_send_csr(startargs[1], cpu_logical_map(cpu), 1);
 		loongson3_mail_send_csr(startargs[0], cpu_logical_map(cpu), 0);
 	} else {
-		loongson3_ipi_write64(startargs[3], (void *)(ipi_mailbox_buf[cpu_logical_map(cpu)]+0x18));
-		loongson3_ipi_write64(startargs[2], (void *)(ipi_mailbox_buf[cpu_logical_map(cpu)]+0x10));
-		loongson3_ipi_write64(startargs[1], (void *)(ipi_mailbox_buf[cpu_logical_map(cpu)]+0x8));
-		loongson3_ipi_write64(startargs[0], (void *)(ipi_mailbox_buf[cpu_logical_map(cpu)]+0x0));
+		ls64_conf_write64(startargs[3], (void *)(ipi_mailbox_buf[cpu_logical_map(cpu)]+0x18));
+		ls64_conf_write64(startargs[2], (void *)(ipi_mailbox_buf[cpu_logical_map(cpu)]+0x10));
+		ls64_conf_write64(startargs[1], (void *)(ipi_mailbox_buf[cpu_logical_map(cpu)]+0x8));
+		ls64_conf_write64(startargs[0], (void *)(ipi_mailbox_buf[cpu_logical_map(cpu)]+0x0));
 	}
 }
 

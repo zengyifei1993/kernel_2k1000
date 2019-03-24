@@ -380,4 +380,37 @@ static inline void disable_unused_cpus(void) {}
 #endif
 
 extern void prom_printf(char *fmt, ...);
+
+static inline void ls64_conf_write64(u64 val64, volatile void __iomem *addr)
+{
+
+	asm volatile (
+	"	.set push			\n"
+	"	.set noreorder			\n"
+	"	sd	%[v], (%[hw])		\n"
+	"	lb	$0, (%[hw])		\n"
+	"	.set pop			\n"
+	:
+	: [hw] "r" (addr),  [v] "r" (val64)
+	);
+}
+
+static inline void ls64_conf_write32(u32 val, volatile void __iomem *addr)
+{
+	asm volatile (
+	"	.set push			\n"
+	"	.set noreorder			\n"
+	"	sw	%[v], (%[hw])		\n"
+	"	lb	$0, (%[hw])		\n"
+	"	.set pop			\n"
+	:
+	: [hw] "r" (addr), [v] "r" (val)
+	);
+
+}
+
+
+#define ls64_conf_read64(addr) readq(addr)
+#define ls64_conf_read32(addr) readl(addr)
+
 #endif /* __ASM_MACH_LOONGSON_LOONGSON_H */
