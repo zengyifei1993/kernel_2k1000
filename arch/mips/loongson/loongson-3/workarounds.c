@@ -183,6 +183,7 @@ void loongson3_arch_func_optimize(unsigned int cpu_type)
 		break;
 	default:
 #if !defined(CONFIG_LOONGSON3_ENHANCEMENT)
+	{
 		struct uasm_label *l = labels;
 		struct uasm_reloc *r = relocs;
 		unsigned int delay_slot_inst;
@@ -248,6 +249,7 @@ void loongson3_arch_func_optimize(unsigned int cpu_type)
 		uasm_i_nop(&p);
 
 		uasm_resolve_relocs(relocs, labels);
+	}
 #endif
 		break;
 	}
