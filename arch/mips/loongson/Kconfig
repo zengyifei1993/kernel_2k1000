@@ -203,8 +203,8 @@ config UEFI_FIRMWARE_INTERFACE
 	bool
 
 config HAVE_SETUP_PER_CPU_AREA
-	def_bool y
+	def_bool n
 
 config NEED_PER_CPU_EMBED_FIRST_CHUNK
-	def_bool y
+	def_bool n
 endif # MACH_LOONGSON
