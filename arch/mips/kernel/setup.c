@@ -872,6 +872,7 @@ arch_initcall(debugfs_mips);
 #endif
 
 #if defined(CONFIG_CPU_LOONGSON3) && defined(CONFIG_NUMA)
+#if defined(CONFIG_HAVE_SETUP_PER_CPU_AREA) && defined(CONFIG_NEED_PER_CPU_EMBED_FIRST_CHUNK)
 #include <linux/percpu.h>
 unsigned long __per_cpu_offset[NR_CPUS] __read_mostly;
 EXPORT_SYMBOL(__per_cpu_offset);
@@ -899,7 +900,6 @@ static int __init  pcpu_cpu_distance(unsigned int from, unsigned int to)
 		return REMOTE_DISTANCE;
 }
 
-
 void __init setup_per_cpu_areas(void)
 {
 	unsigned int cpu;
@@ -918,4 +918,5 @@ void __init setup_per_cpu_areas(void)
 	for_each_possible_cpu(cpu)
 		__per_cpu_offset[cpu] = delta + pcpu_unit_offsets[cpu];
 }
+#endif
 #endif
