@@ -366,6 +366,11 @@
 #ifndef cpu_guest_has_userlocal
 #define cpu_guest_has_userlocal (cpu_data[0].guest.options & MIPS_CPU_ULRI)
 #endif
+#if defined(CONFIG_CPU_LOONGSON3) || defined(CONFIG_CPU_LOONGSON2K)
+#ifndef cpu_has_cpucfg
+#define cpu_has_cpucfg     (cpu_data[0].lses & MIPS_LSE_CPUCFG)
+#endif
+#endif
 /*
  *  * Guest capabilities
  *   */

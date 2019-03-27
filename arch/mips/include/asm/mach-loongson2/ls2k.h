@@ -410,4 +410,124 @@ extern u32 vram_type;
 extern u64 uma_vram_addr;
 extern u64 uma_vram_size;
 extern u32 gpu_brust_type;
+
+/*
+ * Loongson specific extension encodings
+ */
+
+#define MBIT_U(bit)		(1U << (bit))
+
+/* cpucfg register 1*/
+#define MIPS_LSE_FP		MBIT_U( 0)
+#define MIPS_LSE_MMI		MBIT_U( 4)
+#define MIPS_LSE_MSA1		MBIT_U( 5)
+#define MIPS_LSE_MSA2		MBIT_U( 6)
+#define MIPS_LSE_CGP		MBIT_U( 7)
+#define MIPS_LSE_WRP		MBIT_U( 8)
+#define MIPS_LSE_LSX1		MBIT_U( 9)
+#define MIPS_LSE_LSX2		MBIT_U( 10)
+#define MIPS_LSE_LASX		MBIT_U( 11)
+#define MIPS_LSE_R6FXP		MBIT_U( 12)
+#define MIPS_LSE_R6CRCP		MBIT_U( 13)
+#define MIPS_LSE_R6FFP		MBIT_U( 14)
+#define MIPS_LSE_CNT64		MBIT_U( 15)
+#define MIPS_LSE_LSLDR0		MBIT_U( 16)
+#define MIPS_LSE_LSPREF		MBIT_U( 17)
+#define MIPS_LSE_LSPREFX	MBIT_U( 18)
+#define MIPS_LSE_LSSYNCI	MBIT_U( 19)
+#define MIPS_LSE_LSUCA		MBIT_U( 20)
+#define MIPS_LSE_LLSYNC		MBIT_U( 21)
+#define MIPS_LSE_TGTSYNC	MBIT_U( 22)
+#define MIPS_LSE_LLEXC		MBIT_U( 23)
+#define MIPS_LSE_SCRAND		MBIT_U( 24)
+#define MIPS_LSE_MUALP		MBIT_U( 25)
+#define MIPS_LSE_KMUALEN	MBIT_U( 26)
+#define MIPS_LSE_ITLBT		MBIT_U( 27)
+#define MIPS_LSE_LSUPERF	MBIT_U( 28)
+#define MIPS_LSE_SFBP		MBIT_U( 29)
+#define MIPS_LSE_CMDAP		MBIT_U( 30)
+
+#define	MIPS_LSE_FPREV_OFF	1
+#define MIPS_LSE_FPREV_MASK	0x7
+#define MIPS_LSE_FPREV(ver)	(((ver) & MIPS_LSE_FPREV_MASK) << MIPS_LSE_FPREV_OFF)
+
+#define MIPS_LSE_REG1_BASE	(MIPS_LSE_FP | MIPS_LSE_MMI | \
+	MIPS_LSE_LSLDR0 | MIPS_LSE_LSSYNCI | MIPS_LSE_LSUCA | \
+	MIPS_LSE_TGTSYNC| MIPS_LSE_LSUPERF | MIPS_LSE_LLSYNC)
+
+/* cpucfg register 2*/
+#define MIPS_LSE_LEXT1		MBIT_U( 0)
+#define MIPS_LSE_LEXT2		MBIT_U( 1)
+#define MIPS_LSE_LEXT3		MBIT_U( 2)
+#define MIPS_LSE_LSPW		MBIT_U( 3)
+#define MIPS_LSE_LBT1		MBIT_U( 4)
+#define MIPS_LSE_LBT2		MBIT_U( 5)
+#define MIPS_LSE_LBT3		MBIT_U( 6)
+#define MIPS_LSE_LBTMMU		MBIT_U( 7)
+#define MIPS_LSE_LPMP		MBIT_U( 8)
+#define MIPS_LSE_LAMO		MBIT_U( 12)
+#define MIPS_LSE_LPIXU		MBIT_U( 13)
+#define MIPS_LSE_LPIXNU		MBIT_U( 14)
+#define MIPS_LSE_LVZP		MBIT_U( 15)
+#define MIPS_LSE_LGFTP		MBIT_U( 19)
+#define MIPS_LSE_LGFTREV	MBIT_U( 20)
+#define MIPS_LSE_LLFTP		MBIT_U( 23)
+#define MIPS_LSE_LLFREV		MBIT_U( 24)
+#define MIPS_LSE_LCSRP		MBIT_U( 27)
+#define MIPS_LSE_DISBLKLY	MBIT_U( 28)
+
+#define	LS_LPMREV_2K_R1		0x2
+#define	LS_LPMREV_2K_R2		0x2
+
+#define MIPS_LSE_LPMREV_OFF	9
+#define MIPS_LSE_LPMREV_MASK	0x7
+#define MIPS_LSE_LPMREV(ver)	(((ver) & MIPS_LSE_LPMREV_MASK) << MIPS_LSE_LPMREV_OFF)
+
+#define	LS_LVZREV_2K_R1		0x0
+#define	LS_LVZREV_2K_R2		0x0
+
+#define MIPS_LSE_LVZREV_OFF	16
+#define MIPS_LSE_LVZREV_MASK	0x7
+#define MIPS_LSE_LVZREV(ver)	(((ver) & MIPS_LSE_LVZREV_MASK) << MIPS_LSE_LVZREV_OFF)
+
+#define	MIPS_LSE_REG2_BASE	(MIPS_LSE_LEXT1 | MIPS_LSE_LBT1 | MIPS_LSE_LPMP)
+
+/* cpucfg register 3*/
+#define MIPS_LSE_LCAMP		MBIT_U( 0)
+
+#define	LS_LCAMREV_2K_R1	0x0
+#define	LS_LCAMREV_2K_R2	0x0
+
+#define MIPS_LSE_LCAMPREV_OFF	1
+#define MIPS_LSE_LCAMPREV_MASK	0x7
+#define MIPS_LSE_LCAMPREV(ver)	(((ver) & MIPS_LSE_LCAMPREV_MASK) << MIPS_LSE_LCAMPREV_OFF)
+
+#define	LS_LCAMNUM_2K_R1	0x0
+#define	LS_LCAMNUM_2K_R2	0x0
+
+#define MIPS_LSE_LCAMNUM_OFF	4
+#define MIPS_LSE_LCAMNUM_MASK	0xff
+#define MIPS_LSE_LCAMNUM(val)	(((val) & MIPS_LSE_LCAMNUM_MASK) << MIPS_LSE_LCAMNUM_OFF)
+
+#define	LS_LCAMKW_2K_R1		0x0
+#define	LS_LCAMKW_2K_R2		0x0
+
+#define MIPS_LSE_LCAMKW_OFF	12
+#define MIPS_LSE_LCAMKW_MASK	0xff
+#define MIPS_LSE_LCAMKW(val)	(((val) & MIPS_LSE_LCAMKW_MASK) << MIPS_LSE_LCAMKW_OFF)
+
+#define	LS_LCAMVW_2K_R1		0x0
+#define	LS_LCAMVW_2K_R2		0x0
+
+#define MIPS_LSE_LCAMVW_OFF	20
+#define MIPS_LSE_LCAMVW_MASK	0xff
+#define MIPS_LSE_LCAMVW(val)	(((val) & MIPS_LSE_LCAMVW_MASK) << MIPS_LSE_LCAMVW_OFF)
+
+#define MIPS_LSE_REG3_BASE	(MIPS_LSE_LCAMPREV(LS_LCAMREV_3AR1) | MIPS_LSE_LCAMNUM(LS_LCAMNUM_3AR1) |\
+	MIPS_LSE_LCAMKW(LS_LCAMKW_3AR1) | MIPS_LSE_LCAMVW(LS_LCAMVW_3AR1) | MIPS_LSE_LCAMP)
+
+struct cpucfg_info{
+	int	reg[9];
+};
+
 #endif /* _LS2K_H */

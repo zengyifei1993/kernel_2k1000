@@ -169,3 +169,42 @@ int __init ls2k_publish_devices(void)
 arch_initcall(setup_package);
 arch_initcall(setup_dma_ops);
 device_initcall(ls2k_publish_devices);
+
+void encode_cpucfg_info(struct cpuinfo_mips *c,int cpu)
+{
+	extern struct cpucfg_info cpucfg_regs[];
+
+	cpucfg_regs[cpu].reg[0] = c->processor_id;
+	cpucfg_regs[cpu].reg[1] = MIPS_LSE_REG1_BASE | MIPS_LSE_FPREV(c->fpu_id);
+	cpucfg_regs[cpu].reg[2] = MIPS_LSE_REG2_BASE;
+	cpucfg_regs[cpu].reg[3] = 0;
+	cpucfg_regs[cpu].reg[4] = 0;
+	cpucfg_regs[cpu].reg[5] = 0;
+	cpucfg_regs[cpu].reg[6] = 0;
+	cpucfg_regs[cpu].reg[7] = 0;
+	cpucfg_regs[cpu].reg[8] = 0;
+
+	switch (c->processor_id & 0xff0000) {
+	case PRID_COMP_LOONGSON:
+		switch (c->processor_id & 0xff00) {
+		case PRID_IMP_LOONGSON2K:
+			switch (c->processor_id & PRID_REV_MASK) {
+			case PRID_REV_LOONGSON2K_R2:
+				cpucfg_regs[cpu].reg[1] |= MIPS_LSE_CMDAP;
+			case PRID_REV_LOONGSON2K_R1:
+				cpucfg_regs[cpu].reg[1] |= MIPS_LSE_MSA1 | MIPS_LSE_SFBP;
+				cpucfg_regs[cpu].reg[2] |= MIPS_LSE_LEXT2 | MIPS_LSE_LBT2 |
+							   MIPS_LSE_LPMREV(LS_LPMREV_2K_R1);
+			default:
+				break;
+			}
+		default:
+			break;
+		}
+		break;
+	default:
+		cpucfg_regs[cpu].reg[1] = 0;
+		cpucfg_regs[cpu].reg[2] = 0;
+		break;
+	}
+}

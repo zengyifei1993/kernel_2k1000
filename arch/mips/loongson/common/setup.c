@@ -81,3 +81,62 @@ void __init device_tree_init(void)
 	unflatten_device_tree();
 
 }
+
+void encode_cpucfg_info(struct cpuinfo_mips *c,int cpu)
+{
+	extern struct cpucfg_info cpucfg_regs[];
+
+	cpucfg_regs[cpu].reg[0] = c->processor_id;
+	cpucfg_regs[cpu].reg[1] = MIPS_LSE_REG1_BASE | MIPS_LSE_FPREV(c->fpu_id);
+	cpucfg_regs[cpu].reg[2] = MIPS_LSE_REG2_BASE;
+	cpucfg_regs[cpu].reg[3] = MIPS_LSE_REG3_BASE;
+	cpucfg_regs[cpu].reg[4] = 0;
+	cpucfg_regs[cpu].reg[5] = 0;
+	cpucfg_regs[cpu].reg[6] = 0;
+	cpucfg_regs[cpu].reg[7] = 0;
+	cpucfg_regs[cpu].reg[8] = 0;
+
+	switch (c->processor_id & 0xff0000) {
+	case PRID_COMP_LEGACY:
+		switch (c->processor_id & 0xff00) {
+		case PRID_IMP_LOONGSON2:  /* Loongson-3 */
+			switch (c->processor_id & PRID_REV_MASK) {
+			case PRID_REV_LOONGSON3B_R2:
+				cpucfg_regs[cpu].reg[2] |= MIPS_LSE_LGFTP;
+			case PRID_REV_LOONGSON3A_R1:
+			case PRID_REV_LOONGSON3B_R1:
+			default:
+				break;
+			}
+		default:
+			break;
+		}
+		break;
+	case PRID_COMP_LOONGSON:
+		switch (c->processor_id & 0xff00) {
+		case PRID_IMP_LOONGSON2:  /* Loongson-2/3 */
+			switch (c->processor_id & PRID_REV_MASK) {
+			case PRID_REV_LOONGSON3A_R3_1:
+				cpucfg_regs[cpu].reg[1] |= MIPS_LSE_CMDAP;
+			case PRID_REV_LOONGSON3A_R2:
+			case PRID_REV_LOONGSON3A_R3_0:
+				cpucfg_regs[cpu].reg[1] |= MIPS_LSE_CNT64 | MIPS_LSE_LSPREF | MIPS_LSE_LSPREFX |
+							   MIPS_LSE_LLEXC | MIPS_LSE_SCRAND | MIPS_LSE_SFBP;
+				cpucfg_regs[cpu].reg[2] |= MIPS_LSE_LEXT2 | MIPS_LSE_LSPW | MIPS_LSE_LBT2 |
+							   MIPS_LSE_LBTMMU | MIPS_LSE_LVZP | MIPS_LSE_LGFTP |
+							   MIPS_LSE_LLFTP | MIPS_LSE_LPMREV(LS_LPMREV_3AR2) |
+							   MIPS_LSE_LVZREV(LS_LVZREV_3AR2);
+			default:
+				break;
+			}
+		default:
+			break;
+		}
+		break;
+	default:
+		cpucfg_regs[cpu].reg[1] = 0;
+		cpucfg_regs[cpu].reg[2] = 0;
+		cpucfg_regs[cpu].reg[3] = 0;
+		break;
+	}
+}

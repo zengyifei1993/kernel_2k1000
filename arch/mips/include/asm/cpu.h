@@ -394,4 +394,12 @@ enum cpu_type_enum {
 #define MIPS_ASE_MIPS16E2       0x00000400 /* MIPS16e2 */
 #define MIPS_ASE_LASX		0x80000000 /* Loongson LASX */
 
+#if defined(CONFIG_CPU_LOONGSON3) || defined(CONFIG_CPU_LOONGSON2K)
+/*
+ * Loongson specific extension encodings
+ */
+#define MIPS_LSE_CPUCFG		MBIT_ULL( 0)	/* CPU supports cpucfg */
+
+#endif
+
 #endif /* _ASM_CPU_H */

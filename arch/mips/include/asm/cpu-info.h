@@ -89,8 +89,11 @@ struct cpuinfo_mips {
 	unsigned int		kscratch_mask; /* Usable KScratch mask. */
 	int			package;/* physical package number */
 	int			core;	/* physical core number */
-#ifdef CONFIG_CPU_LOONGSON3
+#if defined(CONFIG_CPU_LOONGSON3) || defined(CONFIG_CPU_LOONGSON2K)
+	unsigned long long      lses;   /* loongson specific extensions */
+#if !defined(CONFIG_CPU_LOONGSON2K)
 	struct cache_desc	vcache; /* Victim cache, between pcache and scache */
+#endif
 #endif
 #ifdef CONFIG_64BIT
 	short			vmbits; /* Virtual memory size in bits */

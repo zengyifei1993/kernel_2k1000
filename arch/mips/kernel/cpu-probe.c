@@ -1436,6 +1436,7 @@ static inline void cpu_probe_loongson(struct cpuinfo_mips *c, unsigned int cpu)
 
 		decode_configs(c);
 		c->options |= MIPS_CPU_FTLB | MIPS_CPU_TLBINV | MIPS_CPU_LDPTE;
+		c->lses |= MIPS_LSE_CPUCFG;
 
 		decode_cfg(c);
 
@@ -1544,6 +1545,10 @@ EXPORT_SYMBOL(__ua_limit);
 const char *__cpu_name[NR_CPUS];
 const char *__cpu_full_name[NR_CPUS];
 const char *__elf_platform;
+
+#if defined(CONFIG_CPU_LOONGSON3) || defined(CONFIG_CPU_LOONGSON2K)
+void encode_cpucfg_info(struct cpuinfo_mips *,int );
+#endif
 
  void cpu_probe(void)
 {
@@ -1655,6 +1660,11 @@ const char *__elf_platform;
 #ifdef CONFIG_64BIT
 	if (cpu == 0)
 		__ua_limit = ~((1ull << cpu_vmbits) - 1);
+#endif
+
+#if defined(CONFIG_CPU_LOONGSON3) || defined(CONFIG_CPU_LOONGSON2K)
+	if(!cpu_has_cpucfg)
+		encode_cpucfg_info(c,cpu);
 #endif
 }
 
