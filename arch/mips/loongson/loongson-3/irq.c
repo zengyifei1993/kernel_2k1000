@@ -22,15 +22,136 @@ extern unsigned char ls7a_ipi_irq2pos[];
 extern unsigned int ls2h_irq2pos[];
 extern void	(*loongson3_ipi)(struct pt_regs *regs);
 
+unsigned int ext_ini_en[MAX_32ARRAY_SIZE];
+unsigned char first_online_cpu_of_node[MAX_NUMNODES] = {LS_IOI_INV_CPU_ID};
+
+static DEFINE_SPINLOCK(affinity_lock);
+
+static void set_irq_route(int pos, const struct cpumask *affinity)
+{
+	int i, k, pos_off;
+	unsigned int nodemap[LS_ANYSEND_HANDLE_IRQS] = {0};
+	unsigned char coremap[LS_ANYSEND_HANDLE_IRQS][MAX_NUMNODES] = {{0},{0},{0},{0}}; 
+	unsigned long data = 0;
+	unsigned int blk_bit_set = 0;
+
+	pos_off = pos & (~3); /* get pos of aligned 4 irqs */
+
+	/* calculate nodemap and coremap of 4 irqs including target irq */
+	for (k = 0; k < LS_ANYSEND_HANDLE_IRQS; k++) {
+		const struct cpumask *affinity_tmp;
+		if (pos_off + k == pos) {
+			affinity_tmp = affinity;
+		} else {
+			struct irq_desc *desc = irq_to_desc(pos_off + k);
+			affinity_tmp = desc->irq_data.affinity;
+		}
+		for (i = 0; i < nr_cpus_loongson; i++) {
+			if (cpumask_test_cpu(i, affinity_tmp)) {
+				nodemap[k] |= (1 << (i / cores_per_node));
+				coremap[k][i / cores_per_node] |= (1 << (i % cores_per_node));
+			}
+		}
+	}
+
+	blk_bit_set = (unsigned int)(1 << LS_ANYSEND_BLOCK_SHIFT);
+
+	/* csr write access to force current interrupt route completed on every core */
+	for (i = 0; i < nr_nodes_loongson; i++) {
+		if (cpumask_test_cpu(i, cpu_online_mask)) {
+			data = blk_bit_set | LOONGSON_EXT_IOI_BOUNCE64_OFFSET;
+			data |= (i << LS_ANYSEND_CPU_SHIFT);
+			data |= ((unsigned long)(LS_ANYSEND_IOI_EN32_DATA) << LS_ANYSEND_DATA_SHIFT);
+			dwrite_csr(LOONGSON_ANY_SEND_OFFSET, data);
+
+		}
+	}
+
+	/* !!!! Only support 32bit data write, need to update 4 irqs route reg one time */	
+	for (i = 0; i < nr_nodes_loongson; i++) {
+		data = blk_bit_set | (LOONGSON_EXT_IOI_ROUTE_OFFSET + pos_off);
+		data |= (first_online_cpu_of_node[i] << LS_ANYSEND_CPU_SHIFT);
+		for (k = 0; k < LS_ANYSEND_HANDLE_IRQS; k++) {
+			if (nodemap[k] & (1 << i)) {
+				/* target node only set itself to avoid unreasonable transfer */
+				data |= ((unsigned long)(coremap[k][i] | ((1 << i) << LS_IOI_CPUNODE_SHIFT_IN_ROUTE)) << (LS_ANYSEND_DATA_SHIFT + LS_ANYSEND_ROUTE_DATA_POS(k)));
+			} else {
+				data |= ((unsigned long)(nodemap[k] << LS_IOI_CPUNODE_SHIFT_IN_ROUTE) << (LS_ANYSEND_DATA_SHIFT + LS_ANYSEND_ROUTE_DATA_POS(k)));
+			}
+		}
+		dwrite_csr(LOONGSON_ANY_SEND_OFFSET, data);
+	}
+
+}
+
+
+int ext_set_irq_affinity(struct irq_data *d, const struct cpumask *affinity,
+			  bool force)
+{
+	unsigned long flags;
+	unsigned int tmp_en;
+	unsigned long data;
+	unsigned short pos_off;
+	unsigned int blk_bit_set;
+
+	if ((loongson_pch == &ls7a_pch && ls7a_ipi_irq2pos[d->irq] < 0) || (loongson_pch == &ls2h_pch && ls2h_irq2pos[d->irq - LS2H_PCH_IRQ_BASE] < 0))
+		return -EINVAL;
+
+	if (!config_enabled(CONFIG_SMP))
+		return -EPERM;
+
+	spin_lock_irqsave(&affinity_lock, flags);
+
+	if (cpumask_empty(affinity)) {
+		spin_unlock_irqrestore(&affinity_lock, flags);
+		return -EINVAL;
+	}
+
+	if (!cpumask_subset(affinity, cpu_online_mask)) {
+		spin_unlock_irqrestore(&affinity_lock, flags);
+		return -EINVAL;
+	}
+
+	/*
+	 * control interrupt enable or disalbe through boot cpu
+	 * which is reponsible for dispatching interrupts.
+	 * */
+	blk_bit_set = (unsigned int)(1 << LS_ANYSEND_BLOCK_SHIFT);
+	pos_off = d->irq >> 5;
+
+	tmp_en = ext_ini_en[pos_off] & (~((1 << (d->irq & 0x1F))));
+	data = blk_bit_set | (LOONGSON_EXT_IOI_EN64_OFFSET + (pos_off << 2));
+	data |= ((loongson_boot_cpu_id & LS_ANYSEND_CPU_MASK) << LS_ANYSEND_CPU_SHIFT);
+	data |= ((unsigned long)tmp_en << LS_ANYSEND_DATA_SHIFT);
+	dwrite_csr(LOONGSON_ANY_SEND_OFFSET, data);
+	set_irq_route(d->irq, affinity);
+	data |= ((unsigned long)ext_ini_en[pos_off] << LS_ANYSEND_DATA_SHIFT);
+	dwrite_csr(LOONGSON_ANY_SEND_OFFSET, data);
+
+	cpumask_copy(d->affinity, affinity);
+	spin_unlock_irqrestore(&affinity_lock, flags);
+
+	return IRQ_SET_MASK_OK_NOCOPY;
+
+}
+
 int plat_set_irq_affinity(struct irq_data *d, const struct cpumask *affinity,
 			  bool force)
 {
 	if ((loongson_pch == &ls7a_pch && ls7a_ipi_irq2pos[d->irq] < 0) || (loongson_pch == &ls2h_pch && ls2h_irq2pos[d->irq - LS2H_PCH_IRQ_BASE] < 0))
 		return -EINVAL;
 
-	if (cpumask_empty(affinity))
+	if (!config_enabled(CONFIG_SMP))
+		return -EPERM;
+	
+	if (cpumask_empty(affinity)) {
 		return -EINVAL;
+	}
 
+	if (!cpumask_subset(affinity, cpu_online_mask)) {
+		return -EINVAL;
+	}
+	
 	cpumask_copy(d->affinity, affinity);
 
 	return IRQ_SET_MASK_OK_NOCOPY;

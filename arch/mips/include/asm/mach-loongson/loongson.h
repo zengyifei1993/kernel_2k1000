@@ -167,8 +167,16 @@ static inline void do_perfcnt_IRQ(void)
 
 /* Register offset and bit definition for CSR access */
 #define LOONGSON_CPU_FEATURE_OFFSET		0x00000008
-#define LOONGSON_CPU_TEMPERATURE_OFFSET		0x00000428
+#define LOONGSON_CPU_FEATURE_MSI		(1ULL << 2)
+#define LOONGSON_CPU_FEATURE_EXT_IOI		(1ULL << 3)
 #define LOONGSON_CPU_FEATURE_IPI_PERCORE	(1ULL << 4)
+
+#define LOONGSON_CPU_TEMPERATURE_OFFSET		0x00000428
+#define LOONGSON_ANY_SEND_OFFSET		0x00001158
+
+#define LOONGSON_OTHER_FUNC_OFFSET		0x00000420
+#define LOONGSON_OTHER_FUNC_EXT_IOI		(1ULL << 48)
+
 
 /* Loongson h/w Configuration */
 
