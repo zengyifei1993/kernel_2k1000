@@ -15,12 +15,12 @@ extern struct platform_controller_hub ls7a_pch;
 extern struct platform_controller_hub rs780_pch;
 
 extern unsigned long long smp_group[4];
-extern void loongson3_ipi_interrupt(struct pt_regs *regs);
 
 int ls3a_msi_enabled = 0;
 EXPORT_SYMBOL(ls3a_msi_enabled);
 extern unsigned char ls7a_ipi_irq2pos[];
 extern unsigned int ls2h_irq2pos[];
+extern void	(*loongson3_ipi)(struct pt_regs *regs);
 
 int plat_set_irq_affinity(struct irq_data *d, const struct cpumask *affinity,
 			  bool force)
@@ -48,7 +48,7 @@ void mach_irq_dispatch(unsigned int pending)
 		do_IRQ(LOONGSON_TIMER_IRQ);
 #if defined(CONFIG_SMP)
 	if (pending & CAUSEF_IP6)
-		loongson3_ipi_interrupt(NULL);
+		loongson3_ipi(NULL);
 #endif
 #ifdef CONFIG_KVM_GUEST_LS3A3000
 	if (pending & CAUSEF_IP4) {

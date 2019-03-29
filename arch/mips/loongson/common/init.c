@@ -16,11 +16,16 @@
 #include <loongson.h>
 #include <loongson-pch.h>
 
+extern struct plat_smp_ops loongson3_comp_smp_ops;
 extern struct plat_smp_ops loongson3_smp_ops;
 extern void __init prom_init_numa_memory(void);
 
 /* Loongson CPU address windows config space base address */
 unsigned long __maybe_unused _loongson_addrwincfg_base;
+
+extern void loongson3_comp_ipi_interrupt(struct pt_regs *regs);
+extern void loongson3_ipi_interrupt(struct pt_regs *regs);
+extern void	(*loongson3_ipi)(struct pt_regs *regs);
 
 static void __init mips_nmi_setup(void)
 {
@@ -58,7 +63,14 @@ void __init prom_init(void)
 	/*init the uart base address */
 	prom_init_uart_base();
 #if defined(CONFIG_SMP)
-	register_smp_ops(&loongson3_smp_ops);
+	if ((current_cpu_type() == CPU_LOONGSON3_COMP) &&
+		(read_csr(LOONGSON_CPU_FEATURE_OFFSET) & LOONGSON_CPU_FEATURE_IPI_PERCORE)) {
+		loongson3_ipi = loongson3_comp_ipi_interrupt;
+		register_smp_ops(&loongson3_comp_smp_ops);
+	} else {
+		loongson3_ipi = loongson3_ipi_interrupt;
+		register_smp_ops(&loongson3_smp_ops);
+	}
 #endif
 	board_nmi_handler_setup = mips_nmi_setup;
 #ifdef CONFIG_CPU_LOONGSON3

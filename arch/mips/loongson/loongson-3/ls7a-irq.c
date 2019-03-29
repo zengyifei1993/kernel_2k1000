@@ -21,8 +21,8 @@ static volatile unsigned long long *irq_msi_en = (volatile unsigned long long *)
 static volatile unsigned char *irq_msi_vec = (volatile unsigned char *)((LS7A_IOAPIC_HTMSI_VEC ));
 
 extern unsigned long long smp_group[4];
-extern void loongson3_send_irq_by_ipi(int cpu, int irqs);
 static irqreturn_t lpc_irq_handler(int irq, void *data);
+extern struct plat_smp_ops *mp_ops;
 
 static DEFINE_SPINLOCK(pch_irq_lock);
 extern int ls3a_msi_enabled;
@@ -170,7 +170,7 @@ void handle_7a_irqs(unsigned long long irqs) {
 		}
 
 		/* balanced by other cores */
-		loongson3_send_irq_by_ipi(irq_cpu[irq], (0x1<<(ls7a_ipi_irq2pos[LS7A_IOAPIC_IRQ_BASE + irq])));
+		mp_ops->send_ipi_single(irq_cpu[irq], (0x1 << (ls7a_ipi_irq2pos[LS7A_IOAPIC_IRQ_BASE + irq])) << IPI_IRQ_OFFSET);
 	}
 }
 
@@ -202,7 +202,7 @@ void handle_msi_irqs(unsigned long long irqs) {
 		}
 
 		/* balanced by other cores */
-		loongson3_send_irq_by_ipi(irq_msi[irq], (0x1<<(ls7a_ipi_irq2pos[irq])));
+		mp_ops->send_ipi_single(irq_msi[irq], (0x1 << (ls7a_ipi_irq2pos[irq])) << IPI_IRQ_OFFSET);
 	}
 }
 

@@ -9,8 +9,7 @@
 
 extern int ls3a_msi_enabled;
 extern unsigned long long smp_group[4];
-extern void loongson3_send_irq_by_ipi(int cpu, int irqs);
-extern void loongson3_ipi_interrupt(struct pt_regs *regs);
+extern struct plat_smp_ops *mp_ops;
 
 unsigned int irq_cpu[16] = {[0 ... 15] = -1};
 unsigned int ht_irq[] = {0, 1, 3, 4, 5, 6, 7, 8, 12, 14, 15};
@@ -63,7 +62,7 @@ static void dispatch_msi_irq(int cpu, int htid)
 				irq0 |= 1ULL<<irq;
 			}
 			else
-				loongson3_send_irq_by_ipi(irq_msi[irq1], (0x1 << (rs780e_irq2pos[irq1]-1+16)));
+				mp_ops->send_ipi_single(irq_msi[irq1], (0x1 << (rs780e_irq2pos[irq1] - 1 + 16)) << IPI_IRQ_OFFSET);
 		}
 
 		while(irq0){
@@ -110,7 +109,7 @@ void ht0_irq_dispatch(void)
 		}
 
 		/* balanced by other cores */
-		loongson3_send_irq_by_ipi(irq_cpu[ht_irq[i]], (0x1 << ht_irq[i]));
+		mp_ops->send_ipi_single(irq_cpu[ht_irq[i]], (0x1 << (ht_irq[i])) << IPI_IRQ_OFFSET);
 	}
 
 }

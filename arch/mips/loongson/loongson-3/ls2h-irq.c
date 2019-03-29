@@ -39,7 +39,7 @@ static unsigned char irq_cpu[LS2H_IRQS] =  {[0 ... LS2H_IRQS-1] = -1};;
 
 void unmask_ls2h_irq(struct irq_data *d);
 void mask_ls2h_irq(struct irq_data *d);
-extern void loongson3_send_irq_by_ipi(int cpu, int irqs);
+extern struct plat_smp_ops *mp_ops;
 
 static int ls2h_create_dirq(unsigned int irq)
 {
@@ -159,8 +159,6 @@ static struct irq_chip pch_irq_chip = {
 	.irq_set_affinity	= plat_set_irq_affinity,
 };
 
-extern void loongson3_ipi_interrupt(struct pt_regs *regs);
-
 static DEFINE_SPINLOCK(lpc_irq_lock);
 
 static void ack_lpc_irq(struct irq_data *d)
@@ -246,7 +244,7 @@ static void __ls2h_irq_dispatch(int n, int intstatus)
 		else
 		{
 			mask_ls2h_irq(irqd);
-			loongson3_send_irq_by_ipi(core_num, 1<<(ls2h_irq2pos[irq1]-1));
+			mp_ops->send_ipi_single(core_num, (1 << (ls2h_irq2pos[irq1]-1)) << IPI_IRQ_OFFSET);
 		}
 	}
 }
