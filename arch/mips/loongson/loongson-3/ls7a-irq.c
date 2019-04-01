@@ -541,29 +541,31 @@ static int ls7a_lpc_init(void)
 
 void __init ls7a_init_irq(void)
 {
-#ifdef CONFIG_LS7A_MSI_SUPPORT
 	switch (current_cpu_type()) {
 	case CPU_LOONGSON3:
 		if(((read_c0_prid() & 0xff) > PRID_REV_LOONGSON3A_R1) && ((read_c0_prid() & 0xff) < PRID_REV_LOONGSON3A_R3_1)) {
 			pr_info("Do not supports HT MSI interrupt, disabling LS7A MSI Interrupt.\n");
 			ls3a_msi_enabled = 0;
 		} else {
+#ifdef CONFIG_LS7A_MSI_SUPPORT
 			pr_info("Supports HT MSI interrupt, enabling LS7A MSI Interrupt.\n");
 			ls3a_msi_enabled = 1;
 			pch_irq_chip.name = "LS7A-IOAPIC-MSI";
 			loongson_pch->irq_dispatch = ls7a_msi_irq_dispatch;
+#endif
 		}
 		ls7a_irq_router_init();
 		init_7a_irqs(&pch_irq_chip);
 	break;
 	case CPU_LOONGSON3_COMP:
 		if(read_csr(LOONGSON_CPU_FEATURE_OFFSET) & LOONGSON_CPU_FEATURE_MSI) {
+#ifdef CONFIG_LS7A_MSI_SUPPORT
 			pr_info("Supports HT MSI interrupt, enabling LS7A MSI Interrupt.\n");
 			ls3a_msi_enabled = 1;
 			pch_irq_chip.name = "LS7A-IOAPIC-MSI";
 			loongson_pch->irq_dispatch = ls7a_msi_irq_dispatch;
-			
-			if(read_csr(LOONGSON_CPU_FEATURE_OFFSET) & LOONGSON_CPU_FEATURE_EXT_IOI) {
+#endif
+			if(ls3a_msi_enabled && read_csr(LOONGSON_CPU_FEATURE_OFFSET) & LOONGSON_CPU_FEATURE_EXT_IOI) {
 				ext_ioi_init();
 				init_7a_irqs(&ext_irq_chip);
 			} else {
@@ -583,6 +585,6 @@ void __init ls7a_init_irq(void)
 	default:
 	break;
 	}
-#endif
+
 	ls7a_lpc_init();
 }
