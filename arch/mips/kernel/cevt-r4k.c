@@ -234,12 +234,13 @@ int  r4k_clockevent_init(void)
 	cd->set_mode		= mips_set_clock_mode;
 	cd->event_handler	= mips_event_handler;
 
-#if !defined(CONFIG_LOONGSON3_ENHANCEMENT) && !defined(CONFIG_KVM_GUEST_LS3A3000)
+#if !defined(CONFIG_LOONGSON3_ENHANCEMENT)
 #ifdef CONFIG_CEVT_GIC
 	if (!gic_present)
 #endif
 	clockevents_config_and_register(cd, mips_hpt_frequency, 0x300, 0x7fffffff);
 #else
+#if !defined(CONFIG_KVM_GUEST_LS3A3000)
 
 	cd->name		= "loongson3";
 	cd->features		= CLOCK_EVT_FEAT_ONESHOT;
@@ -256,6 +257,7 @@ int  r4k_clockevent_init(void)
 	irq &= ~MIPS_CONF6_INNTIMER;
 	irq |= MIPS_CONF6_EXTIMER;
 	write_c0_config6(irq);
+#endif
 #endif
 	if (cp0_timer_irq_installed)
 		return 0;
