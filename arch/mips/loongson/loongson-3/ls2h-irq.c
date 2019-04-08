@@ -13,7 +13,7 @@
  */
 #include <linux/init.h>
 #include <linux/interrupt.h>
-
+#include <linux/syscore_ops.h>
 #include <asm/io.h>
 #include <asm/irq_cpu.h>
 #include <asm/mipsregs.h>
@@ -333,3 +333,29 @@ void __init ls2h_init_irq(void)
 	irq_set_chip_and_handler(1, &lpc_irq_chip, handle_level_irq);
 	irq_set_chip_and_handler(12, &lpc_irq_chip, handle_level_irq);
 }
+
+#ifdef CONFIG_PM
+
+static int loongson3_ls2h_suspend(void)
+{
+	return 0;
+}
+
+static void loongson3_ls2h_resume(void)
+{
+	ls2h_irq_router_init();
+}
+
+static struct syscore_ops ls2h_syscore_ops = {
+	.suspend = loongson3_ls2h_suspend,
+	.resume = loongson3_ls2h_resume,
+};
+
+static int __init ls2h_init_ops(void)
+{
+	register_syscore_ops(&ls2h_syscore_ops);
+	return 0;
+}
+
+device_initcall(ls2h_init_ops);
+#endif

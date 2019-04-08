@@ -184,16 +184,7 @@ void mach_resume(suspend_state_t state)
 		if (hw_coherentio == 0)
 			uncache_resume();
 
-		if (loongson_pch->board_type == LS2H)
-			ls2h_irq_router_init();
-
-		else if(loongson_pch->board_type == LS7A) {
-            if (ls3a_msi_enabled)
-                init_7a_irqs();
-			ls7a_irq_router_init();
-        }
-		else {
-			rs780_irq_router_init();
+		if (loongson_pch->board_type == RS780E) {
 			acpi_registers_setup();
 			acpi_sleep_complete();
 		}
