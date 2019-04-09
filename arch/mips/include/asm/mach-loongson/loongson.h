@@ -177,6 +177,8 @@ static inline void do_perfcnt_IRQ(void)
 #define LOONGSON_OTHER_FUNC_OFFSET		0x00000420
 #define LOONGSON_OTHER_FUNC_EXT_IOI		(1ULL << 48)
 
+#define LOONGSON_NODE_COUNTER_EN        (_ULCAST_(1) <<  1)
+
 
 /* Loongson h/w Configuration */
 
