@@ -2,7 +2,7 @@
 #include <irq.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>
-
+#include <linux/syscore_ops.h>
 #include <asm/irq_cpu.h>
 #include <asm/i8259.h>
 #include <asm/mipsregs.h>
@@ -175,3 +175,29 @@ void __init rs780_init_irq(void)
 	rs780_irq_router_init();
 	init_i8259_irqs();
 }
+
+#ifdef CONFIG_PM
+
+static int loongson3_rs780_suspend(void)
+{
+	return 0;
+}
+
+static void loongson3_rs780_resume(void)
+{
+	rs780_irq_router_init();
+}
+
+static struct syscore_ops rs780_syscore_ops = {
+	.suspend = loongson3_rs780_suspend,
+	.resume = loongson3_rs780_resume,
+};
+
+static int __init rs780_init_ops(void)
+{
+	register_syscore_ops(&rs780_syscore_ops);
+	return 0;
+}
+
+device_initcall(rs780_init_ops);
+#endif

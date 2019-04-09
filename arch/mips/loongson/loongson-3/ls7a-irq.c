@@ -2,7 +2,7 @@
 #include <irq.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>
-
+#include <linux/syscore_ops.h>
 #include <asm/irq_cpu.h>
 #include <asm/i8259.h>
 #include <asm/mipsregs.h>
@@ -588,3 +588,66 @@ void __init ls7a_init_irq(void)
 
 	ls7a_lpc_init();
 }
+
+#ifdef CONFIG_PM
+
+static int loongson3_comp_iopic_suspend(void)
+{
+	return 0;
+}
+
+static void loongson3_comp_iopic_resume(void)
+{
+	int i;
+	struct irq_desc *desc;
+
+	ext_ioi_init();
+	init_7a_irqs(&ext_irq_chip);
+
+	for (i = 0; i < sizeof(ls7a_ipi_irq2pos); i++) {
+		if (ls7a_ipi_irq2pos[i] != -1) {
+			desc = irq_to_desc(i);
+			ext_set_irq_affinity(&desc->irq_data, desc->irq_data.affinity, 0);
+		}
+	}
+}
+
+static struct syscore_ops ls7a_comp_syscore_ops = {
+	.suspend = loongson3_comp_iopic_suspend,
+	.resume = loongson3_comp_iopic_resume,
+};
+
+
+static int loongson3_iopic_suspend(void)
+{
+	return 0;
+}
+
+static void loongson3_iopic_resume(void)
+{
+	ls7a_irq_router_init();
+	init_7a_irqs(&pch_irq_chip);
+}
+
+static struct syscore_ops ls7a_syscore_ops = {
+	.suspend = loongson3_iopic_suspend,
+	.resume = loongson3_iopic_resume,
+};
+
+static int __init ls7a_init_ops(void)
+{
+	if ((current_cpu_type() == CPU_LOONGSON3_COMP)) {
+		if (ls3a_msi_enabled && read_csr(LOONGSON_CPU_FEATURE_OFFSET) & LOONGSON_CPU_FEATURE_EXT_IOI) { /* ext ioi */
+			register_syscore_ops(&ls7a_comp_syscore_ops);
+		} else {
+			register_syscore_ops(&ls7a_syscore_ops);
+		}
+	} else {
+		register_syscore_ops(&ls7a_syscore_ops);
+	}
+
+	return 0;
+}
+
+device_initcall(ls7a_init_ops);
+#endif
