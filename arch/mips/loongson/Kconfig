@@ -157,6 +157,14 @@ config LS7A_HPET
 
 endif # LOONGSON3_HPET_SUPPORT
 
+config CPU_SUPPORTS_UNCACHED_ACCELERATED
+	bool "CPU support uncached accelerated"
+	default n
+	depends on CPU_LOONGSON3
+	help
+	  IF set Y ,framebuffer driver will access memory by uncached accelerated which
+	  reflected in ioremap and mmap.
+
 config LS7A_MSI_SUPPORT
 	bool "LS7A MSI Support"
 	depends on LOONGSON_MACH3X
