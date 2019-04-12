@@ -126,6 +126,17 @@ config GS464E_NODE_COUNTER
 
 	  If unsure, say No.
 
+config GS464V_STABLE_COUNTER
+	bool "Loongson3 Stable Counter"
+	depends on LOONGSON_MACH3X
+	help
+	  This option enables the stable counter of Loongson3A3000_COMP.
+
+	  If you want to enable loongson4k StableCounter Driver,Please enable this option.
+	  This option replace node counter with stable counter.
+
+	  If unsure, say No.
+
 menuconfig LOONGSON3_HPET_SUPPORT
 	bool "Loongson3 HPET Support"
 	depends on LOONGSON_MACH3X

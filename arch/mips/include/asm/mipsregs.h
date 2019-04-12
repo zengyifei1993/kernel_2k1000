@@ -1316,6 +1316,22 @@ static inline void dwrite_csr(int reg,unsigned long long val)
 		:
 		);
 }
+
+static inline unsigned long long drdtime(void)
+{
+	unsigned long long val = 0;
+    int rID = 0;
+
+	__asm__ __volatile__(
+		"parse_r rID,%0\n\t"
+		"parse_r val,%1\n\t"
+		".insn \n\t"
+		".word (0xc8090118 | (rID << 21) | (val << 11))\n\t"
+		:"=r"(rID),"=r"(val)
+		:
+		);
+    return val;
+}
 #endif
 
 /*
