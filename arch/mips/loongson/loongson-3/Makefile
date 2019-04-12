@@ -14,6 +14,8 @@ obj-$(CONFIG_SUSPEND)	+= pm.o sleep.o
 
 obj-$(CONFIG_GS464E_NODE_COUNTER) += node_counter.o
 
+obj-$(CONFIG_GS464V_STABLE_COUNTER) += stable_counter.o
+
 obj-$(CONFIG_LOONGSON3_HPET_SUPPORT) += hpet.o
 
 obj-$(CONFIG_LOONGSON3_CPUAUTOPLUG) += loongson3_cpuautoplug.o

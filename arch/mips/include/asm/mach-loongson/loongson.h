@@ -180,6 +180,9 @@ static inline void do_perfcnt_IRQ(void)
 
 #define LOONGSON_NODE_COUNTER_EN        (_ULCAST_(1) <<  1)
 
+#define LOONGSON_CPUCFG_CONFIG_FIELD2    0x2
+
+#define LOONGSON_STABLE_COUNT_EN        (1ULL << 47)
 
 /* Loongson h/w Configuration */
 
