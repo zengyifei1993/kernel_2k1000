@@ -618,7 +618,7 @@ static int ls_nand_probe(struct platform_device *pdev)
 
 	pdata->chip_ver = LS2K_VER3;
 	pdata->cs = 2;
-	pdata->csrdy = 88442200;
+	pdata->csrdy = 0x88442200;
 	pdata->nr_parts = 2;
 	pdata->enable_arbiter = 1;
 
