@@ -54,6 +54,7 @@ extern unsigned int __weak get_c0_compare_int(void);
 extern int r4k_clockevent_init(void);
 extern int smtc_clockevent_init(void);
 extern int gic_clockevent_init(void);
+extern int stable_clockevent_init(void);
 
 static inline int mips_clockevent_init(void)
 {
@@ -62,7 +63,13 @@ static inline int mips_clockevent_init(void)
 #elif defined(CONFIG_CEVT_GIC)
 	return (gic_clockevent_init() | r4k_clockevent_init());
 #elif defined(CONFIG_CEVT_R4K)
-	return r4k_clockevent_init();
+    int res = 0;
+
+    res = stable_clockevent_init();
+    if (res != 0)
+	    return r4k_clockevent_init();
+    else
+        return res;
 #else
 	return -ENXIO;
 #endif
