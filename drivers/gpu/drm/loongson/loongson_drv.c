@@ -201,6 +201,33 @@ static int loongson_probe_vram(struct loongson_drm_device *ldev, void __iomem *m
 	return offset - 65536;
 }
 
+#ifdef CONFIG_CPU_SUPPORTS_UNCACHED_ACCELERATED
+static void __iomem *ls_uncache_acc_iomap(struct pci_dev *dev,
+			      int bar,
+			      unsigned long offset,
+			      unsigned long maxlen)
+{
+	resource_size_t start = pci_resource_start(dev, bar);
+	resource_size_t len = pci_resource_len(dev, bar);
+	unsigned long flags = pci_resource_flags(dev, bar);
+
+	if (len <= offset || !start)
+		return NULL;
+	len -= offset;
+	start += offset;
+	if (maxlen && len > maxlen)
+		len = maxlen;
+	if (flags & IORESOURCE_IO)
+		return __pci_ioport_map(dev, start, len);
+	if (flags & IORESOURCE_MEM) {
+		if (flags & IORESOURCE_CACHEABLE)
+			return ioremap(start, len);
+		return ioremap_uncached_accelerated(start, len);
+	}
+	/* What? */
+	return NULL;
+}
+#endif
 /**
  * loongson_vram_init --Map the framebuffer from the card and configure the core
  *
@@ -250,7 +277,11 @@ static int loongson_vram_init(struct loongson_drm_device *ldev)
 
 #ifdef CONFIG_DRM_LOONGSON_VGA_PLATFORM
 #else
+#ifdef CONFIG_CPU_SUPPORTS_UNCACHED_ACCELERATED
+	mem = ls_uncache_acc_iomap(ldev->vram_pdev, 2, 0, 0);
+#else
 	mem = pci_iomap(ldev->vram_pdev, 2, 0);
+#endif
 	ldev->mc.vram_size = loongson_probe_vram(ldev, mem);
 
 	pci_iounmap(ldev->vram_pdev, mem);
