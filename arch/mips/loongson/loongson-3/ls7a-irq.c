@@ -285,8 +285,8 @@ static void init_7a_irq(int dev, int irq, struct irq_chip *pirq_chip) {
 static void ext_ioi_init(void)
 {
 	int i, j;
-	unsigned long data = 0;
-	unsigned long tmp = 0;
+	unsigned int data = 0;
+	unsigned int tmp = 0;
 
 	/* calculate nodemap and coremap of target pos */
 	for (i = 0; i < nr_cpus_loongson; i++) {
@@ -296,58 +296,27 @@ static void ext_ioi_init(void)
 		}
 	}
 
-	tmp = (unsigned long)(read_csr(LS_ANYSEND_OTHER_FUNC_OFFSET) | LS_ANYSEND_OTHER_FUNC_EXT_IOI);
-	
+	tmp = (unsigned int)(read_csr(LS_ANYSEND_OTHER_FUNC_OFFSET) | LS_ANYSEND_OTHER_FUNC_EXT_IOI);
+
 	/* init irq en bitmap */
 	for (i = 0; i < (LS_IOI_IRQ_VECTORS >> 5); i++) {
 		ext_ini_en[i] = LS_ANYSEND_IOI_EN32_DATA;
 	}
 
 	for (i = 0; i < nr_nodes_loongson; i++) {
-
-		unsigned int blk_bit_set = (unsigned int)(1 << LS_ANYSEND_BLOCK_SHIFT);
-
 		if (first_online_cpu_of_node[i] != LS_IOI_INV_CPU_ID) {
-			data = blk_bit_set | LS_ANYSEND_OTHER_FUNC_OFFSET;
-			data |= (first_online_cpu_of_node[i] << LS_ANYSEND_CPU_SHIFT);
-			data |= ((unsigned long)tmp << LS_ANYSEND_DATA_SHIFT);
-			dwrite_csr(LOONGSON_ANY_SEND_OFFSET, data);
+
+			any_send(LS_ANYSEND_OTHER_FUNC_OFFSET, tmp, first_online_cpu_of_node[i]);
 
 			for(j = 0; j < LS_ANYSEND_IOI_NODEMAP_ITEMS; j++) {
-				data = blk_bit_set | (LOONGSON_EXT_IOI_NODEMAP_OFFSET + (j << 2));	
-				data |= (first_online_cpu_of_node[i] << LS_ANYSEND_CPU_SHIFT);
-				data |= ((unsigned long)((((j << 1) + 1) << LS_IOI_NODEMAP_BITS_PER_ENTRY) | (j << 1)) << LS_ANYSEND_DATA_SHIFT);
-				dwrite_csr(LOONGSON_ANY_SEND_OFFSET, data);
+				data |= ((((j << 1) + 1) << LS_IOI_NODEMAP_BITS_PER_ENTRY) | (j << 1));
+				any_send(LOONGSON_EXT_IOI_NODEMAP_OFFSET, data, first_online_cpu_of_node[i]);
 			}
 
-			for(j = 0; j < LS_ANYSEND_IOI_EN_ITEMS; j++) {
-				data  = blk_bit_set | (LOONGSON_EXT_IOI_EN64_OFFSET + (j << 2));
-				data |= (first_online_cpu_of_node[i] << LS_ANYSEND_CPU_SHIFT);
-				data |= ((unsigned long)LS_ANYSEND_IOI_EN32_DATA << LS_ANYSEND_DATA_SHIFT);
-				dwrite_csr(LOONGSON_ANY_SEND_OFFSET, data);
-			}
-
-			for(j = 0; j < LS_ANYSEND_IOI_IPMAP_ITEMS; j++) {
-				data  = blk_bit_set | (LOONGSON_EXT_IOI_MAP_OFFSET + (j << 2));
-				data |= (first_online_cpu_of_node[i] << LS_ANYSEND_CPU_SHIFT);
-				if (j == 0)
-					data |= ((unsigned long)LS_ANYSEND_IOI_IPMAP_DATA << LS_ANYSEND_DATA_SHIFT);
-				dwrite_csr(LOONGSON_ANY_SEND_OFFSET, data);
-			}
-			
-			for(j = 0; j < LS_ANYSEND_IOI_ROUTE_ITEMS; j++) {		
-				data  = blk_bit_set | (LOONGSON_EXT_IOI_ROUTE_OFFSET + (j << 2));
-				data |= (first_online_cpu_of_node[i] << LS_ANYSEND_CPU_SHIFT);
-				data |= ((unsigned long)LS_ANYSEND_IOI_ROUTE_DATA << LS_ANYSEND_DATA_SHIFT);		
-				dwrite_csr(LOONGSON_ANY_SEND_OFFSET, data);
-			}				
-
-			for(j = 0; j < LS_ANYSEND_IOI_BOUNCE_ITEMS; j++) {
-				data  = blk_bit_set | (LOONGSON_EXT_IOI_BOUNCE64_OFFSET + (j << 2));
-				data |= (first_online_cpu_of_node[i] << LS_ANYSEND_CPU_SHIFT);
-				data |= ((unsigned long)LS_ANYSEND_IOI_BOUNCE_DATA << LS_ANYSEND_DATA_SHIFT);
-				dwrite_csr(LOONGSON_ANY_SEND_OFFSET, data);
-			}	
+			EXT_IOI_REGS_INIT(LS_ANYSEND_IOI_EN_ITEMS, LOONGSON_EXT_IOI_EN64_OFFSET, LS_ANYSEND_IOI_EN32_DATA, first_online_cpu_of_node[i]);
+			EXT_IOI_REGS_INIT(LS_ANYSEND_IOI_IPMAP_ITEMS, LOONGSON_EXT_IOI_MAP_OFFSET, LS_ANYSEND_IOI_IPMAP_DATA, first_online_cpu_of_node[i]);
+			EXT_IOI_REGS_INIT(LS_ANYSEND_IOI_ROUTE_ITEMS, LOONGSON_EXT_IOI_ROUTE_OFFSET, LS_ANYSEND_IOI_ROUTE_DATA, first_online_cpu_of_node[i]);
+			EXT_IOI_REGS_INIT(LS_ANYSEND_IOI_BOUNCE_ITEMS, LOONGSON_EXT_IOI_BOUNCE64_OFFSET, LS_ANYSEND_IOI_BOUNCE_DATA, first_online_cpu_of_node[i]);
 		}
 	}
 	loongson_pch->irq_dispatch = ls7a_ext_irq_dispatch;

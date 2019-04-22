@@ -27,6 +27,17 @@ unsigned char first_online_cpu_of_node[MAX_NUMNODES] = {LS_IOI_INV_CPU_ID};
 
 static DEFINE_SPINLOCK(affinity_lock);
 
+void any_send(unsigned int off, unsigned int data, unsigned int cpu)
+{
+	unsigned long data64 = 0;
+	unsigned int blk_bit_set = (unsigned int)(1 << LS_ANYSEND_BLOCK_SHIFT);
+
+	data64 = blk_bit_set | off;
+	data64 |= (cpu << LS_ANYSEND_CPU_SHIFT);
+	data64 |= ((unsigned long)data << LS_ANYSEND_DATA_SHIFT);
+	dwrite_csr(LOONGSON_ANY_SEND_OFFSET, data64);
+}
+
 static void set_irq_route(int pos, const struct cpumask *affinity)
 {
 	int i, k, pos_off;
@@ -57,29 +68,23 @@ static void set_irq_route(int pos, const struct cpumask *affinity)
 	blk_bit_set = (unsigned int)(1 << LS_ANYSEND_BLOCK_SHIFT);
 
 	/* csr write access to force current interrupt route completed on every core */
-	for (i = 0; i < nr_nodes_loongson; i++) {
+	for (i = 0; i < nr_cpus_loongson; i++) {
 		if (cpumask_test_cpu(i, cpu_online_mask)) {
-			data = blk_bit_set | LOONGSON_EXT_IOI_BOUNCE64_OFFSET;
-			data |= (i << LS_ANYSEND_CPU_SHIFT);
-			data |= ((unsigned long)(LS_ANYSEND_IOI_EN32_DATA) << LS_ANYSEND_DATA_SHIFT);
-			dwrite_csr(LOONGSON_ANY_SEND_OFFSET, data);
-
+			any_send(LOONGSON_EXT_IOI_BOUNCE64_OFFSET, LS_ANYSEND_IOI_EN32_DATA, i);
 		}
 	}
 
 	/* !!!! Only support 32bit data write, need to update 4 irqs route reg one time */	
 	for (i = 0; i < nr_nodes_loongson; i++) {
-		data = blk_bit_set | (LOONGSON_EXT_IOI_ROUTE_OFFSET + pos_off);
-		data |= (first_online_cpu_of_node[i] << LS_ANYSEND_CPU_SHIFT);
 		for (k = 0; k < LS_ANYSEND_HANDLE_IRQS; k++) {
 			if (nodemap[k] & (1 << i)) {
 				/* target node only set itself to avoid unreasonable transfer */
-				data |= ((unsigned long)(coremap[k][i] | ((1 << i) << LS_IOI_CPUNODE_SHIFT_IN_ROUTE)) << (LS_ANYSEND_DATA_SHIFT + LS_ANYSEND_ROUTE_DATA_POS(k)));
+				data |= ((unsigned long)(coremap[k][i] | ((1 << i) << LS_IOI_CPUNODE_SHIFT_IN_ROUTE)) << (LS_ANYSEND_ROUTE_DATA_POS(k)));
 			} else {
-				data |= ((unsigned long)(nodemap[k] << LS_IOI_CPUNODE_SHIFT_IN_ROUTE) << (LS_ANYSEND_DATA_SHIFT + LS_ANYSEND_ROUTE_DATA_POS(k)));
+				data |= ((unsigned long)(nodemap[k] << LS_IOI_CPUNODE_SHIFT_IN_ROUTE) << (LS_ANYSEND_ROUTE_DATA_POS(k)));
 			}
 		}
-		dwrite_csr(LOONGSON_ANY_SEND_OFFSET, data);
+		any_send(LOONGSON_EXT_IOI_ROUTE_OFFSET + pos_off, data, first_online_cpu_of_node[i]);
 	}
 
 }
@@ -89,10 +94,7 @@ int ext_set_irq_affinity(struct irq_data *d, const struct cpumask *affinity,
 			  bool force)
 {
 	unsigned long flags;
-	unsigned int tmp_en;
-	unsigned long data;
 	unsigned short pos_off;
-	unsigned int blk_bit_set;
 
 	if ((loongson_pch == &ls7a_pch && ls7a_ipi_irq2pos[d->irq] < 0) || (loongson_pch == &ls2h_pch && ls2h_irq2pos[d->irq - LS2H_PCH_IRQ_BASE] < 0))
 		return -EINVAL;
@@ -116,17 +118,11 @@ int ext_set_irq_affinity(struct irq_data *d, const struct cpumask *affinity,
 	 * control interrupt enable or disalbe through boot cpu
 	 * which is reponsible for dispatching interrupts.
 	 * */
-	blk_bit_set = (unsigned int)(1 << LS_ANYSEND_BLOCK_SHIFT);
 	pos_off = d->irq >> 5;
 
-	tmp_en = ext_ini_en[pos_off] & (~((1 << (d->irq & 0x1F))));
-	data = blk_bit_set | (LOONGSON_EXT_IOI_EN64_OFFSET + (pos_off << 2));
-	data |= ((loongson_boot_cpu_id & LS_ANYSEND_CPU_MASK) << LS_ANYSEND_CPU_SHIFT);
-	data |= ((unsigned long)tmp_en << LS_ANYSEND_DATA_SHIFT);
-	dwrite_csr(LOONGSON_ANY_SEND_OFFSET, data);
+	any_send(LOONGSON_EXT_IOI_EN64_OFFSET + (pos_off << 2), ext_ini_en[pos_off] & (~((1 << (d->irq & 0x1F)))), loongson_boot_cpu_id);
 	set_irq_route(d->irq, affinity);
-	data |= ((unsigned long)ext_ini_en[pos_off] << LS_ANYSEND_DATA_SHIFT);
-	dwrite_csr(LOONGSON_ANY_SEND_OFFSET, data);
+	any_send(LOONGSON_EXT_IOI_EN64_OFFSET + (pos_off << 2), ext_ini_en[pos_off], loongson_boot_cpu_id);
 
 	cpumask_copy(d->affinity, affinity);
 	spin_unlock_irqrestore(&affinity_lock, flags);
