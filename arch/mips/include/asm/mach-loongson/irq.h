@@ -61,7 +61,7 @@
 #define LS_IOI_IRQ_VECTORS	128
 #define LS_ANYSEND_IOI_NODEMAP_ITEMS	8
 #define LS_ANYSEND_IOI_EN_ITEMS	4
-#define LS_ANYSEND_IOI_IPMAP_ITEMS	2
+#define LS_ANYSEND_IOI_IPMAP_ITEMS	1
 #define LS_ANYSEND_IOI_ROUTE_ITEMS	32
 #define LS_ANYSEND_IOI_BOUNCE_ITEMS	4
 #define LS_IOI_NODEMAP_BITS_PER_ENTRY	16
@@ -73,6 +73,13 @@
 #define LS_IOI_CPUNODE_SHIFT_IN_ROUTE	4
 #define LS_ANYSEND_ROUTE_DATA_POS(n)	(n << 3)
 #define LS_ANYSEND_IOI_UPDATE_IRQ_NUM	32
+
+extern void any_send(unsigned int off, unsigned int data, unsigned int cpu);
+#define EXT_IOI_REGS_INIT(cnt, off, data, cpu) ({	\
+	int x;						\
+	for (x = 0; x < cnt; x++)			\
+		any_send(off + (x << 2), data, cpu);	\
+})
 
 /* group 0 */
 #define LS2H_PCH_ACPI_IRQ		(0 + LS2H_PCH_IRQ_BASE)
