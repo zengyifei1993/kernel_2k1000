@@ -5,6 +5,7 @@
 #include <linux/spinlock.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
+#include <loongson.h>
 
 #define IRQ_LS7A_MSI_0 0
 #define LS7A_NUM_MSI_IRQS 64
@@ -14,6 +15,7 @@ static DECLARE_BITMAP(msi_irq_in_use, LS7A_NUM_MSI_IRQS)={0xff0000000000ffffULL}
 
 static DEFINE_SPINLOCK(lock);
 extern int ls3a_msi_enabled;
+extern int ext_set_irq_affinity(struct irq_data *d, const struct cpumask *affinity, bool force);
 
 int pch_create_dirq(unsigned int irq);
 void pch_destroy_dirq(unsigned int irq);
@@ -109,6 +111,13 @@ int ls7a_setup_msi_irq(struct pci_dev *pdev, struct msi_desc *desc)
 	msg.data = irq;
 
 	write_msi_msg(irq, &msg);
+
+	if ((current_cpu_type() == CPU_LOONGSON3_COMP) &&
+		(read_csr(LOONGSON_CPU_FEATURE_OFFSET) & LOONGSON_CPU_FEATURE_EXT_IOI)) {
+		ls7a_msi_chip.name = "PCI-MSI-EXT";
+		ls7a_msi_chip.irq_set_affinity = ext_set_irq_affinity;
+	}
+
 	irq_set_chip_and_handler(irq, &ls7a_msi_chip, handle_edge_irq);
 
 	return 0;
