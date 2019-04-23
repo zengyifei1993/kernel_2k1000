@@ -63,13 +63,15 @@ static inline int mips_clockevent_init(void)
 #elif defined(CONFIG_CEVT_GIC)
 	return (gic_clockevent_init() | r4k_clockevent_init());
 #elif defined(CONFIG_CEVT_R4K)
+#ifdef CONFIG_GS464V_STABLE_COUNTER
     int res = 0;
 
     res = stable_clockevent_init();
-    if (res != 0)
-	    return r4k_clockevent_init();
-    else
+    if (res == 0)
         return res;
+    else
+#endif
+	    return r4k_clockevent_init();
 #else
 	return -ENXIO;
 #endif
