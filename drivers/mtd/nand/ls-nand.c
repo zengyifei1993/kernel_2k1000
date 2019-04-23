@@ -337,7 +337,7 @@ static void ls_read_id(struct ls_nand_info *info)
 	unsigned int id_l, id_h;
 	unsigned char *data = (unsigned char *)(info->data_buff);
 
-	writel((5 << ID_NUM_SHIFT), REG(NAND_PARAM_REG));
+	writel((6 << ID_NUM_SHIFT), REG(NAND_PARAM_REG));
 	writel(0x10000*info->cs, REG(NAND_ADDRR_REG));
 	writel((CMD_RD_ID | CMD_VALID), REG(NAND_CMD_REG));
 	wait_nand_done(info, 100);
@@ -346,10 +346,14 @@ static void ls_read_id(struct ls_nand_info *info)
 #ifdef MTD_NAND_DEBUG
 	pr_info("id_l: %08x, id_h:%08x\n", id_l, id_h);
 #endif
-	data[0] = (id_h & 0xff);
-	data[1] = (id_l >> 24) & 0xff;
-	data[2] = (id_l >> 16) & 0xff;
-	data[3] = (id_l >> 8) & 0xff;
+	data[0] = ((id_h >> 8) & 0xff);
+	data[1] = (id_h & 0xff);
+	data[2] = (id_l >> 24) & 0xff;
+	data[3] = (id_l >> 16) & 0xff;
+	data[4] = (id_l >> 8) & 0xff;
+	data[5] = id_l & 0xff;
+	data[6] = 0;
+	data[7] = 0;
 }
 
 static void ls_nand_cmdfunc(struct mtd_info *mtd, unsigned command,
@@ -440,7 +444,7 @@ static void ls_nand_cmdfunc(struct mtd_info *mtd, unsigned command,
 			ls_nand_get_ready(mtd);
 		break;
 	case NAND_CMD_READID:
-		info->buf_count = 0x4;
+		info->buf_count = 0x6;
 		info->buf_start = 0;
 		ls_read_id(info);
 		break;
