@@ -182,14 +182,14 @@ void mach_irq_dispatch(unsigned int pending)
 	if (pending & CAUSEF_IP2)
 	{
 #ifndef CONFIG_KVM_GUEST_LS3A3000
-		int cpu = smp_processor_id();
+		int cpu = cpu_logical_map(smp_processor_id());
 		int irqs, irq, irqs_pci, irq_lpc;
 
-		if(cpu == 0)
+		if(cpu == loongson_boot_cpu_id)
 		{
-
-			irqs_pci = LOONGSON_INT_ROUTER_ISR(0) & 0xf0;
-			irq_lpc = LOONGSON_INT_ROUTER_ISR(0) & 0x400;
+			int core_index = loongson_boot_cpu_id % cores_per_node;
+			irqs_pci = LOONGSON_INT_ROUTER_ISR(core_index) & 0xf0;
+			irq_lpc = LOONGSON_INT_ROUTER_ISR(core_index) & 0x400;
 			if(irqs_pci)
 			{
 				while ((irq = ffs(irqs_pci)) != 0) {
