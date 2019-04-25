@@ -21,5 +21,6 @@
 #define R10000_LLSC_WAR			0
 #define MIPS34K_MISSED_ITLB_WAR		0
 #define LOONGSON_LLSC_WAR		1
+#define LOONGSON_LAMO		0
 
 #endif /* __ASM_MACH_LOONGSON2K_WAR_H */

@@ -44,58 +44,76 @@
 		: "=r" (ret), "=&r" (oldval), "=R" (*uaddr)		\
 		: "0" (0), "R" (*uaddr), "Jr" (oparg), "i" (-EFAULT)	\
 		: "memory");						\
-	} else if (cpu_has_llsc && LOONGSON_LLSC_WAR) {			\
-		__asm__ __volatile__(					\
-		"	.set	push				\n"	\
-		"	.set	noat				\n"	\
-		"	.set	mips3				\n"	\
-		__LS3A_WAR_LLSC						\
-		"1:						\n"	\
-		"	ll	%1, %4	# __futex_atomic_op	\n"	\
-		"	.set	mips0				\n"	\
-		"	" insn	"				\n"	\
-		"	.set	mips3				\n"	\
-		"2:	sc	$1, %2				\n"	\
-		"	beqz	$1, 1b				\n"	\
-		"3:						\n"	\
-		"	.set	pop				\n"	\
-		"	.set	mips0				\n"	\
-		"	.section .fixup,\"ax\"			\n"	\
-		"4:	li	%0, %6				\n"	\
-		"	j	3b				\n"	\
-		"	.previous				\n"	\
-		"	.section __ex_table,\"a\"		\n"	\
-		"	"__UA_ADDR "\t1b, 4b			\n"	\
-		"	"__UA_ADDR "\t2b, 4b			\n"	\
-		"	.previous				\n"	\
-		: "=r" (ret), "=&r" (oldval), "=R" (*uaddr)		\
-		: "0" (0), "R" (*uaddr), "Jr" (oparg), "i" (-EFAULT)	\
-		: "memory");						\
 	} else if (cpu_has_llsc) {					\
-		__asm__ __volatile__(					\
-		"	.set	push				\n"	\
-		"	.set	noat				\n"	\
-		"	.set	mips3				\n"	\
-		"1:	ll	%1, %4	# __futex_atomic_op	\n"	\
-		"	.set	mips0				\n"	\
-		"	" insn	"				\n"	\
-		"	.set	mips3				\n"	\
-		"2:	sc	$1, %2				\n"	\
-		"	beqz	$1, 1b				\n"	\
-		"3:						\n"	\
-		"	.set	pop				\n"	\
-		"	.set	mips0				\n"	\
-		"	.section .fixup,\"ax\"			\n"	\
-		"4:	li	%0, %6				\n"	\
-		"	j	3b				\n"	\
-		"	.previous				\n"	\
-		"	.section __ex_table,\"a\"		\n"	\
-		"	"__UA_ADDR "\t1b, 4b			\n"	\
-		"	"__UA_ADDR "\t2b, 4b			\n"	\
-		"	.previous				\n"	\
-		: "=r" (ret), "=&r" (oldval), "=R" (*uaddr)		\
-		: "0" (0), "R" (*uaddr), "Jr" (oparg), "i" (-EFAULT)	\
-		: "memory");						\
+		if (LOONGSON_LAMO) {			\
+			__asm__ __volatile__(									\
+			"	.set	noat				\n"	\
+			"1:	" insn	"				\n"	\
+			"2:						\n"	\
+			"	.set	mips0				\n"	\
+			"	.section .fixup,\"ax\"			\n"	\
+			"3:	li	%0, %4				\n"	\
+			"	j	2b				\n"	\
+			"	.previous				\n"	\
+			"	.section __ex_table,\"a\"		\n"	\
+			"	"__UA_ADDR "\t1b, 3b			\n"	\
+			"	.previous				\n"	\
+			: "+r" (ret), "=&r" (oldval), "+m" (*uaddr)		\
+			: "Jr" (oparg), "i" (-EFAULT)	\
+			: "memory");						\
+		} else if (LOONGSON_LLSC_WAR && !LOONGSON_LAMO) {			\
+			__asm__ __volatile__(					\
+			"	.set	push				\n"	\
+			"	.set	noat				\n"	\
+			"	.set	mips3				\n"	\
+			__LS3A_WAR_LLSC						\
+			"1:						\n"	\
+			"	ll	%1, %4	# __futex_atomic_op	\n"	\
+			"	.set	mips0				\n"	\
+			"	" insn	"				\n"	\
+			"	.set	mips3				\n"	\
+			"2:	sc	$1, %2				\n"	\
+			"	beqz	$1, 1b				\n"	\
+			"3:						\n"	\
+			"	.set	pop				\n"	\
+			"	.set	mips0				\n"	\
+			"	.section .fixup,\"ax\"			\n"	\
+			"4:	li	%0, %6				\n"	\
+			"	j	3b				\n"	\
+			"	.previous				\n"	\
+			"	.section __ex_table,\"a\"		\n"	\
+			"	"__UA_ADDR "\t1b, 4b			\n"	\
+			"	"__UA_ADDR "\t2b, 4b			\n"	\
+			"	.previous				\n"	\
+			: "=r" (ret), "=&r" (oldval), "=R" (*uaddr)		\
+			: "0" (0), "R" (*uaddr), "Jr" (oparg), "i" (-EFAULT)	\
+			: "memory");						\
+		} else {	\
+			__asm__ __volatile__(					\
+			"	.set	push				\n"	\
+			"	.set	noat				\n"	\
+			"	.set	mips3				\n"	\
+			"1:	ll	%1, %4	# __futex_atomic_op	\n"	\
+			"	.set	mips0				\n"	\
+			"	" insn	"				\n"	\
+			"	.set	mips3				\n"	\
+			"2:	sc	$1, %2				\n"	\
+			"	beqz	$1, 1b				\n"	\
+			"3:						\n"	\
+			"	.set	pop				\n"	\
+			"	.set	mips0				\n"	\
+			"	.section .fixup,\"ax\"			\n"	\
+			"4:	li	%0, %6				\n"	\
+			"	j	3b				\n"	\
+			"	.previous				\n"	\
+			"	.section __ex_table,\"a\"		\n"	\
+			"	"__UA_ADDR "\t1b, 4b			\n"	\
+			"	"__UA_ADDR "\t2b, 4b			\n"	\
+			"	.previous				\n"	\
+			: "=r" (ret), "=&r" (oldval), "=R" (*uaddr)		\
+			: "0" (0), "R" (*uaddr), "Jr" (oparg), "i" (-EFAULT)	\
+			: "memory");						\
+		}	\
 	} else								\
 		ret = -ENOSYS;						\
 }
@@ -118,24 +136,50 @@ futex_atomic_op_inuser(int encoded_op, u32 __user *uaddr)
 
 	switch (op) {
 	case FUTEX_OP_SET:
-		__futex_atomic_op("move $1, %z5", ret, oldval, uaddr, oparg);
+		if (LOONGSON_LAMO){
+#ifdef CONFIG_CPU_SUPPORTS_LAMO_INSTRUCTIONS
+			__futex_atomic_op("amswap_sync.w %1, %z3, %2", ret, oldval, uaddr, oparg);
+#endif
+		} else {
+			__futex_atomic_op("move $1, %z5", ret, oldval, uaddr, oparg);
+		}
 		break;
 
 	case FUTEX_OP_ADD:
-		__futex_atomic_op("addu $1, %1, %z5",
-				  ret, oldval, uaddr, oparg);
+		if (LOONGSON_LAMO) {
+#ifdef CONFIG_CPU_SUPPORTS_LAMO_INSTRUCTIONS
+			__futex_atomic_op("amadd_sync.w %1, %z3, %2", ret, oldval, uaddr, oparg);
+#endif
+		} else {
+			__futex_atomic_op("addu $1, %1, %z5", ret, oldval, uaddr, oparg);
+		}
 		break;
 	case FUTEX_OP_OR:
-		__futex_atomic_op("or	$1, %1, %z5",
-				  ret, oldval, uaddr, oparg);
+		if (LOONGSON_LAMO) {
+#ifdef CONFIG_CPU_SUPPORTS_LAMO_INSTRUCTIONS
+			__futex_atomic_op("amor_sync.w	%1, %z3, %2", ret, oldval, uaddr, oparg);
+#endif
+		} else {
+			__futex_atomic_op("or	$1, %1, %z5", ret, oldval, uaddr, oparg);
+		}
 		break;
 	case FUTEX_OP_ANDN:
-		__futex_atomic_op("and	$1, %1, %z5",
-				  ret, oldval, uaddr, ~oparg);
+		if (LOONGSON_LAMO) {
+#ifdef CONFIG_CPU_SUPPORTS_LAMO_INSTRUCTIONS
+			__futex_atomic_op("amand_sync.w	%1, %z3, %2", ret, oldval, uaddr, ~oparg);
+#endif
+		} else {
+			__futex_atomic_op("and	$1, %1, %z5", ret, oldval, uaddr, ~oparg);
+		}
 		break;
 	case FUTEX_OP_XOR:
-		__futex_atomic_op("xor	$1, %1, %z5",
-				  ret, oldval, uaddr, oparg);
+		if (LOONGSON_LAMO) {
+#ifdef CONFIG_CPU_SUPPORTS_LAMO_INSTRUCTIONS
+			__futex_atomic_op("amxor_sync.w	%1, %z3, %2", ret, oldval, uaddr, oparg);
+#endif
+		} else {
+			__futex_atomic_op("xor	$1, %1, %z5", ret, oldval, uaddr, oparg);
+		}
 		break;
 	default:
 		ret = -ENOSYS;

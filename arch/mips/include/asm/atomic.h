@@ -76,7 +76,15 @@ static __inline__ void atomic_add(int i, atomic_t * v)
 		"	.set	mips0					\n"
 		: "=&r" (temp), "+m" (v->counter)
 		: "Ir" (i));
-	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR) {
+	} else if (LOONGSON_LAMO) {
+#ifdef CONFIG_CPU_SUPPORTS_LAMO_INSTRUCTIONS
+		__asm__ __volatile__(
+		" amadd_sync.w $zero, %1, %0		\n"
+		: "+ZB" (v->counter)
+		: "r" (i)
+		: "memory");
+#endif
+	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR && !LOONGSON_LAMO) {
 		int temp;
 
 		__ls3a_war_llsc();
@@ -134,7 +142,15 @@ static __inline__ void atomic_sub(int i, atomic_t * v)
 		"	.set	mips0					\n"
 		: "=&r" (temp), "+m" (v->counter)
 		: "Ir" (i));
-	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR) {
+	} else if (LOONGSON_LAMO) {
+#ifdef CONFIG_CPU_SUPPORTS_LAMO_INSTRUCTIONS
+		__asm__ __volatile__(
+		" amadd_sync.w $zero, %1, %0		\n"
+		: "+ZB" (v->counter)
+		: "r" (-i)
+		: "memory");
+#endif
+	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR && !LOONGSON_LAMO) {
 		int temp;
 
 		__ls3a_war_llsc();
@@ -193,7 +209,17 @@ static __inline__ int atomic_add_return(int i, atomic_t * v)
 		"	.set	mips0					\n"
 		: "=&r" (result), "=&r" (temp), "+m" (v->counter)
 		: "Ir" (i));
-	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR) {
+	} else if (LOONGSON_LAMO) {
+#ifdef CONFIG_CPU_SUPPORTS_LAMO_INSTRUCTIONS
+		__asm__ __volatile__(
+		" amadd_sync.w %1, %2, %0		\n"
+		: "+ZB" (v->counter), "=&r" (result)
+		: "r" (i)
+		: "memory");
+
+		result = result + i;
+#endif
+	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR && !LOONGSON_LAMO) {
 		int temp;
 
 		__ls3a_war_llsc();
@@ -260,7 +286,17 @@ static __inline__ int atomic_sub_return(int i, atomic_t * v)
 		: "Ir" (i), "m" (v->counter)
 		: "memory");
 
-	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR) {
+	} else if (LOONGSON_LAMO) {
+#ifdef CONFIG_CPU_SUPPORTS_LAMO_INSTRUCTIONS
+		__asm__ __volatile__(
+		" amadd_sync.w %1, %2, %0		\n"
+		: "+ZB" (v->counter), "=&r" (result)
+		: "r" (-i)
+		: "memory");
+
+		result = result -i;
+#endif
+	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR && !LOONGSON_LAMO) {
 		int temp;
 
 		__ls3a_war_llsc();
@@ -540,7 +576,15 @@ static __inline__ void atomic64_add(long i, atomic64_t * v)
 		"	.set	mips0					\n"
 		: "=&r" (temp), "+m" (v->counter)
 		: "Ir" (i));
-	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR) {
+	} else if (LOONGSON_LAMO) {
+#ifdef CONFIG_CPU_SUPPORTS_LAMO_INSTRUCTIONS
+		__asm__ __volatile__(
+		" amadd_sync.d $zero, %1, %0		\n"
+		: "+ZB" (v->counter)
+		: "r" (i)
+		: "memory");
+#endif
+	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR && !LOONGSON_LAMO) {
 		long temp;
 
 		__ls3a_war_llsc();
@@ -598,7 +642,15 @@ static __inline__ void atomic64_sub(long i, atomic64_t * v)
 		"	.set	mips0					\n"
 		: "=&r" (temp), "+m" (v->counter)
 		: "Ir" (i));
-	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR) {
+	} else if (LOONGSON_LAMO) {
+#ifdef CONFIG_CPU_SUPPORTS_LAMO_INSTRUCTIONS
+		__asm__ __volatile__(
+		" amadd_sync.d $zero, %1, %0		\n"
+		: "+ZB" (v->counter)
+		: "r" (-i)
+		: "memory");
+#endif
+	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR && !LOONGSON_LAMO) {
 		long temp;
 
 		__ls3a_war_llsc();
@@ -657,7 +709,17 @@ static __inline__ long atomic64_add_return(long i, atomic64_t * v)
 		"	.set	mips0					\n"
 		: "=&r" (result), "=&r" (temp), "+m" (v->counter)
 		: "Ir" (i));
-	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR) {
+	} else if (LOONGSON_LAMO) {
+#ifdef CONFIG_CPU_SUPPORTS_LAMO_INSTRUCTIONS
+		__asm__ __volatile__(
+		" amadd_sync.d %1, %2, %0		\n"
+		: "+ZB" (v->counter), "=&r" (result)
+		: "r" (i)
+		: "memory");
+
+		result = result + i;
+#endif
+	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR && !LOONGSON_LAMO) {
 		long temp;
 
 		__ls3a_war_llsc();
@@ -729,7 +791,17 @@ static __inline__ long atomic64_sub_return(long i, atomic64_t * v)
 		: "=&r" (result), "=&r" (temp), "=m" (v->counter)
 		: "Ir" (i), "m" (v->counter)
 		: "memory");
-	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR) {
+	} else if (LOONGSON_LAMO) {
+#ifdef CONFIG_CPU_SUPPORTS_LAMO_INSTRUCTIONS
+		__asm__ __volatile__(
+		" amadd_sync.d %1, %2, %0		\n"
+		: "+ZB" (v->counter), "=&r" (result)
+		: "r" (-i)
+		: "memory");
+
+		result = result -i;
+#endif
+	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR && !LOONGSON_LAMO) {
 		long temp;
 
 		__ls3a_war_llsc();
