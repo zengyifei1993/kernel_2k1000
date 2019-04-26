@@ -31,7 +31,7 @@ enum {
  * switch_to(n) should switch tasks to task nr n, first
  * checking that n isn't the current task, in which case it does nothing.
  */
-extern asmlinkage void *resume(void *last, void *next, void *next_ti, s32 fp_save);
+extern asmlinkage void *resume(void *last, void *next, void *next_ti);
 
 extern unsigned int ll_bit;
 extern struct task_struct *ll_task;
@@ -92,7 +92,7 @@ do {									\
 #define switch_to(prev, next, last)					\
 do {									\
 	u32 __c0_stat;							\
-	s32 __fpsave = FP_SAVE_NONE;					\
+	lose_fpu_inatomic(1, prev);					\
 	__mips_mt_fpaff_switch_to(prev);				\
 	if (tsk_used_math(next))					\
 		__sanitize_fcr31(next);					\
@@ -107,11 +107,7 @@ do {									\
 		write_c0_status(__c0_stat & ~ST0_CU2);			\
 	}								\
 	__clear_software_ll_bit();					\
-	if (test_and_clear_tsk_thread_flag(prev, TIF_USEDFPU))		\
-		__fpsave = FP_SAVE_SCALAR;				\
-	if (test_and_clear_tsk_thread_flag(prev, TIF_USEDMSA))		\
-		__fpsave = FP_SAVE_VECTOR;				\
-	(last) = resume(prev, next, task_thread_info(next), __fpsave);	\
+	(last) = resume(prev, next, task_thread_info(next));	\
 } while (0)
 
 #define finish_arch_switch(prev)					\
@@ -129,7 +125,6 @@ do {									\
 	if (cpu_has_userlocal)						\
 		write_c0_userlocal(current_thread_info()->tp_value);	\
 	__restore_watch();						\
-	disable_msa();							\
 } while (0)
 
 #endif /* _ASM_SWITCH_TO_H */
