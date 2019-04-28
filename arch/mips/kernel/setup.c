@@ -285,7 +285,7 @@ static void __init finalize_initrd(void)
 		goto disable;
 	}
 
-	reserve_bootmem(__pa(initrd_start), size, BOOTMEM_DEFAULT);
+	memblock_reserve(__pa(initrd_start), size);
 	initrd_below_start_ok = 1;
 
 	pr_info("Initial ramdisk at: 0x%lx (%lu bytes)\n",
@@ -322,28 +322,21 @@ static void __init bootmem_init(void)
 
 #else  /* !CONFIG_SGI_IP27 */
 
-static unsigned long __init bootmap_bytes(unsigned long pages)
-{
-	unsigned long bytes = DIV_ROUND_UP(pages, 8);
-
-	return ALIGN(bytes, sizeof(long));
-}
-
 static void __init bootmem_init(void)
 {
 	unsigned long reserved_end;
-	unsigned long mapstart = ~0UL;
-	unsigned long bootmap_size;
-	bool bootmap_valid = false;
 	int i;
 
 	/*
-	 * Init any data related to initrd. It's a nop if INITRD is
-	 * not selected. Once that done we can determine the low bound
-	 * of usable memory.
+	 * Sanity check any INITRD first. We don't take it into account
+	 * for bootmem setup initially, rely on the end-of-kernel-code
+	 * as our memory range starting point. Once bootmem is inited we
+	 * will reserve the area used for the initrd.
 	 */
-	reserved_end = max(init_initrd(),
-			   (unsigned long) PFN_UP(__pa_symbol(&_end)));
+	init_initrd();
+	reserved_end = (unsigned long) PFN_UP(__pa_symbol(&_end));
+
+	memblock_reserve(PHYS_OFFSET, reserved_end << PAGE_SHIFT);
 
 	/*
 	 * max_low_pfn is not a number of pages. The number of pages
@@ -371,9 +364,11 @@ static void __init bootmem_init(void)
 			min_low_pfn = start;
 		if (end <= reserved_end)
 			continue;
-		if (start >= mapstart)
+#ifdef CONFIG_BLK_DEV_INITRD
+		/* Skip zones before initrd and initrd itself */
+		if (initrd_end && end <= (unsigned long)PFN_UP(__pa(initrd_end)))
 			continue;
-		mapstart = max(reserved_end, start);
+#endif
 	}
 
 	if (min_low_pfn >= max_low_pfn)
@@ -399,44 +394,6 @@ static void __init bootmem_init(void)
 #endif
 		max_low_pfn = PFN_DOWN(HIGHMEM_START);
 	}
-
-	/*
-	 * check that mapstart doesn't overlap with any of
-	 * memory regions that have been reserved through eg. DTB
-	 */
-	bootmap_size = bootmap_bytes(max_low_pfn - min_low_pfn);
-
-	bootmap_valid = memory_region_available(PFN_PHYS(mapstart),
-						bootmap_size);
-	for (i = 0; i < boot_mem_map.nr_map && !bootmap_valid; i++) {
-		unsigned long mapstart_addr;
-
-		switch (boot_mem_map.map[i].type) {
-		case BOOT_MEM_RESERVED:
-			mapstart_addr = PFN_ALIGN(boot_mem_map.map[i].addr +
-						boot_mem_map.map[i].size);
-			if (PHYS_PFN(mapstart_addr) < mapstart)
-				break;
-
-			bootmap_valid = memory_region_available(mapstart_addr,
-								bootmap_size);
-			if (bootmap_valid)
-				mapstart = PHYS_PFN(mapstart_addr);
-			break;
-		default:
-			break;
-		}
-	}
-
-	if (!bootmap_valid)
-		panic("No memory area to place a bootmap bitmap");
-
-	/*
-	 * Initialize the boot-time allocator with low memory only.
-	 */
-	if (bootmap_size != init_bootmem_node(NODE_DATA(0), mapstart,
-					 min_low_pfn, max_low_pfn))
-		panic("Unexpected memory size required for bootmap");
 
 	for (i = 0; i < boot_mem_map.nr_map; i++) {
 		unsigned long start, end;
@@ -486,9 +443,8 @@ static void __init bootmem_init(void)
 		default:
 			/* Not usable memory */
 			if (start > min_low_pfn && end < max_low_pfn)
-				reserve_bootmem(boot_mem_map.map[i].addr,
-						boot_mem_map.map[i].size,
-						BOOTMEM_DEFAULT);
+				memblock_reserve(boot_mem_map.map[i].addr,
+						boot_mem_map.map[i].size);
 			continue;
 		}
 
@@ -511,14 +467,8 @@ static void __init bootmem_init(void)
 		size = end - start;
 
 		/* Register lowmem ranges */
-		free_bootmem(PFN_PHYS(start), size << PAGE_SHIFT);
 		memory_present(0, start, end);
 	}
-
-	/*
-	 * Reserve the bootmap memory.
-	 */
-	reserve_bootmem(PFN_PHYS(mapstart), bootmap_size, BOOTMEM_DEFAULT);
 
 	/*
 	 * Reserve initrd memory if needed.
@@ -554,7 +504,7 @@ static int usermem __initdata;
 
 static int __init early_parse_mem(char *p)
 {
-	unsigned long start, size;
+	phys_addr_t start, size;
 
 	/*
 	 * If a user specifies memory size, we
@@ -610,9 +560,9 @@ static int __init early_parse_elfcorehdr(char *p)
 early_param("elfcorehdr", early_parse_elfcorehdr);
 #endif
 
-static void __init arch_mem_addpart(phys_t mem, phys_t end, int type)
+static void __init arch_mem_addpart(phys_addr_t mem, phys_addr_t end, int type)
 {
-	phys_t size;
+	phys_addr_t size;
 	int i;
 
 	size = end - mem;
@@ -685,10 +635,12 @@ static void __init request_crashkernel(struct resource *res)
 
 static void __init arch_mem_init(char **cmdline_p)
 {
+	struct memblock_region *reg;
 	extern void plat_mem_setup(void);
 
 	/* call board setup routine */
 	plat_mem_setup();
+	memblock_set_bottom_up(true);
 
 	/*
 	 * Make sure all kernel memory is in the maps.  The "UP" and
@@ -731,29 +683,42 @@ static void __init arch_mem_init(char **cmdline_p)
 	}
 
 	bootmem_init();
+
+	/*
+	 * Prevent memblock from allocating high memory.
+	 * This cannot be done before max_low_pfn is detected, so up
+	 * to this point is possible to only reserve physical memory
+	 * with memblock_reserve; memblock_virt_alloc* can be used
+	 * only after this point
+	 */
+	memblock_set_current_limit(PFN_PHYS(max_low_pfn));
+
 #ifdef CONFIG_PROC_VMCORE
 	if (setup_elfcorehdr && setup_elfcorehdr_size) {
 		printk(KERN_INFO "kdump reserved memory at %lx-%lx\n",
 		       setup_elfcorehdr, setup_elfcorehdr_size);
-		reserve_bootmem(setup_elfcorehdr, setup_elfcorehdr_size,
-				BOOTMEM_DEFAULT);
+		memblock_reserve(setup_elfcorehdr, setup_elfcorehdr_size);
 	}
 #endif
 
 	mips_parse_crashkernel();
 #ifdef CONFIG_KEXEC
 	if (crashk_res.start != crashk_res.end)
-		reserve_bootmem(crashk_res.start,
-				crashk_res.end - crashk_res.start + 1,
-				BOOTMEM_DEFAULT);
+		memblock_reserve(crashk_res.start,
+				 crashk_res.end - crashk_res.start + 1);
 #endif
 	device_tree_init();
 	sparse_init();
 	plat_swiotlb_setup();
 	paging_init();
 
-    reserve_bootmem_region(__pa_symbol(&__nosave_begin),
-            __pa_symbol(&__nosave_end)); /* Reserve for hibernation */
+	/* Tell bootmem about cma reserved memblock section */
+	for_each_memblock(reserved, reg)
+		if (reg->size != 0)
+			memblock_reserve(reg->base, reg->size);
+
+	reserve_bootmem_region(__pa_symbol(&__nosave_begin),
+			__pa_symbol(&__nosave_end)); /* Reserve for hibernation */
 }
 
 static void __init resource_init(void)

@@ -23,7 +23,6 @@
 #include <asm/page.h>
 #include <asm/pgalloc.h>
 #include <asm/sections.h>
-#include <linux/bootmem.h>
 #include <linux/init.h>
 #include <linux/irq.h>
 #include <asm/bootinfo.h>
@@ -32,13 +31,36 @@
 #include <asm/wbflush.h>
 #include <boot_param.h>
 
-static struct node_data prealloc__node_data[MAX_NUMNODES];
 unsigned char __node_distances[MAX_NUMNODES][MAX_NUMNODES];
 EXPORT_SYMBOL(__node_distances);
 struct node_data *__node_data[MAX_NUMNODES];
 EXPORT_SYMBOL(__node_data);
 extern u64 vuma_vram_addr;
 extern u64 vuma_vram_size;
+
+static inline struct node_data * __init alloc_node_data(int nid)
+{
+	void * nd;
+	unsigned long nd_pa;
+	size_t nd_sz = roundup(sizeof(struct node_data), PAGE_SIZE);
+
+	nd_pa = memblock_alloc_nid(nd_sz, SMP_CACHE_BYTES, nid);
+	if (!nd_pa) {
+		nd_pa = __memblock_alloc_base(nd_sz, SMP_CACHE_BYTES,
+				MEMBLOCK_ALLOC_ACCESSIBLE);
+		if (!nd_pa) {
+			pr_err("Cannot find %zu Byte for node_data %d \n",
+					nd_sz, nid);
+			return NULL;
+		}
+	}
+
+	nd = __va(nd_pa);
+	pr_info("hp: nd_pa:%lx, nd:%p\n", nd_pa, nd);
+	memset(nd, 0, sizeof(struct node_data));
+
+	return (struct node_data *)nd;
+}
 
 static void enable_lpa(void)
 {
@@ -228,43 +250,41 @@ static void __init szmem(unsigned int node)
 
 static void __init node_mem_init(unsigned int node)
 {
-	unsigned long bootmap_size;
 	unsigned long node_addrspace_offset;
-	unsigned long start_pfn, end_pfn, freepfn;
+	unsigned long start_pfn, end_pfn;
+	struct node_data *nd;
 
 	node_addrspace_offset = nid_to_addroffset(node);
-	printk("node%d's addrspace_offset is 0x%lx\n", node, node_addrspace_offset);
+	pr_info("Node%d's addrspace_offset is 0x%lx\n",
+			node, node_addrspace_offset);
 
 	get_pfn_range_for_nid(node, &start_pfn, &end_pfn);
-	freepfn = start_pfn;
-	if (node == 0)
-		freepfn = PFN_UP(__pa_symbol(&_end)); /* kernel binary end address */
-	printk("Node%d's start_pfn is 0x%lx, end_pfn is 0x%lx, freepfn is 0x%lx\n",
-		node, start_pfn, end_pfn, freepfn);
+	pr_info("Node%d: start_pfn=0x%lx, end_pfn=0x%lx\n",
+		node, start_pfn, end_pfn);
 
-	__node_data[node] = prealloc__node_data + node;
-
-	NODE_DATA(node)->bdata = &bootmem_node_data[node];
+	free_bootmem_with_active_regions(node, end_pfn);
+	nd = alloc_node_data(node);
+	__node_data[node] = nd;
 	NODE_DATA(node)->node_start_pfn = start_pfn;
 	NODE_DATA(node)->node_spanned_pages = end_pfn - start_pfn;
 
-	bootmap_size = init_bootmem_node(NODE_DATA(node), freepfn,
-					start_pfn, end_pfn);
-	free_bootmem_with_active_regions(node, end_pfn);
-	if (node == 0) /* used by finalize_initrd() */
+
+	if (node == 0) {
+		/* kernel end address */
+		unsigned long kernel_end_pfn = PFN_UP(__pa_symbol(&_end));
+
+		/* used by finalize_initrd() */
 		max_low_pfn = end_pfn;
 
-	/* This is reserved for the kernel and bdata->node_bootmem_map */
-	reserve_bootmem_node(NODE_DATA(node), start_pfn << PAGE_SHIFT, \
-		((freepfn - start_pfn) << PAGE_SHIFT) + bootmap_size, \
-		BOOTMEM_DEFAULT);
-
-        /* Just for compatibility previous Loongson-3A kernel */
-	if (node == 0 && node_end_pfn(0) >= (0xffffffff >> PAGE_SHIFT)) {
+		/* Reserve the kernel text/data/bss */
+		memblock_reserve(start_pfn << PAGE_SHIFT,
+				((kernel_end_pfn - start_pfn) << PAGE_SHIFT));
 		/* Reserve 0xfe000000~0xffffffff for RS780E integrated GPU */
-		reserve_bootmem_node(NODE_DATA(node), \
-				(node_addrspace_offset | 0xfe000000), 32 << 20, BOOTMEM_DEFAULT);
+		if (node_end_pfn(0) >= (0xffffffff >> PAGE_SHIFT))
+			memblock_reserve((node_addrspace_offset | 0xfe000000),
+					 32 << 20);
 	}
+
 
 	sparse_memory_present_with_active_regions(node);
 }
@@ -284,6 +304,8 @@ static __init void prom_meminit(void)
 			cpus_clear(__node_data[(node)]->cpumask);
 		}
 	}
+	max_low_pfn = PHYS_PFN(memblock_end_of_DRAM());
+
 	for (cpu = 0; cpu < nr_cpus_loongson; cpu++) {
 		node = cpu / cores_per_node;
 		if (node >= num_online_nodes())
@@ -301,19 +323,10 @@ static __init void prom_meminit(void)
 
 void __init paging_init(void)
 {
-	unsigned node;
 	unsigned long zones_size[MAX_NR_ZONES] = {0, };
 
 	pagetable_init();
 
-	for_each_online_node(node) {
-		unsigned long  start_pfn, end_pfn;
-
-		get_pfn_range_for_nid(node, &start_pfn, &end_pfn);
-
-		if (end_pfn > max_low_pfn)
-			max_low_pfn = end_pfn;
-	}
 #ifdef CONFIG_ZONE_DMA32
 	zones_size[ZONE_DMA32] = MAX_DMA32_PFN;
 #endif
@@ -325,36 +338,10 @@ extern unsigned long setup_zero_pages(void);
 
 void __init mem_init(void)
 {
-	unsigned long codesize, datasize, initsize, tmp;
-	unsigned node;
-
-	high_memory = (void *) __va(num_physpages << PAGE_SHIFT);
-		printk("total ram pages initialed %ld\n",totalram_pages);
-
-	for_each_online_node(node) {
-		/*
-		 * This will free up the bootmem, ie, slot 0 memory.
-		 */
-		totalram_pages += free_all_bootmem_node(NODE_DATA(node));
-		printk("total ram pages are %ld\n",totalram_pages);
-	}
-
+	high_memory = (void *) __va(get_num_physpages() << PAGE_SHIFT);
+	totalram_pages += free_all_bootmem();
 	setup_zero_pages();	/* This comes from node 0 */
-
-	codesize = (unsigned long) &_etext - (unsigned long) &_text;
-	datasize = (unsigned long) &_edata - (unsigned long) &_etext;
-	initsize = (unsigned long) &__init_end - (unsigned long) &__init_begin;
-
-	tmp = nr_free_pages();
-	printk(KERN_INFO "Memory: %luk/%luk available (%ldk kernel code, "
-	       "%ldk reserved, %ldk data, %ldk init, %ldk highmem)\n",
-	       tmp << (PAGE_SHIFT-10),
-	       num_physpages << (PAGE_SHIFT-10),
-	       codesize >> 10,
-	       (num_physpages - tmp) << (PAGE_SHIFT-10),
-	       datasize >> 10,
-	       initsize >> 10,
-	       (unsigned long) (totalhigh_pages << (PAGE_SHIFT-10)));
+	mem_init_print_info(NULL);
 }
 
 /* All PCI device belongs to logical Node-0 */
