@@ -570,4 +570,6 @@ static inline void ls64_conf_write32(u32 val, volatile void __iomem *addr)
 struct cpucfg_info{
 	int	reg[9];
 };
+
++void loongson_nodecounter_adjust(void);
 #endif /* __ASM_MACH_LOONGSON_LOONGSON_H */

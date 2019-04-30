@@ -1179,6 +1179,7 @@ static void kvm_vz_dequeue_timer_int_cb(struct kvm_vcpu *vcpu)
 
 #define MIPS_EXC_INT_HT          11
 #define MIPS_EXC_INT_PM          12
+#define MIPS_EXC_INT_FREQ        13
 #define MIPS_EXC_INT_IPI         14
 
 static void kvm_vz_queue_io_int_cb(struct kvm_vcpu *vcpu,
@@ -1201,6 +1202,10 @@ static void kvm_vz_queue_io_int_cb(struct kvm_vcpu *vcpu,
 
 	case 4:
 		kvm_vz_queue_irq(vcpu, MIPS_EXC_INT_PM);
+		break;
+
+	case 5:
+		kvm_vz_queue_irq(vcpu, MIPS_EXC_INT_FREQ);
 		break;
 
 	case 6:
@@ -1234,6 +1239,10 @@ static void kvm_vz_dequeue_io_int_cb(struct kvm_vcpu *vcpu,
 		kvm_vz_dequeue_irq(vcpu, MIPS_EXC_INT_PM);
 		break;
 
+	case -5:
+		kvm_vz_dequeue_irq(vcpu, MIPS_EXC_INT_FREQ);
+		break;
+
 	case -6:
 		kvm_vz_dequeue_irq(vcpu, MIPS_EXC_INT_IPI);
 		break;
@@ -1249,6 +1258,7 @@ static u32 kvm_vz_priority_to_irq[MIPS_EXC_MAX] = {
 	[MIPS_EXC_INT_HT]    = C_IRQ1,
 	[MIPS_EXC_INT_IPI]   = C_IRQ4,
 	[MIPS_EXC_INT_PM]    = C_IRQ2,
+	[MIPS_EXC_INT_FREQ]  = C_IRQ3,
 };
 
 static int kvm_vz_irq_clear_cb(struct kvm_vcpu *vcpu, unsigned int priority,
@@ -1277,6 +1287,7 @@ static int kvm_vz_irq_clear_cb(struct kvm_vcpu *vcpu, unsigned int priority,
 	case MIPS_EXC_INT_HT:
 	case MIPS_EXC_INT_IPI:
 	case MIPS_EXC_INT_PM:
+	case MIPS_EXC_INT_FREQ:
 		/* Clear GuestCtl2.VIP irq if not using Hardware Clear */
 		if (cpu_has_guestctl2) {
 			if(vcpu->arch.pending_exceptions_clr & (1<< priority)) {
@@ -1285,7 +1296,7 @@ static int kvm_vz_irq_clear_cb(struct kvm_vcpu *vcpu, unsigned int priority,
 				*/
 				vcpu->arch.cop0->reg[MIPS_CP0_CAUSE][0] = read_gc0_cause();
 				vcpu->arch.cop0->reg[MIPS_CP0_CAUSE][0] &= (~irq);
-				write_c0_guestctl2(vcpu->arch.cop0->reg[MIPS_CP0_CAUSE][0] & 0x5c00);
+				write_c0_guestctl2(vcpu->arch.cop0->reg[MIPS_CP0_CAUSE][0] & 0x7c00);
 			}
 		} else {
 			kvm_err("No any other way to clear guest interrupt\n");
@@ -1317,13 +1328,14 @@ static int kvm_vz_irq_deliver_cb(struct kvm_vcpu *vcpu, unsigned int priority,
 	case MIPS_EXC_INT_HT:
 	case MIPS_EXC_INT_IPI:
 	case MIPS_EXC_INT_PM:
+	case MIPS_EXC_INT_FREQ:
 		if (cpu_has_guestctl2) {
 			/*To insure the other IP not miss by the set guestctl2 for
 			* not once to set all the pending_exception
 			*/
 			vcpu->arch.cop0->reg[MIPS_CP0_CAUSE][0] = read_gc0_cause();
 			vcpu->arch.cop0->reg[MIPS_CP0_CAUSE][0] |= irq;
-			write_c0_guestctl2(vcpu->arch.cop0->reg[MIPS_CP0_CAUSE][0] & 0x5c00);
+			write_c0_guestctl2(vcpu->arch.cop0->reg[MIPS_CP0_CAUSE][0] & 0x7c00);
 		} else
 			set_gc0_cause(irq);
 		break;
@@ -1388,7 +1400,7 @@ static void _kvm_vz_restore_stimer(struct kvm_vcpu *vcpu, u32 compare,
 
 	back_to_back_c0_hazard();
 	write_gc0_cause(cause);
-	write_c0_guestctl2(cause & 0x5c00);
+	write_c0_guestctl2(cause & 0x7c00);
 }
 
 /**
@@ -1419,7 +1431,7 @@ static void _kvm_vz_restore_htimer(struct kvm_vcpu *vcpu,
 	/* restore guest CP0_Cause, as TI may already be set */
 	back_to_back_c0_hazard();
 	write_gc0_cause(cause);
-	write_c0_guestctl2(cause & 0x5c00);
+	write_c0_guestctl2(cause & 0x7c00);
 
 	/*
 	 * The above sequence isn't atomic and would result in lost timer
@@ -2163,7 +2175,7 @@ static int kvm_vz_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 	/* restore Root.GuestCtl2 from unused Guest guestctl2 register */
 	if (cpu_has_guestctl2) {
 		write_c0_guestctl2(
-			cop0->reg[MIPS_CP0_CAUSE][0] & 0x5c00);
+			cop0->reg[MIPS_CP0_CAUSE][0] & 0x7c00);
 	}
 
 	return 0;
@@ -2201,7 +2213,7 @@ static int kvm_vz_vcpu_put(struct kvm_vcpu *vcpu, int cpu)
 	/* save Root.GuestCtl2 in unused Guest guestctl2 register */
 	if (cpu_has_guestctl2)
 		cop0->reg[MIPS_CP0_GUESTCTL2][MIPS_CP0_GUESTCTL2_SEL] =
-			read_gc0_cause() & 0x5c00;
+			read_gc0_cause() & 0x7c00;
 
 	return 0;
 }
@@ -3169,7 +3181,9 @@ int kvm_mips_handle_ls3a3000_vz_root_tlb_fault(unsigned long badvaddr,
 			idx = (badvaddr >> PAGE_SHIFT) & 1;
 			ret = kvm_lsvz_map_page(vcpu, gpa, write_fault, 0, &pte_gpa[idx], &pte_gpa[!idx]);
 			if (ret == RESUME_GUEST) {
-				pte_gpa[!idx].pte |= _PAGE_GLOBAL;
+				//pte_gpa[!idx].pte |= _PAGE_GLOBAL;
+				pte_gpa[0].pte |= _PAGE_GLOBAL;
+				pte_gpa[1].pte |= _PAGE_GLOBAL;
 				tlb.tlb_hi = (badvaddr & 0xc000ffffffffe000) & (PAGE_MASK << 1);
 				tlb.tlb_mask = 0x7800;
 				tlb.tlb_lo[0] = pte_to_entrylo(pte_val(pte_gpa[0]));

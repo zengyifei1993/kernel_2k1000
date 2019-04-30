@@ -154,7 +154,7 @@ int plat_set_irq_affinity(struct irq_data *d, const struct cpumask *affinity,
 }
 
 #ifdef CONFIG_KVM_GUEST_LS3A3000
-#define UNUSED_IPS (CAUSEF_IP5 | CAUSEF_IP1 | CAUSEF_IP0)
+#define UNUSED_IPS (CAUSEF_IP1 | CAUSEF_IP0)
 #else
 #define UNUSED_IPS (CAUSEF_IP5 | CAUSEF_IP4 | CAUSEF_IP1 | CAUSEF_IP0)
 #endif
@@ -168,11 +168,13 @@ void mach_irq_dispatch(unsigned int pending)
 		loongson3_ipi(NULL);
 #endif
 #ifdef CONFIG_KVM_GUEST_LS3A3000
+	pending = read_c0_cause() & read_c0_status() & ST0_IM;
+	if (pending & CAUSEF_IP5)
+		loongson_nodecounter_adjust();
 	if (pending & CAUSEF_IP4) {
 		lsvirt_button_poweroff();
 	}
 #endif
-
 	if (pending & CAUSEF_IP3)
 		loongson_pch->irq_dispatch();
 	if (pending & CAUSEF_IP2)
@@ -309,7 +311,7 @@ void __init mach_init_irq(void)
 #ifndef CONFIG_KVM_GUEST_LS3A3000
 	set_c0_status(STATUSF_IP2 | STATUSF_IP6);
 #else
-	set_c0_status(STATUSF_IP2  | STATUSF_IP4 | STATUSF_IP6);
+	set_c0_status(STATUSF_IP2  | STATUSF_IP4 | STATUSF_IP5 | STATUSF_IP6);
 #endif
 }
 
