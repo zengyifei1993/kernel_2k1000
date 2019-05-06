@@ -13,38 +13,17 @@
 
 #include <boot_param.h>
 #define NODE_ADDRSPACE_SHIFT 44
-#define NODE0_ADDRSPACE_OFFSET 0x000000000000UL
-#define NODE1_ADDRSPACE_OFFSET 0x100000000000UL
-#define NODE2_ADDRSPACE_OFFSET 0x200000000000UL
-#define NODE3_ADDRSPACE_OFFSET 0x300000000000UL
 
-#define pa_to_nid(addr)	   (addr & 0xf00000000000) == NODE0_ADDRSPACE_OFFSET ? 0 \
-			: ((addr & 0xf00000000000) == NODE1_ADDRSPACE_OFFSET ? 1 \
-			: ((addr & 0xf00000000000) == NODE2_ADDRSPACE_OFFSET ? 2:3))
-
-#define LEVELS_PER_SLICE        128
-
-struct slice_data {
-	unsigned long irq_enable_mask[2];
-	int level_to_irq[LEVELS_PER_SLICE];
-};
-
-struct hub_data {
-	cpumask_t	h_cpus;
-	unsigned long slice_map;
-	unsigned long irq_alloc_mask[2];
-	struct slice_data slice[2];
-};
+#define pa_to_nid(addr)	  ((addr >> NODE_ADDRSPACE_SHIFT) & 0xf)
+#define nid_to_addroffset(node)	((unsigned long)node << NODE_ADDRSPACE_SHIFT)
 
 struct node_data {
 	struct pglist_data pglist;
-	struct hub_data hub;
 	cpumask_t cpumask;
 };
 
 extern struct node_data *__node_data[];
 
 #define NODE_DATA(n)		(&__node_data[(n)]->pglist)
-#define hub_data(n)		(&__node_data[(n)]->hub)
 
 #endif /* _ASM_MACH_MMZONE_H */
