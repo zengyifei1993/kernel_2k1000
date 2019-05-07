@@ -283,19 +283,19 @@ int __init loongson_acpi_init(void)
     switch (loongson_pch->board_type) {
         case LS2H:
             acpi_irq = LS2H_PCH_ACPI_IRQ;
-            acpi_control_reg = LS2H_PM1_CNT_REG;
-            acpi_status_reg  = LS2H_PM1_STS_REG;
-            acpi_enable_reg  = LS2H_PM1_EN_REG;
-            gpe0_status_reg  = LS2H_GPE0_STS_REG;
-		gpe0_enable_reg = LS2H_GPE0_EN_REG;
+            acpi_control_reg = (void *)LS2H_PM1_CNT_REG;
+            acpi_status_reg  = (void *)LS2H_PM1_STS_REG;
+            acpi_enable_reg  = (void *)LS2H_PM1_EN_REG;
+            gpe0_status_reg  = (void *)LS2H_GPE0_STS_REG;
+	    gpe0_enable_reg = (void *)LS2H_GPE0_EN_REG;
             break;
         case LS7A:
             acpi_irq = LS7A_IOAPIC_ACPI_INT_IRQ;
-            acpi_control_reg = LS7A_PM1_CNT_REG;
-            acpi_status_reg  = LS7A_PM1_EVT_REG;
-            acpi_enable_reg  = LS7A_PM1_ENA_REG;
-            gpe0_status_reg  = LS7A_GPE0_STS_REG;
-		gpe0_enable_reg = LS7A_GPE0_ENA_REG;
+	    acpi_control_reg = (void *)LS7A_PM1_CNT_REG;
+            acpi_status_reg  = (void *)LS7A_PM1_EVT_REG;
+            acpi_enable_reg  = (void *)LS7A_PM1_ENA_REG;
+            gpe0_status_reg  = (void *)LS7A_GPE0_STS_REG;
+	    gpe0_enable_reg = (void *)LS7A_GPE0_ENA_REG;
             break;
         case RS780E:
             acpi_irq = RS780_PCH_ACPI_IRQ;
@@ -303,7 +303,7 @@ int __init loongson_acpi_init(void)
             acpi_status_reg  = (void *)(mips_io_port_base + SBX00_PM_EVT_BLK + 0);
             acpi_enable_reg  = (void *)(mips_io_port_base + SBX00_PM_EVT_BLK + 2);
             gpe0_status_reg  = (void *)(mips_io_port_base + SBX00_GPE0_BLK   + 0);
-		gpe0_enable_reg = (void *)(mips_io_port_base + SBX00_GPE0_BLK   + 4);
+	    gpe0_enable_reg = (void *)(mips_io_port_base + SBX00_GPE0_BLK   + 4);
             register_acpi_resource();
             break;
         default:
