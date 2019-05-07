@@ -271,11 +271,11 @@ static void dma_setup(struct ls_nand_info *info, int dma_cmd, int dma_cnt)
 			t |= 0x1UL;
 	else
 			t &= ~0x1UL;
-	dma_order = readq(info->dma_order_reg) & 0xfUL | t;
-	writeq(dma_order, info->dma_order_reg);
+	dma_order = (readq((void *)info->dma_order_reg) & 0xfUL ) | t;
+	writeq(dma_order, (void *)info->dma_order_reg);
 
 	t = STATUS_TIME_LOOP_R;
-	while ((readl(info->dma_order_reg) & 0x8) && t) {
+	while ((readl((void*)info->dma_order_reg) & 0x8) && t) {
 			t--;
 			udelay(50);
 	};
@@ -556,8 +556,8 @@ static void test_handler(unsigned long data)
 	mod_timer(&info->test_timer, jiffies + 1);
 	val = (info->dma_ask_phy & ~0x1fUL) | 0x4;
 
-	dma_order = readq(info->dma_order_reg) & 0x1fUL | val;
-	writeq(dma_order, info->dma_order_reg);
+	dma_order = (readq((void *)info->dma_order_reg) & 0x1fUL) | val;
+	writeq(dma_order, (void *)info->dma_order_reg);
 	udelay(1000);
 }
 
@@ -690,9 +690,9 @@ static int ls_nand_probe(struct platform_device *pdev)
 	}
 	of_property_read_u32(chan->device->dev->of_node, "reg", &data);
 	r->start = data;
-	info->dma_order_reg = ioremap(r->start, 8);
+	info->dma_order_reg = (u64)ioremap(r->start, 8);
 #ifdef MTD_NAND_DEBUG
-	pr_info("info->dma_order_reg = %x\n", info->dma_order_reg);
+	pr_info("info->dma_order_reg = %llx\n", info->dma_order_reg);
 #endif
 
 	r = platform_get_resource(pdev, IORESOURCE_MEM, 0);
