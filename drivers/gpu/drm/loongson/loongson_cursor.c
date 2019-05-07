@@ -13,9 +13,6 @@
 #include <drm/drmP.h>
 #include "loongson_drv.h"
 
-static bool warn_transparent = true;
-static bool warn_palette = true;
-
 /*
   Hide the cursor off screen. We can't disable the cursor hardware because it
   takes too long to re-activate and causes momentary corruption
@@ -74,7 +71,7 @@ static void loongson_show_cursor(struct drm_crtc *crtc)
 			}
 
 			ldev->cursor_showed = true;
-			ldev->cursor_crtc_id == crtc_id;
+			ldev->cursor_crtc_id = crtc_id;
 		}
 	}
 }
@@ -172,7 +169,7 @@ int loongson_crtc_cursor_set2(struct drm_crtc *crtc,
 	if (ret)
 		loongson_hide_cursor(crtc);
 	loongson_bo_unreserve(pixels);
-out_unreserve1:
+
 out_unref:
 	drm_gem_object_unreference_unlocked(obj);
 
@@ -183,13 +180,13 @@ int loongson_crtc_cursor_move(struct drm_crtc *crtc, int x, int y)
 {
 	struct loongson_drm_device *ldev = (struct loongson_drm_device *)crtc->dev->dev_private;
 	struct loongson_crtc *loongson_crtc = to_loongson_crtc(crtc);
+	int xorign = 0, yorign = 0;
 	unsigned int crtc_id;
 	unsigned long base;
-	int xorign = 0, yorign = 0;
+	u32 tmp;
 
 	base = (unsigned long)(ldev->rmmio);
         crtc_id = loongson_crtc->crtc_id;
-	u32 tmp;
 
 
 	/*upper edge condition*/

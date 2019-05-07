@@ -20,8 +20,6 @@
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_plane_helper.h>
 
-static u32 output_mode;
-
 DEFINE_SPINLOCK(loongson_crtc_lock);
 
 /**
@@ -57,15 +55,13 @@ static void loongson_set_start_address(struct drm_crtc *crtc, unsigned offset)
 	struct loongson_drm_device *ldev;
 	struct loongson_crtc *loongson_crtc = to_loongson_crtc(crtc);
 	unsigned int crtc_id;
-	u32 addr;
-	int count;
 	unsigned long base;
 
 	crtc_id = loongson_crtc->crtc_id;
 	DRM_DEBUG("crtc_gpu_addr = 0x%x\n",offset);
 	ldev = crtc->dev->dev_private;
 	base = (unsigned long)(ldev->rmmio);
-	DRM_DEBUG("base=0x%x\n",base);
+	DRM_DEBUG("base=0x%lx\n",base);
 	if(crtc_id == 0){
 		ls_writel(offset,base +	LS_FB_ADDR0_DVO0_REG);
 		ls_writel(offset,base +	LS_FB_ADDR1_DVO0_REG);
@@ -101,7 +97,7 @@ static int loongson_crtc_do_set_base(struct drm_crtc *crtc,
 	int ret;
 	unsigned int depth;
 	u64 gpu_addr;
-	unsigned long flags,base;
+	unsigned long base;
 	unsigned int crtc_id;
 	unsigned int crtc_address;
 	unsigned int width,pitch;
@@ -162,8 +158,8 @@ static int loongson_crtc_do_set_base(struct drm_crtc *crtc,
 		return ret;
 	}
 
-	DRM_DEBUG("gpu_addr = 0x%x\n",gpu_addr);
-	ldev-> fb_vram_base = gpu_addr;
+	DRM_DEBUG("gpu_addr = 0x%llx\n",gpu_addr);
+	ldev->fb_vram_base = gpu_addr;
 	if (&ldev->lfbdev->lfb == loongson_fb) {
 		/* if pushing console in kmap it */
 		ret = ttm_bo_kmap(&bo->bo, 0, bo->bo.num_pages, &bo->kmap);
@@ -444,7 +440,7 @@ static int loongson_crtc_mode_set(struct drm_crtc *crtc,
 	unsigned int vr, vss, vse, vfl;
 	int ret;
 	struct pix_pll pll_cfg;
-	unsigned long flags,base;
+	unsigned long base;
 	unsigned int crtc_id;
 
 
@@ -462,8 +458,13 @@ static int loongson_crtc_mode_set(struct drm_crtc *crtc,
 	vfl	= mode->vtotal;
 	depth = crtc->primary->fb->bits_per_pixel;
 	pix_freq = mode->clock;
-	DRM_DEBUG("crtc_id = %d,hr = %d,hss = %d,hse = %d,hfl = %d,vr = %d,vss = %d,vse = %d,vfl = %d,depth = %d,pix_freq = %d,x = %d,y = %d\n",crtc_id,hr,hss,hse,hfl,vr,vss,vse,vfl,depth,pix_freq,x,y);
-	DRM_DEBUG("fb width = %d,height = %d\n",crtc->primary->fb->width,crtc->primary->fb->height);
+	DRM_DEBUG("crtc_id = %d,hr = %d,hss = %d,hse = %d,hfl = %d,vr = %d,vss = %d," 
+			"vse = %d,vfl = %d,depth = %d,pix_freq = %d,x = %d,y = %d\n",
+			crtc_id, hr, hss, hse, hfl, vr, vss, vse, vfl, depth,
+			pix_freq, x, y);
+
+	DRM_DEBUG("fb width = %d,height = %d\n", crtc->primary->fb->width, 
+			crtc->primary->fb->height);
 
 	loongson_crtc->width = hr;
 	loongson_crtc->height = vr;
