@@ -704,7 +704,6 @@ LEAF(_restore_msa)
 	.set	pop
 END(_restore_msa)
 
-#ifndef CONFIG_CPU_HAS_LASX
 LEAF(_init_msa_upper)
 	.set	push
 	.set	noat
@@ -745,7 +744,6 @@ LEAF(_init_msa_upper)
 	vsel_d	0x2, 0, 31
 	.set	pop
 END(_init_msa_upper)
-#endif
 
 #endif /* CONFIG_CPU_HAS_MSA */
 
@@ -897,7 +895,7 @@ LEAF(_init_lasx_upper)
 	.set	pop
 END(_init_lasx_upper)
 
-LEAF(_init_msa_upper)
+LEAF(_init_lasx_uppest)
 	.set	push
 	.set	noat
 	.set	noreorder
@@ -937,5 +935,5 @@ LEAF(_init_msa_upper)
 	jr	ra
 	xvseli_d 0xe, 0, 31
 	.set	pop
-END(_init_msa_upper)
+END(_init_lasx_uppest)
 #endif

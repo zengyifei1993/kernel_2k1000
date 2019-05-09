@@ -34,8 +34,10 @@
 static void decode_cfg(struct cpuinfo_mips *c)
 {
 	unsigned int cfg1 = read_cfg(LS_CFG1);
-	if (cfg1 & LS_CFG1_LASX)
+	if (cfg1 & LS_CFG1_LASX) {
 		c->ases |= MIPS_ASE_LASX;
+		set_c0_config6(MIPS_CONF6_LASXMODE);
+	}
 }
 #endif
  /*

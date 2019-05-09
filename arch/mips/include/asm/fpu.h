@@ -143,13 +143,18 @@ static inline void lose_fpu_inatomic(int save, struct task_struct *tsk)
 {
 	if (is_msa_enabled()) {
 		if (save) {
-			save_msa(tsk);
+			if (is_lasx_enabled())
+				save_lasx(tsk);
+			else
+				save_msa(tsk);
+
 			tsk->thread.fpu.fcr31 =
-					read_32bit_cp1_register(CP1_STATUS);
+				read_32bit_cp1_register(CP1_STATUS);
 		}
 		disable_msa();
 		clear_tsk_thread_flag(tsk, TIF_USEDMSA);
 		__disable_fpu();
+		disable_lasx();
 	} else if (is_fpu_owner()) {
 		if (save)
 			_save_fp(tsk);

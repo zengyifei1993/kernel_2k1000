@@ -16,13 +16,52 @@
 
 #include <asm/inst.h>
 
+enum {
+	CTX_MSA = 1,
+	CTX_LASX = 2,
+};
+
 extern void _save_msa(struct task_struct *);
 extern void _restore_msa(struct task_struct *);
 extern void _init_msa_upper(void);
-#ifdef CONFIG_CPU_HAS_LASX
+
 extern void _save_lasx(struct task_struct *);
 extern void _restore_lasx(struct task_struct *);
-#endif
+extern void _init_lasx_upper(void);
+
+static inline int is_lasx_enabled(void)
+{
+	if (!cpu_has_lasx)
+		return 0;
+
+	return (read_c0_config() & MIPS_CONF_LASXEN) ?
+			1 : 0;
+}
+
+static inline void enable_lasx(void)
+{
+	if (cpu_has_lasx)
+		set_c0_config(MIPS_CONF_LASXEN);
+
+}
+
+static inline void disable_lasx(void)
+{
+	if (cpu_has_lasx)
+		clear_c0_config(MIPS_CONF_LASXEN);
+}
+
+static inline void save_lasx(struct task_struct *t)
+{
+	if (cpu_has_lasx)
+		_save_lasx(t);
+}
+
+static inline void restore_lasx(struct task_struct *t)
+{
+	if (cpu_has_lasx)
+		_restore_lasx(t);
+}
 
 extern void read_msa_wr_b(unsigned idx, union fpureg *to);
 extern void read_msa_wr_h(unsigned idx, union fpureg *to);
@@ -128,35 +167,35 @@ static inline int is_msa_enabled(void)
 
 static inline int thread_msa_context_live(void)
 {
+	int ret = 0;
 	/*
 	 * Check cpu_has_msa only if it's a constant. This will allow the
 	 * compiler to optimise out code for CPUs without MSA without adding
 	 * an extra redundant check for CPUs with MSA.
 	 */
 	if (__builtin_constant_p(cpu_has_msa) && !cpu_has_msa)
-		return 0;
+		goto  out;
 
-	return test_thread_flag(TIF_MSA_CTX_LIVE);
+	ret =  test_thread_flag(TIF_MSA_CTX_LIVE) ? CTX_MSA : 0;
+
+	if (__builtin_constant_p(cpu_has_lasx) && !cpu_has_lasx)
+		goto out;
+
+	ret = test_thread_flag(TIF_MSA_XCTX_LIVE) ? CTX_LASX : ret;
+out:
+	return ret;
 }
 
 static inline void save_msa(struct task_struct *t)
 {
 	if (cpu_has_msa)
-#ifdef CONFIG_CPU_HAS_LASX
-		_save_lasx(t);
-#else
 		_save_msa(t);
-#endif
 }
 
 static inline void restore_msa(struct task_struct *t)
 {
 	if (cpu_has_msa)
-#ifdef CONFIG_CPU_HAS_LASX
-		_restore_lasx(t);
-#else
 		_restore_msa(t);
-#endif
 }
 
 #ifdef TOOLCHAIN_SUPPORTS_MSA

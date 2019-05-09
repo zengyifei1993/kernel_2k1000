@@ -80,7 +80,11 @@ extern asmlinkage void handle_ov(void);
 extern asmlinkage void handle_tr(void);
 extern asmlinkage void handle_msa_fpe(void);
 extern asmlinkage void handle_fpe(void);
+#ifdef CONFIG_CPU_LOONGSON3
+extern asmlinkage void handle_lx(void);
+#else
 extern asmlinkage void handle_ftlb(void);
+#endif
 extern asmlinkage void handle_msa(void);
 extern asmlinkage void handle_mdmx(void);
 extern asmlinkage void handle_watch(void);
@@ -1178,7 +1182,6 @@ static int enable_restore_fp_context(int msa)
 		goto out;
 
 	enable_msa();
-	write_msa_csr(current->thread.fpu.msacsr);
 	set_thread_flag(TIF_USEDMSA);
 
 	/*
@@ -1189,35 +1192,27 @@ static int enable_restore_fp_context(int msa)
 	 * opportunity to see data left behind by another.
 	 */
 	prior_msa = test_and_set_thread_flag(TIF_MSA_CTX_LIVE);
-	if (!prior_msa && was_fpu_owner) {
-		_init_msa_upper();
-
-		goto out;
+	if (!prior_msa && !was_fpu_owner) {
+		_restore_fp(current);
 	}
 
 	if (!prior_msa) {
-		/*
-		 * Restore the least significant 64b of each vector register
-		 * from the existing scalar FP context.
-		 */
-		_restore_fp(current);
-
-		/*
-		 * The task has not formerly used MSA, so clear the upper 64b
-		 * of each vector register such that it cannot see data left
-		 * behind by another task.
-		 */
+		/* initialize upper 64 bit */
 		_init_msa_upper();
+		write_msa_csr(current->thread.fpu.msacsr);
 	} else {
-		/* We need to restore the vector context. */
-		restore_msa(current);
-
 		/* Restore the scalar FP control & status register */
 		if (!was_fpu_owner)
 			write_32bit_cp1_register(CP1_STATUS,
-						 current->thread.fpu.fcr31);
+					current->thread.fpu.fcr31);
+		/* we need to check for LASX context further */
+		if (test_thread_flag(TIF_MSA_XCTX_LIVE)) {
+			enable_lasx();
+			restore_lasx(current);
+		} else {
+			restore_msa(current);
+		}
 	}
-
 out:
 	preempt_enable();
 
@@ -1640,6 +1635,7 @@ asmlinkage void cache_parity_error(void)
 	panic("Can't handle the cache error!");
 }
 
+#ifndef CONFIG_CPU_LOONGSON3
 asmlinkage void do_ftlb(void)
 {
 	const int field = 2 * sizeof(unsigned long);
@@ -1667,6 +1663,55 @@ asmlinkage void do_ftlb(void)
 	/* Just print the cacheerr bits for now */
 	cache_parity_error();
 }
+#else
+asmlinkage void do_lx(struct pt_regs *regs, unsigned int gscause)
+{
+	enum ctx_state prev_state;
+	unsigned int gsexecode;
+
+	prev_state = exception_enter();
+	gsexecode = GSEX_CODD(gscause);
+
+	switch(gsexecode) {
+
+	case GSEX_LASXDIS:
+		if (!cpu_has_lasx || test_thread_flag(TIF_32BIT_FPREGS)) {
+			force_sig(SIGILL, current);
+			goto out;
+		}
+
+		die_if_kernel("lasx disable invoked from kernel context!",
+				regs);
+
+		preempt_disable();
+
+		set_thread_flag(TIF_MSA_XCTX_LIVE);
+
+		if(!is_fpu_owner()) {
+			own_fpu_inatomic(0);
+			write_32bit_cp1_register(CP1_STATUS,
+					current->thread.fpu.fcr31);
+			enable_msa();
+			restore_msa(current);
+			set_thread_flag(TIF_USEDMSA);
+
+		}
+
+		enable_lasx();
+		_init_lasx_upper();
+
+		preempt_enable();
+
+
+		break;
+	default:
+		pr_err("Unhandled GSEX, GSEX_CODE: %x, badinst: %x@%lx !\n",
+				gsexecode, read_c0_badinstr(), exception_epc(regs));
+	}
+out:
+	exception_exit(prev_state);
+}
+#endif
 
 /*
  * SDBBP EJTAG debug exception handler.
@@ -2250,7 +2295,11 @@ void __init trap_init(void)
 	if (cpu_has_fpu && !cpu_has_nofpuex)
 		set_except_vector(15, handle_fpe);
 
+#ifdef CONFIG_CPU_LOONGSON3
+	set_except_vector(16, handle_lx);
+#else
 	set_except_vector(16, handle_ftlb);
+#endif
 	set_except_vector(21, handle_msa);
 
 	if (cpu_has_rixiex) {

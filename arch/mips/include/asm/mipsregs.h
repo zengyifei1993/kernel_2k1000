@@ -86,6 +86,7 @@
 #define CP0_XCONTEXT $20
 #define CP0_FRAMEMASK $21
 #define CP0_DIAGNOSTIC $22
+#define CP0_DIAGNOSTIC1 $22, 1
 #define CP0_DEBUG $23
 #define CP0_DEPC $24
 #define CP0_PERFORMANCE $25
@@ -553,6 +554,7 @@
 #define MIPS_CONF_MT_FTLB	(_ULCAST_(4) <<  7)
 #define MIPS_CONF_AR		(_ULCAST_(7) << 10)
 #define MIPS_CONF_AT		(_ULCAST_(3) << 13)
+#define MIPS_CONF_LASXEN	(_ULCAST_(1) << 19)
 #define MIPS_CONF_M		(_ULCAST_(1) << 31)
 
 /*
@@ -657,6 +659,7 @@
 #define MIPS_CONF6_FTLBEN	(_ULCAST_(1) << 15)
 /* Loongson-3 FTLB on/off bit */
 #define MIPS_CONF6_FTLBDIS	(_ULCAST_(1) << 22)
+#define MIPS_CONF6_LASXMODE	(_ULCAST_(1) << 21)
 /* FTLB probability bits */
 #define MIPS_CONF6_FTLBP_SHIFT	(16)
 
@@ -1242,6 +1245,10 @@ __asm__(".macro parse_r var r\n\t"
 #define LS_CFG1		(1)
 
 #define LS_CFG1_LASX	(1 << 12)
+
+#define GSEX_LASXDIS	0x7
+
+#define GSEX_CODD(x)  ((x & 0x7c) >> 2)
 
 static inline unsigned int read_cfg(int reg)
 {
@@ -3104,6 +3111,7 @@ __BUILD_SET_C0(status)
 __BUILD_SET_C0(cause)
 __BUILD_SET_C0(config)
 __BUILD_SET_C0(config5)
+__BUILD_SET_C0(config6)
 __BUILD_SET_C0(intcontrol)
 __BUILD_SET_C0(intctl)
 __BUILD_SET_C0(srsmap)
