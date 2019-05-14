@@ -1592,6 +1592,7 @@ config CPU_LOONGSON3
 	select CPU_SUPPORTS_HIGHMEM
 	select CPU_SUPPORTS_HUGEPAGES
 	select CPU_SUPPORTS_MSA
+	select CPU_SUPPORTS_LASX
 	select WEAK_ORDERING
 	select WEAK_REORDERING_BEYOND_LLSC
 	select MIPS_PGD_C0_CONTEXT if !KVM_GUEST_LS3A3000
@@ -2196,6 +2197,14 @@ config CPU_HAS_MSA
 
 	  If unsure, say Y.
 
+config CPU_HAS_LASX
+	bool "Support for the Loongson Advanced SIMD Extension (EXPERIMENTAL)"
+	depends on CPU_SUPPORTS_LASX
+	depends on 64BIT && CPU_HAS_MSA
+	help
+	  Loongson Advanced SIMD Extension is 256bit wide SIMD extension first
+	  introduced in Loongson 3A4000
+
 config CPU_HAS_WB
 	bool
 
@@ -2277,6 +2286,9 @@ config SYS_SUPPORTS_MICROMIPS
 	bool
 
 config CPU_SUPPORTS_MSA
+	bool
+
+config CPU_SUPPORTS_LASX
 	bool
 
 config ARCH_FLATMEM_ENABLE
