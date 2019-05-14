@@ -571,5 +571,5 @@ struct cpucfg_info{
 	int	reg[9];
 };
 
-+void loongson_nodecounter_adjust(void);
+void loongson_nodecounter_adjust(void);
 #endif /* __ASM_MACH_LOONGSON_LOONGSON_H */
