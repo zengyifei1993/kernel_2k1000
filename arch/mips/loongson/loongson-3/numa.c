@@ -101,27 +101,6 @@ static void __init init_topology_matrix(void)
 	}
 }
 
-static unsigned long nid_to_addroffset(unsigned int nid)
-{
-	unsigned long result;
-	switch(nid){
-	case 0:
-	default:
-		result = NODE0_ADDRSPACE_OFFSET;
-		break;
-	case 1:
-		result = NODE1_ADDRSPACE_OFFSET;
-		break;
-	case 2:
-		result = NODE2_ADDRSPACE_OFFSET;
-		break;
-	case 3:
-		result = NODE3_ADDRSPACE_OFFSET;
-		break;
-	}
-	return result;
-}
-
 extern unsigned int has_systab;
 extern unsigned long systab_addr;
 
