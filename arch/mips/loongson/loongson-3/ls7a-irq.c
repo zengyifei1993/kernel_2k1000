@@ -75,16 +75,32 @@ void pch_destroy_dirq(unsigned int irq)
 static void mask_pch_irq(struct irq_data *d);
 static void unmask_pch_irq(struct irq_data *d);
 
+static void enable_pch_irq(unsigned int irq)
+{
+	unsigned long flags;
+	spin_lock_irqsave(&pch_irq_lock, flags);
+	*irq_mask &= ~(1ULL << (irq - LS7A_IOAPIC_IRQ_BASE));
+	spin_unlock_irqrestore(&pch_irq_lock, flags);
+}
+
+static void disable_pch_irq(unsigned int irq)
+{
+	unsigned long flags;
+	spin_lock_irqsave(&pch_irq_lock, flags);
+	*irq_mask |= (1ULL << (irq - LS7A_IOAPIC_IRQ_BASE));
+	spin_unlock_irqrestore(&pch_irq_lock, flags);
+}
+
 unsigned int startup_pch_irq(struct irq_data *d)
 {
 	pch_create_dirq(d->irq);
-	unmask_pch_irq(d);
+	enable_pch_irq(d->irq);
 	return 0;
 }
 
 void shutdown_pch_irq(struct irq_data *d)
 {
-	mask_pch_irq(d);
+	disable_pch_irq(d->irq);
 	pch_destroy_dirq(d->irq);
 }
 
@@ -273,7 +289,6 @@ void ls7a_ext_irq_dispatch(void)
 }
 
 static void init_7a_irq(int dev, int irq, struct irq_chip *pirq_chip) {
-	*irq_mask  &= ~(1ULL << dev);
 	*(volatile unsigned char *)(LS7A_IOAPIC_ROUTE_ENTRY + dev) = USE_7A_INT0;
 	irq_set_chip_and_handler(irq, pirq_chip, handle_level_irq);
 	if(ls3a_msi_enabled) {
@@ -347,20 +362,18 @@ void init_7a_irqs(struct irq_chip *pirq_chip)
 	init_7a_irq(LS7A_IOAPIC_OHCI0_OFFSET	, LS7A_IOAPIC_OHCI0_IRQ, pirq_chip);
 	init_7a_irq(LS7A_IOAPIC_EHCI1_OFFSET	, LS7A_IOAPIC_EHCI1_IRQ, pirq_chip);
 	init_7a_irq(LS7A_IOAPIC_OHCI1_OFFSET	, LS7A_IOAPIC_OHCI1_IRQ, pirq_chip);
-	if(pci_msi_enabled() == 0) {
-		init_7a_irq(LS7A_IOAPIC_PCIE_F0_PORT0_OFFSET, LS7A_IOAPIC_PCIE_F0_PORT0_IRQ, pirq_chip);
-		init_7a_irq(LS7A_IOAPIC_PCIE_F0_PORT1_OFFSET, LS7A_IOAPIC_PCIE_F0_PORT1_IRQ, pirq_chip);
-		init_7a_irq(LS7A_IOAPIC_PCIE_F0_PORT2_OFFSET, LS7A_IOAPIC_PCIE_F0_PORT2_IRQ, pirq_chip);
-		init_7a_irq(LS7A_IOAPIC_PCIE_F0_PORT3_OFFSET, LS7A_IOAPIC_PCIE_F0_PORT3_IRQ, pirq_chip);
-		init_7a_irq(LS7A_IOAPIC_PCIE_F1_PORT0_OFFSET, LS7A_IOAPIC_PCIE_F1_PORT0_IRQ, pirq_chip);
-		init_7a_irq(LS7A_IOAPIC_PCIE_F1_PORT1_OFFSET, LS7A_IOAPIC_PCIE_F1_PORT1_IRQ, pirq_chip);
-		init_7a_irq(LS7A_IOAPIC_PCIE_H_LO_OFFSET, LS7A_IOAPIC_PCIE_H_LO_IRQ, pirq_chip);
-		init_7a_irq(LS7A_IOAPIC_PCIE_H_HI_OFFSET, LS7A_IOAPIC_PCIE_H_HI_IRQ, pirq_chip);
-		init_7a_irq(LS7A_IOAPIC_PCIE_G0_LO_OFFSET, LS7A_IOAPIC_PCIE_G0_LO_IRQ, pirq_chip);
-		init_7a_irq(LS7A_IOAPIC_PCIE_G0_HI_OFFSET, LS7A_IOAPIC_PCIE_G0_HI_IRQ, pirq_chip);
-		init_7a_irq(LS7A_IOAPIC_PCIE_G1_LO_OFFSET, LS7A_IOAPIC_PCIE_G1_LO_IRQ, pirq_chip);
-		init_7a_irq(LS7A_IOAPIC_PCIE_G1_HI_OFFSET, LS7A_IOAPIC_PCIE_G1_HI_IRQ, pirq_chip);
-	}
+	init_7a_irq(LS7A_IOAPIC_PCIE_F0_PORT0_OFFSET, LS7A_IOAPIC_PCIE_F0_PORT0_IRQ, pirq_chip);
+	init_7a_irq(LS7A_IOAPIC_PCIE_F0_PORT1_OFFSET, LS7A_IOAPIC_PCIE_F0_PORT1_IRQ, pirq_chip);
+	init_7a_irq(LS7A_IOAPIC_PCIE_F0_PORT2_OFFSET, LS7A_IOAPIC_PCIE_F0_PORT2_IRQ, pirq_chip);
+	init_7a_irq(LS7A_IOAPIC_PCIE_F0_PORT3_OFFSET, LS7A_IOAPIC_PCIE_F0_PORT3_IRQ, pirq_chip);
+	init_7a_irq(LS7A_IOAPIC_PCIE_F1_PORT0_OFFSET, LS7A_IOAPIC_PCIE_F1_PORT0_IRQ, pirq_chip);
+	init_7a_irq(LS7A_IOAPIC_PCIE_F1_PORT1_OFFSET, LS7A_IOAPIC_PCIE_F1_PORT1_IRQ, pirq_chip);
+	init_7a_irq(LS7A_IOAPIC_PCIE_H_LO_OFFSET, LS7A_IOAPIC_PCIE_H_LO_IRQ, pirq_chip);
+	init_7a_irq(LS7A_IOAPIC_PCIE_H_HI_OFFSET, LS7A_IOAPIC_PCIE_H_HI_IRQ, pirq_chip);
+	init_7a_irq(LS7A_IOAPIC_PCIE_G0_LO_OFFSET, LS7A_IOAPIC_PCIE_G0_LO_IRQ, pirq_chip);
+	init_7a_irq(LS7A_IOAPIC_PCIE_G0_HI_OFFSET, LS7A_IOAPIC_PCIE_G0_HI_IRQ, pirq_chip);
+	init_7a_irq(LS7A_IOAPIC_PCIE_G1_LO_OFFSET, LS7A_IOAPIC_PCIE_G1_LO_IRQ, pirq_chip);
+	init_7a_irq(LS7A_IOAPIC_PCIE_G1_HI_OFFSET, LS7A_IOAPIC_PCIE_G1_HI_IRQ, pirq_chip);
 	init_7a_irq(LS7A_IOAPIC_ACPI_INT_OFFSET, LS7A_IOAPIC_ACPI_INT_IRQ, pirq_chip);
 	init_7a_irq(LS7A_IOAPIC_HPET_INT_OFFSET, LS7A_IOAPIC_HPET_INT_IRQ, pirq_chip);
 	init_7a_irq(LS7A_IOAPIC_AC97_HDA_OFFSET, LS7A_IOAPIC_AC97_HDA_IRQ, pirq_chip);
