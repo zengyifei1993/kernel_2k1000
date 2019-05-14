@@ -163,20 +163,23 @@ void loongson3_comp_ipi_interrupt(struct pt_regs *regs)
 				irqs &= ~(1<<irq);
 				if(irq < 16)
 					do_IRQ(irq);
-				else
-					do_IRQ(rs780e_pos2irq[irq-16]-1);
+				else {
+					irq1 = rs780e_pos2irq[irq - 16];
+					if (likely(irq1 != 0)) do_IRQ(irq1 - 1);
+				}
 			}
 		break;
 		case LS2H:
 			while ((irq = ffs(irqs))) {
-				do_IRQ(ls2h_pos2irq[irq-1]-1);
+				irq1 = ls2h_pos2irq[irq - 1];
+				if (likely(irq1 != 0)) do_IRQ(irq1 - 1);
 				irqs &= ~(1<<(irq-1));
 			}
 		break;
 		case LS7A:
 			while ((irq = ffs(irqs))) {
 				irq1 = ls7a_ipi_pos2irq[irq-1];
-				do_IRQ(irq1);
+				if (likely(irq1 != 255)) do_IRQ(irq1);
 				irqs &= ~(1<<(irq-1));
 			}
 			break;
@@ -454,20 +457,23 @@ void loongson3_ipi_interrupt(struct pt_regs *regs)
 				irqs &= ~(1<<irq);
 				if(irq < 16)
 					do_IRQ(irq);
-				else
-					do_IRQ(rs780e_pos2irq[irq-16]-1);
+				else {
+					irq1 = rs780e_pos2irq[irq - 16];
+					if (likely(irq1 != 0)) do_IRQ(irq1 - 1);
+				}
 			}
 		break;
 		case LS2H:
 			while ((irq = ffs(irqs))) {
-				do_IRQ(ls2h_pos2irq[irq-1]-1);
+				irq1 = ls2h_pos2irq[irq - 1];
+				if (likely(irq1 != 0)) do_IRQ(irq1 - 1);
 				irqs &= ~(1<<(irq-1));
 			}
 		break;
 		case LS7A:
 			while ((irq = ffs(irqs))) {
 				irq1 = ls7a_ipi_pos2irq[irq-1];
-				do_IRQ(irq1);
+				if (likely(irq1 != 255)) do_IRQ(irq1);
 				irqs &= ~(1<<(irq-1));
 			}
 			break;
