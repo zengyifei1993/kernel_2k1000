@@ -187,29 +187,6 @@ loongson_bo_evict_flags(struct ttm_buffer_object *bo, struct ttm_placement *pl)
 }
 
 /**
- * loongson_bo_move:
- *
- * @bo: the buffer to move
- * @evict: whether this motion is evicting the buffer from
- * the graphics address space
- * @interruptible: Use interruptible sleeps if possible when sleeping.
- * @no_wait: whether this should give up and return -EBUSY
- * if this move would require sleeping
- * @new_mem: the new memory region receiving the buffer
- *
- * Move a buffer between two memory regions.
- */
-static int loongson_bo_move(struct ttm_buffer_object *bo,
-		       bool evict, bool interruptible,
-		       bool no_wait_gpu,
-		       struct ttm_mem_reg *new_mem)
-{
-	int r;
-	r = ttm_bo_move_memcpy(bo, evict, no_wait_gpu, new_mem);
-	return r;
-}
-
-/**
  * loongson_bo_verify_access - Access verification helper for TTM
  * @node: Offset node
  * @filp: Open-file

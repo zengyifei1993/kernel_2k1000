@@ -148,6 +148,8 @@ static const struct drm_mode_config_funcs loongson_mode_funcs = {
 	.fb_create = loongson_user_framebuffer_create,
 };
 
+
+#ifndef CONFIG_DRM_LOONGSON_VGA_PLATFORM 
 /**
  * loongson_probe_vram
  *
@@ -200,6 +202,7 @@ static int loongson_probe_vram(struct loongson_drm_device *ldev, void __iomem *m
 	DRM_INFO("loongson vram test success.\n");
 	return offset - 65536;
 }
+#endif
 
 #ifdef CONFIG_CPU_SUPPORTS_UNCACHED_ACCELERATED
 static void __iomem *ls_uncache_acc_iomap(struct pci_dev *dev,
@@ -238,12 +241,11 @@ static void __iomem *ls_uncache_acc_iomap(struct pci_dev *dev,
  */
 static int loongson_vram_init(struct loongson_drm_device *ldev)
 {
-	void __iomem *mem;
 #ifdef CONFIG_DRM_LOONGSON_VGA_PLATFORM
-	struct platform_device *vram_pdev;
 	struct resource *r;
 #else
 	struct pci_dev *vram_pdev;
+	void __iomem *mem;
 #endif
 	struct apertures_struct *aper = alloc_apertures(1);
 	if (!aper)
@@ -320,7 +322,7 @@ static int loongson_drm_device_init(struct drm_device *dev,
 	ldev->rmmio_base = pci_resource_start(ldev->dev->pdev, 0);
 	ldev->rmmio_size = pci_resource_len(ldev->dev->pdev, 0);
 #endif
-	DRM_INFO("ldev->rmmio_base = 0x%x,ldev->rmmio_size = 0x%x\n",ldev->rmmio_base,ldev->rmmio_size);
+	DRM_INFO("ldev->rmmio_base = 0x%llx,ldev->rmmio_size = 0x%llx\n",ldev->rmmio_base,ldev->rmmio_size);
 
 	if (!devm_request_mem_region(ldev->dev->dev, ldev->rmmio_base, ldev->rmmio_size,
 				"loongsonfb_mmio")) {
@@ -420,7 +422,7 @@ int loongson_modeset_init(struct loongson_drm_device *ldev)
 			return -1;
 		}
 
-		ldev->mode_info[i].connector = connector;
+		ldev->mode_info[i].connector = (struct loongson_connector *)connector;
 		drm_mode_connector_attach_encoder(connector, encoder);
 		connector->polled = DRM_CONNECTOR_POLL_CONNECT | DRM_CONNECTOR_POLL_DISCONNECT;
 	}
@@ -500,7 +502,7 @@ static int ioctl_get_bo_vram_base(struct drm_device *dev, void *data,
         loongson_bo_unreserve(bo);
         ldev->fb_vram_base = gpu_addr;
         args->value = gpu_addr;
-        DRM_DEBUG("loongson_get_bo_vram_base bo=%x, fb_vram_base=%x\n", bo, gpu_addr);
+        DRM_DEBUG("loongson_get_bo_vram_base bo=%p, fb_vram_base=%lx\n", bo, gpu_addr);
 	return 0;
 }
 
@@ -597,7 +599,7 @@ int loongson_dumb_create(struct drm_file *file,
 	struct drm_gem_object *gobj;
 	struct loongson_bo *bo;
 	u32 handle;
-	unsigned long gpu_addr;
+	u64 gpu_addr;
 
 	args->pitch = args->width * ((args->bpp + 7) / 8);
 	args->size = args->pitch * args->height;
@@ -723,6 +725,7 @@ int loongson_dumb_destroy(struct drm_file *file,
 	loongson_bo_unreserve(bo);
 	return drm_gem_dumb_destroy(file, dev, handle);
 }
+
 /**
  * loongson_vga_open -Driver callback when a new struct drm_file is opened.
  * Useful for setting up driver-private data structures like buffer allocators,
@@ -742,56 +745,6 @@ static int loongson_vga_open(struct drm_device *dev, struct drm_file *file)
 	DRM_DEBUG("open: dev=%p, file=%p", dev, file);
 
 	return 0;
-}
-
-
-static int loongson_vga_firstopen(struct drm_device *dev)
-{
-	DRM_DEBUG("firstopen: dev=%p", dev);
-	return 0;
-}
-
-/**
- * lastclose - clean up after all DRM clients have exited
- * @dev: DRM device
- *
- * Take care of cleaning up after all DRM clients have exited.  In the
- * mode setting case, we want to restore the kernel's initial mode (just
- * in case the last client left us in a bad state).
- */
-static void loongson_vga_lastclose(struct drm_device *dev)
-{
-        int i;
-
-        /* we don't support vga-switcheroo.. so just make sure the fbdev
-         * mode is active
-         */
-        struct loongson_drm_device *ldev = dev->dev_private;
-        int ret;
-
-        DRM_DEBUG("lastclose: dev=%p", ldev);
-}
-
-
-
-static void loongson_vga_preclose(struct drm_device *dev, struct drm_file *file)
-{
-       DRM_DEBUG("loongson_vga_precolse : dev=%p, file=%p", dev, file);
-}
-
-/**
- * loongson_vga_postclose
- *
- * @dev: DRM device
- * @file: DRM device private data
- *
- * One of the driver callbacks when a new struct drm_file is closed. Useful for tearing down
- * driver-private data structures allocated in open like buffer allocators,
- * execution contexts or similar things.
- */
-static void loongson_vga_postclose(struct drm_device *dev, struct drm_file *file)
-{
-	DRM_DEBUG("loongson_vga_posecolse : dev=%p, file=%p", dev, file);
 }
 
 /**
@@ -915,7 +868,7 @@ static void loongson_vga_pci_unregister(struct pci_dev *pdev)
  * Suspend & resume.
  */
 /*
- * loongson_drm_drm_suspend - initiate device suspend
+ * loongson_drm_suspend - initiate device suspend
  *
  * @pdev: drm dev pointer
  * @state: suspend state
@@ -924,13 +877,13 @@ static void loongson_vga_pci_unregister(struct pci_dev *pdev)
  * Returns 0 for success or an error on failure.
  * Called at driver suspend.
  */
-int loongson_drm_drm_suspend(struct drm_device *dev, bool suspend,
+int loongson_drm_suspend(struct drm_device *dev, bool suspend,
                                    bool fbcon, bool freeze)
 {
         struct loongson_drm_device *ldev;
         struct drm_crtc *crtc;
         struct drm_connector *connector;
-        int i, r;
+        int i;
 
 	return 0;
         if (dev == NULL || dev->dev_private == NULL) {
@@ -970,8 +923,8 @@ int loongson_drm_drm_suspend(struct drm_device *dev, bool suspend,
                 lobj = gem_to_loongson_bo(lfb->obj);
                 /* don't unpin kernel fb objects */
                 if (!loongson_fbdev_lobj_is_fb(ldev, lobj)) {
-                        r = loongson_bo_reserve(lobj, false);
-                        if (r == 0) {
+                        i = loongson_bo_reserve(lobj, false);
+                        if (i == 0) {
                                 loongson_bo_unpin(lobj);
                                 loongson_bo_unreserve(lobj);
                         }
@@ -998,7 +951,7 @@ int loongson_drm_drm_suspend(struct drm_device *dev, bool suspend,
 }
 
 /*
- *  * loongson_drm_drm_resume - initiate device suspend
+ *  * loongson_drm_resume - initiate device suspend
  *
  * @pdev: drm dev pointer
  * @state: suspend state
@@ -1008,32 +961,28 @@ int loongson_drm_drm_suspend(struct drm_device *dev, bool suspend,
  * Called at driver suspend.
  */
 
-int loongson_drm_drm_resume(struct drm_device *dev, bool resume, bool fbcon)
+int loongson_drm_resume(struct drm_device *dev, bool resume, bool fbcon)
 {
-#ifdef CONFIG_DRM_LOONGSON_VGA_PLATFORM
-	struct platform_device *pdev = dev->pdev;
-#else
+#ifndef CONFIG_DRM_LOONGSON_VGA_PLATFORM
 	struct pci_dev *pdev = dev->pdev;
 #endif
 	struct loongson_drm_device *ldev = dev->dev_private;
 	struct drm_crtc *crtc;
         struct drm_connector *connector;
-        int r;
 
-	return 0;
         if (dev->switch_power_state == DRM_SWITCH_POWER_OFF)
                 return 0;
 
         if (fbcon) {
                 console_lock();
         }
-#ifdef CONFIG_DRM_LOONGSON_VGA_PLATFORM
 
-#else
+#ifndef CONFIG_DRM_LOONGSON_VGA_PLATFORM
+
         if (resume) {
-                pci_set_power_state(dev->pdev, PCI_D0);
-                pci_restore_state(dev->pdev);
-                if (pci_enable_device(dev->pdev)) {
+                pci_set_power_state(pdev, PCI_D0);
+                pci_restore_state(pdev);
+                if (pci_enable_device(pdev)) {
                         if (fbcon)
                                 console_unlock();
                         return -1;
@@ -1042,7 +991,6 @@ int loongson_drm_drm_resume(struct drm_device *dev, bool resume, bool fbcon)
 #endif
         /* pin cursors */
         list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
-                struct loongson_crtc *lcrtc = to_loongson_crtc(crtc);
 
                /* if (radeon_crtc->cursor_bo) {
                         struct radeon_bo *robj = gem_to_radeon_bo(radeon_crtc->cursor_bo);
@@ -1078,110 +1026,6 @@ int loongson_drm_drm_resume(struct drm_device *dev, bool resume, bool fbcon)
                 console_unlock();
         }
 	return 0;
-}
-
-/**
- * loongson_drm_pm_suspend
- *
- * @dev   pointer to the device
- *
- * Executed before putting the system into a sleep state in which the
- * contents of main memory are preserved.
- */
-static int loongson_drm_pm_suspend(struct device *dev)
-{
-#ifdef CONFIG_DRM_LOONGSON_VGA_PLATFORM
-
-#else
-        struct pci_dev *pdev = to_pci_dev(dev);
-        struct drm_device *drm_dev = pci_get_drvdata(pdev);
-	DRM_DEBUG("loongson_drm_pm_suspend");
-        return loongson_drm_drm_suspend(drm_dev, true, true, false);
-#endif
-}
-
-/**
- * loongson_drm_pm_resume
- *
- * @dev pointer to the device
- *
- * Executed after waking the system up from a sleep state in which the
- * contents of main memory were preserved.
- */
-static int loongson_drm_pm_resume(struct device *dev)
-{
-#ifdef CONFIG_DRM_LOONGSON_VGA_PLATFORM
-
-#else
-        struct pci_dev *pdev = to_pci_dev(dev);
-        struct drm_device *drm_dev = pci_get_drvdata(pdev);
-	DRM_DEBUG("loongson_drm_pm_resume");
-        return loongson_drm_drm_resume(drm_dev, true, true);
-#endif
-}
-
-/**
- *  loongson_drm_pm_freeze
- *
- *  @dev pointer to device
- *
- *  Hibernation-specific, executed before creating a hibernation image.
- *  Analogous to @suspend(), but it should not enable the device to signal
- *  wakeup events or change its power state.
- */
-static int loongson_drm_pm_freeze(struct device *dev)
-{
-#ifdef CONFIG_DRM_LOONGSON_VGA_PLATFORM
-
-#else
-	struct pci_dev *pdev = to_pci_dev(dev);
-	struct drm_device *drm_dev = pci_get_drvdata(pdev);
-	DRM_DEBUG("loongson_drm_pm_freeze");
-	return loongson_drm_drm_suspend(drm_dev, false, true, true);
-#endif
-}
-
-/**
- * loongson_drm_pm_draw
- *
- * @dev pointer to device
- *
- * Hibernation-specific, executed after creating a hibernation image OR
- * if the creation of an image has failed.  Also executed after a failing
- * attempt to restore the contents of main memory from such an image.
- * Undo the changes made by the preceding @freeze(), so the device can be
- * operated in the same way as immediately before the call to @freeze().
- */
-static int loongson_drm_pm_thaw(struct device *dev)
-{
-#ifdef CONFIG_DRM_LOONGSON_VGA_PLATFORM
-
-#else
-        struct pci_dev *pdev = to_pci_dev(dev);
-        struct drm_device *drm_dev = pci_get_drvdata(pdev);
-	DRM_DEBUG("loongson_drm_pm_thaw");
-        return loongson_drm_drm_resume(drm_dev, false, true);
-#endif
-}
-
-/**
- *  loongson_drm_pm_restore
- *
- * @dev   pointer to device
- *
- *  Hibernation-specific, executed after restoring the contents of main
- *  memory from a hibernation image, analogous to @resume()
- */
-static int loongson_drm_pm_restore(struct device *dev)
-{
-#ifdef CONFIG_DRM_LOONGSON_VGA_PLATFORM
-
-#else
-        struct pci_dev *pdev = to_pci_dev(dev);
-        struct drm_device *drm_dev = pci_get_drvdata(pdev);
-	DRM_DEBUG("loongson_drm_pm_restore");
-        return loongson_drm_drm_resume(drm_dev, true, true);
-#endif
 }
 
 #ifdef CONFIG_DRM_LOONGSON_VGA_PLATFORM
@@ -1239,6 +1083,90 @@ static void __exit loongson_vga_platform_exit(void)
 module_init(loongson_vga_platform_init);
 module_exit(loongson_vga_platform_exit);
 #else
+/**
+ * loongson_drm_pm_suspend
+ *
+ * @dev   pointer to the device
+ *
+ * Executed before putting the system into a sleep state in which the
+ * contents of main memory are preserved.
+ */
+static int loongson_drm_pm_suspend(struct device *dev)
+{
+        struct pci_dev *pdev = to_pci_dev(dev);
+        struct drm_device *drm_dev = pci_get_drvdata(pdev);
+	DRM_DEBUG("loongson_drm_pm_suspend");
+        return loongson_drm_suspend(drm_dev, true, true, false);
+}
+
+/**
+ * loongson_drm_pm_resume
+ *
+ * @dev pointer to the device
+ *
+ * Executed after waking the system up from a sleep state in which the
+ * contents of main memory were preserved.
+ */
+static int loongson_drm_pm_resume(struct device *dev)
+{
+        struct pci_dev *pdev = to_pci_dev(dev);
+        struct drm_device *drm_dev = pci_get_drvdata(pdev);
+	DRM_DEBUG("loongson_drm_pm_resume");
+        return loongson_drm_resume(drm_dev, true, true);
+}
+
+/**
+ *  loongson_drm_pm_freeze
+ *
+ *  @dev pointer to device
+ *
+ *  Hibernation-specific, executed before creating a hibernation image.
+ *  Analogous to @suspend(), but it should not enable the device to signal
+ *  wakeup events or change its power state.
+ */
+static int loongson_drm_pm_freeze(struct device *dev)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	struct drm_device *drm_dev = pci_get_drvdata(pdev);
+	DRM_DEBUG("loongson_drm_pm_freeze");
+	return loongson_drm_suspend(drm_dev, false, true, true);
+}
+
+/**
+ * loongson_drm_pm_draw
+ *
+ * @dev pointer to device
+ *
+ * Hibernation-specific, executed after creating a hibernation image OR
+ * if the creation of an image has failed.  Also executed after a failing
+ * attempt to restore the contents of main memory from such an image.
+ * Undo the changes made by the preceding @freeze(), so the device can be
+ * operated in the same way as immediately before the call to @freeze().
+ */
+static int loongson_drm_pm_thaw(struct device *dev)
+{
+        struct pci_dev *pdev = to_pci_dev(dev);
+        struct drm_device *drm_dev = pci_get_drvdata(pdev);
+	DRM_DEBUG("loongson_drm_pm_thaw");
+        return loongson_drm_resume(drm_dev, false, true);
+}
+
+/**
+ *  loongson_drm_pm_restore
+ *
+ * @dev   pointer to device
+ *
+ *  Hibernation-specific, executed after restoring the contents of main
+ *  memory from a hibernation image, analogous to @resume()
+ */
+static int loongson_drm_pm_restore(struct device *dev)
+{
+        struct pci_dev *pdev = to_pci_dev(dev);
+        struct drm_device *drm_dev = pci_get_drvdata(pdev);
+	DRM_DEBUG("loongson_drm_pm_restore");
+        return loongson_drm_resume(drm_dev, true, true);
+}
+
 /*
  * * struct dev_pm_ops - device PM callbacks
  *

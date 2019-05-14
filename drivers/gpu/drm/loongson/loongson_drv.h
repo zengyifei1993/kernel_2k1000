@@ -329,9 +329,9 @@ bool loongson_fbdev_lobj_is_fb(struct loongson_drm_device *ldev, struct loongson
 void loongson_fbdev_restore_mode(struct loongson_drm_device *ldev);
 void loongson_fbdev_set_suspend(struct loongson_drm_device *ldev, int state);
 
-int loongson_drm_drm_suspend(struct drm_device *dev, bool suspend,
+int loongson_drm_suspend(struct drm_device *dev, bool suspend,
                                    bool fbcon, bool freeze);
-int loongson_drm_drm_resume(struct drm_device *dev, bool resume, bool fbcon);
+int loongson_drm_resume(struct drm_device *dev, bool resume, bool fbcon);
 			   /* loongson_cursor.c */
 int loongson_crtc_cursor_set2(struct drm_crtc *crtc, struct drm_file *file_priv,
 						uint32_t handle, uint32_t width, uint32_t height,int32_t hot_x, int32_t hot_y);

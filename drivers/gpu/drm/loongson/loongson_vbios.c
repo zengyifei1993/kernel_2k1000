@@ -38,7 +38,7 @@ int have_table = 0 ;
 uint table[256] ;
 
 
-void make_table()
+void make_table(void)
 {
     int i, j;
     have_table = 1 ;
@@ -106,7 +106,7 @@ void * loongson_vbios_default(void){
 	crtc_vbios[0]->phy_num = 1;
 	crtc_vbios[0]->phy_id[0] = 0;
 
-	crtc_vbios[1]->next_crtc_offset = NULL;
+	crtc_vbios[1]->next_crtc_offset = 0;
 	crtc_vbios[1]->crtc_id = 1;
 	crtc_vbios[1]->crtc_version = default_version;
 	crtc_vbios[1]->crtc_max_weight = 2048;
@@ -120,7 +120,7 @@ void * loongson_vbios_default(void){
 	connector_vbios[1] = (struct loongson_vbios_connector *)(vbios_start + vbios->connector_offset + sizeof(struct loongson_vbios_connector));
 
 	connector_vbios[0]->next_connector_offset = vbios->connector_offset + sizeof(struct loongson_vbios_connector);
-	connector_vbios[1]->next_connector_offset = NULL;
+	connector_vbios[1]->next_connector_offset = 0;
 
 	connector_vbios[0]->crtc_id = 0;
 	connector_vbios[1]->crtc_id = 1;
@@ -149,7 +149,7 @@ void * loongson_vbios_default(void){
 	phy_vbios[1] = (struct loongson_vbios_phy *)(vbios_start + vbios->phy_offset + sizeof(struct loongson_vbios_phy));
 
 	phy_vbios[0]->next_phy_offset = vbios->phy_offset + sizeof(struct loongson_vbios_phy);
-	phy_vbios[1]->next_phy_offset = NULL;
+	phy_vbios[1]->next_phy_offset = 0;
 
 	phy_vbios[0]->phy_type = phy_transparent;
 	phy_vbios[1]->phy_type = phy_transparent;
@@ -190,7 +190,8 @@ int loongson_vbios_crc_check(void * vbios){
 	return 0;
 }
 
-int loongson_vbios_init(struct loongson_drm_device *ldev){
+int loongson_vbios_init(struct loongson_drm_device *ldev)
+{
 	struct loongson_vbios *vbios;
 	int i;
 	unsigned char * vbios_start;
@@ -200,7 +201,7 @@ int loongson_vbios_init(struct loongson_drm_device *ldev){
 #ifdef CONFIG_CPU_LOONGSON2K
 	ldev->vbios = (struct loongson_vbios *)loongson_vbios_default();
 #else
-	if(vgabios_addr != NULL)
+	if(!vgabios_addr)
 	{
 		if(loongson_vbios_crc_check((void *)vgabios_addr)||loongson_vbios_title_check((struct loongson_vbios *)vgabios_addr)){
 			DRM_ERROR("UEFI get wrong vbios!");
@@ -226,9 +227,9 @@ int loongson_vbios_init(struct loongson_drm_device *ldev){
 			DRM_INFO("VBIOS get from SPI check success!\n");
 		}
 	}
-#endif
 
 vbios_set:
+#endif
 	vbios = ldev->vbios;
 	vbios_start = (unsigned char *)vbios;
 
