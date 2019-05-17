@@ -24,6 +24,9 @@ extern int ls7a_pcibios_map_irq(struct pci_dev *dev, u8 slot, u8 pin);
 extern int ls7a_pcibios_dev_init(struct pci_dev *dev);
 extern int ls7a_setup_msi_irq(struct pci_dev *pdev, struct msi_desc *desc);
 extern void ls7a_teardown_msi_irq(unsigned int irq);
+#ifdef CONFIG_PM
+extern int ls7a_init_ops(void);
+#endif
 unsigned long ls7a_dc_writeflags;
 DEFINE_SPINLOCK(ls7a_dc_writelock);
 
@@ -37,6 +40,9 @@ static void __init ls7a_arch_initcall(void)
 
 static void __init ls7a_device_initcall(void)
 {
+#ifdef CONFIG_PM
+	ls7a_init_ops();
+#endif
 }
 
 const struct platform_controller_hub ls7a_pch = {

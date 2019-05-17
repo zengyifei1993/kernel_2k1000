@@ -36,11 +36,6 @@
 extern void acpi_sleep_prepare(void);
 extern void acpi_sleep_complete(void);
 extern void acpi_registers_setup(void);
-extern void ls2h_irq_router_init(void);
-extern void rs780_irq_router_init(void);
-extern void	ls7a_irq_router_init(void);
-extern void init_7a_irqs(void);
-extern int ls3a_msi_enabled;
 
 struct loongson_registers {
 	u32 config4;

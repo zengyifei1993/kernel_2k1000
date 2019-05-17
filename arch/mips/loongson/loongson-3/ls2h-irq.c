@@ -351,11 +351,10 @@ static struct syscore_ops ls2h_syscore_ops = {
 	.resume = loongson3_ls2h_resume,
 };
 
-static int __init ls2h_init_ops(void)
+int __init ls2h_init_ops(void)
 {
 	register_syscore_ops(&ls2h_syscore_ops);
 	return 0;
 }
 
-device_initcall(ls2h_init_ops);
 #endif

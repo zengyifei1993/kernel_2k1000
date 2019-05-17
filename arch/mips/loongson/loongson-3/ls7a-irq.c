@@ -75,32 +75,22 @@ void pch_destroy_dirq(unsigned int irq)
 static void mask_pch_irq(struct irq_data *d);
 static void unmask_pch_irq(struct irq_data *d);
 
-static void enable_pch_irq(unsigned int irq)
+unsigned int startup_pch_irq_comp(struct irq_data *d)
 {
-	unsigned long flags;
-	spin_lock_irqsave(&pch_irq_lock, flags);
-	*irq_mask &= ~(1ULL << (irq - LS7A_IOAPIC_IRQ_BASE));
-	spin_unlock_irqrestore(&pch_irq_lock, flags);
-}
-
-static void disable_pch_irq(unsigned int irq)
-{
-	unsigned long flags;
-	spin_lock_irqsave(&pch_irq_lock, flags);
-	*irq_mask |= (1ULL << (irq - LS7A_IOAPIC_IRQ_BASE));
-	spin_unlock_irqrestore(&pch_irq_lock, flags);
+	unmask_pch_irq(d);
+	return 0;
 }
 
 unsigned int startup_pch_irq(struct irq_data *d)
 {
 	pch_create_dirq(d->irq);
-	enable_pch_irq(d->irq);
+	unmask_pch_irq(d);
 	return 0;
 }
 
 void shutdown_pch_irq(struct irq_data *d)
 {
-	disable_pch_irq(d->irq);
+	mask_pch_irq(d);
 	pch_destroy_dirq(d->irq);
 }
 
@@ -109,9 +99,6 @@ static void mask_pch_irq(struct irq_data *d)
 	unsigned long flags;
 
 	unsigned long irq_nr = d->irq;
-
-	if(ls3a_msi_enabled)
-		return;
 
 	spin_lock_irqsave(&pch_irq_lock, flags);
 
@@ -130,8 +117,7 @@ static void unmask_pch_irq(struct irq_data *d)
 
 	if(ls3a_msi_enabled)
 		*irq_clear = 1ULL << (irq_nr - LS7A_IOAPIC_IRQ_BASE);
-	else
-		*irq_mask &= ~(1ULL << (irq_nr - LS7A_IOAPIC_IRQ_BASE));
+	*irq_mask &= ~(1ULL << (irq_nr - LS7A_IOAPIC_IRQ_BASE));
 
 	spin_unlock_irqrestore(&pch_irq_lock, flags);
 }
@@ -149,8 +135,8 @@ static struct irq_chip ext_irq_chip = {
 	.name		= "LS7A-IOAPIC-EXT",
 	.irq_mask	= mask_pch_irq,
 	.irq_unmask	= unmask_pch_irq,
-	.irq_startup	= startup_pch_irq,
-	.irq_shutdown	= shutdown_pch_irq,
+	.irq_startup	= startup_pch_irq_comp,
+	.irq_shutdown	= mask_pch_irq,
 	.irq_set_affinity = ext_set_irq_affinity,
 };
 
@@ -288,13 +274,18 @@ void ls7a_ext_irq_dispatch(void)
 	}
 }
 
-static void init_7a_irq(int dev, int irq, struct irq_chip *pirq_chip) {
+static void init_irq_route(int dev, int irq)
+{
 	*(volatile unsigned char *)(LS7A_IOAPIC_ROUTE_ENTRY + dev) = USE_7A_INT0;
-	irq_set_chip_and_handler(irq, pirq_chip, handle_level_irq);
-	if(ls3a_msi_enabled) {
+	if (ls3a_msi_enabled) {
 		*irq_msi_en |= 1ULL << dev;
 		*(volatile unsigned char *)(irq_msi_vec+dev) = irq;
 	}
+}
+
+static void init_7a_irq(int dev, int irq, struct irq_chip *pirq_chip) {
+	init_irq_route(dev, irq);
+	irq_set_chip_and_handler(irq, pirq_chip, handle_level_irq);
 }
 
 static void ext_ioi_init(void)
@@ -573,8 +564,65 @@ void __init ls7a_init_irq(void)
 
 #ifdef CONFIG_PM
 
+static struct saved_registers
+{
+	unsigned long irq_edge;
+	unsigned long irq_pol;
+	unsigned long irq_mask;
+}pic_saved_registers;
+
+static void init_irqs_route(void)
+{
+	init_irq_route(LS7A_IOAPIC_UART0_OFFSET    , LS7A_IOAPIC_UART0_IRQ);
+	init_irq_route(LS7A_IOAPIC_I2C0_OFFSET     , LS7A_IOAPIC_I2C0_IRQ);
+	init_irq_route(LS7A_IOAPIC_GMAC0_OFFSET    , LS7A_IOAPIC_GMAC0_IRQ);
+	init_irq_route(LS7A_IOAPIC_GMAC0_PMT_OFFSET, LS7A_IOAPIC_GMAC0_PMT_IRQ);
+	init_irq_route(LS7A_IOAPIC_GMAC1_OFFSET    , LS7A_IOAPIC_GMAC1_IRQ);
+	init_irq_route(LS7A_IOAPIC_GMAC1_PMT_OFFSET, LS7A_IOAPIC_GMAC1_PMT_IRQ);
+	init_irq_route(LS7A_IOAPIC_SATA0_OFFSET    , LS7A_IOAPIC_SATA0_IRQ);
+	init_irq_route(LS7A_IOAPIC_SATA1_OFFSET    , LS7A_IOAPIC_SATA1_IRQ);
+	init_irq_route(LS7A_IOAPIC_SATA2_OFFSET    , LS7A_IOAPIC_SATA2_IRQ);
+	init_irq_route(LS7A_IOAPIC_DC_OFFSET       , LS7A_IOAPIC_DC_IRQ);
+	init_irq_route(LS7A_IOAPIC_GPU_OFFSET      , LS7A_IOAPIC_GPU_IRQ);
+	init_irq_route(LS7A_IOAPIC_EHCI0_OFFSET    , LS7A_IOAPIC_EHCI0_IRQ);
+	init_irq_route(LS7A_IOAPIC_OHCI0_OFFSET    , LS7A_IOAPIC_OHCI0_IRQ);
+	init_irq_route(LS7A_IOAPIC_EHCI1_OFFSET    , LS7A_IOAPIC_EHCI1_IRQ);
+	init_irq_route(LS7A_IOAPIC_OHCI1_OFFSET    , LS7A_IOAPIC_OHCI1_IRQ);
+	init_irq_route(LS7A_IOAPIC_PCIE_F0_PORT0_OFFSET, LS7A_IOAPIC_PCIE_F0_PORT0_IRQ);
+	init_irq_route(LS7A_IOAPIC_PCIE_F0_PORT1_OFFSET, LS7A_IOAPIC_PCIE_F0_PORT1_IRQ);
+	init_irq_route(LS7A_IOAPIC_PCIE_F0_PORT2_OFFSET, LS7A_IOAPIC_PCIE_F0_PORT2_IRQ);
+	init_irq_route(LS7A_IOAPIC_PCIE_F0_PORT3_OFFSET, LS7A_IOAPIC_PCIE_F0_PORT3_IRQ);
+	init_irq_route(LS7A_IOAPIC_PCIE_F1_PORT0_OFFSET, LS7A_IOAPIC_PCIE_F1_PORT0_IRQ);
+	init_irq_route(LS7A_IOAPIC_PCIE_F1_PORT1_OFFSET, LS7A_IOAPIC_PCIE_F1_PORT1_IRQ);
+	init_irq_route(LS7A_IOAPIC_PCIE_H_LO_OFFSET, LS7A_IOAPIC_PCIE_H_LO_IRQ);
+	init_irq_route(LS7A_IOAPIC_PCIE_H_HI_OFFSET, LS7A_IOAPIC_PCIE_H_HI_IRQ);
+	init_irq_route(LS7A_IOAPIC_PCIE_G0_LO_OFFSET, LS7A_IOAPIC_PCIE_G0_LO_IRQ);
+	init_irq_route(LS7A_IOAPIC_PCIE_G0_HI_OFFSET, LS7A_IOAPIC_PCIE_G0_HI_IRQ);
+	init_irq_route(LS7A_IOAPIC_PCIE_G1_LO_OFFSET, LS7A_IOAPIC_PCIE_G1_LO_IRQ);
+	init_irq_route(LS7A_IOAPIC_PCIE_G1_HI_OFFSET, LS7A_IOAPIC_PCIE_G1_HI_IRQ);
+	init_irq_route(LS7A_IOAPIC_ACPI_INT_OFFSET, LS7A_IOAPIC_ACPI_INT_IRQ);
+	init_irq_route(LS7A_IOAPIC_HPET_INT_OFFSET, LS7A_IOAPIC_HPET_INT_IRQ);
+	init_irq_route(LS7A_IOAPIC_AC97_HDA_OFFSET, LS7A_IOAPIC_AC97_HDA_IRQ);
+	init_irq_route(LS7A_IOAPIC_LPC_OFFSET, LS7A_IOAPIC_LPC_IRQ);
+}
+
+static void restore_registers(void)
+{
+	*irq_edge = pic_saved_registers.irq_edge;
+	*irq_pol = pic_saved_registers.irq_pol;
+	*irq_mask = pic_saved_registers.irq_mask;
+}
+
+static void save_registers(void)
+{
+	pic_saved_registers.irq_edge = *irq_edge;
+	pic_saved_registers.irq_pol = *irq_pol;
+	pic_saved_registers.irq_mask = *irq_mask;
+}
+
 static int loongson3_comp_iopic_suspend(void)
 {
+	save_registers();
 	return 0;
 }
 
@@ -584,11 +632,12 @@ static void loongson3_comp_iopic_resume(void)
 	struct irq_desc *desc;
 
 	ext_ioi_init();
-	init_7a_irqs(&ext_irq_chip);
+	init_irqs_route();
+	restore_registers();
 
-	for (i = 0; i < sizeof(ls7a_ipi_irq2pos); i++) {
-		if (ls7a_ipi_irq2pos[i] != -1) {
-			desc = irq_to_desc(i);
+	for (i = 0; i < NR_IRQS; i++) {
+		desc = irq_to_desc(i);
+		if (desc->handle_irq != NULL && desc->handle_irq != handle_bad_irq) {
 			ext_set_irq_affinity(&desc->irq_data, desc->irq_data.affinity, 0);
 		}
 	}
@@ -602,13 +651,15 @@ static struct syscore_ops ls7a_comp_syscore_ops = {
 
 static int loongson3_iopic_suspend(void)
 {
+	save_registers();
 	return 0;
 }
 
 static void loongson3_iopic_resume(void)
 {
 	ls7a_irq_router_init();
-	init_7a_irqs(&pch_irq_chip);
+	init_irqs_route();
+	restore_registers();
 }
 
 static struct syscore_ops ls7a_syscore_ops = {
@@ -616,7 +667,7 @@ static struct syscore_ops ls7a_syscore_ops = {
 	.resume = loongson3_iopic_resume,
 };
 
-static int __init ls7a_init_ops(void)
+int __init ls7a_init_ops(void)
 {
 	if ((current_cpu_type() == CPU_LOONGSON3_COMP)) {
 		if (ls3a_msi_enabled && read_csr(LOONGSON_CPU_FEATURE_OFFSET) & LOONGSON_CPU_FEATURE_EXT_IOI) { /* ext ioi */
@@ -631,5 +682,4 @@ static int __init ls7a_init_ops(void)
 	return 0;
 }
 
-device_initcall(ls7a_init_ops);
 #endif
