@@ -398,7 +398,8 @@ enum cpu_type_enum {
 /*
  * Loongson specific extension encodings
  */
-#define MIPS_LSE_CPUCFG		MBIT_ULL( 0)	/* CPU supports cpucfg */
+#define MIPS_LSE_CPUCFG			MBIT_ULL(0)	/* CPU supports cpucfg */
+#define MIPS_HAS_LSE_LAMO		MBIT_ULL(1)	/* CPU supports lamo instructions */
 
 #endif
 

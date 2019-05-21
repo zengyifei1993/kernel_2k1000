@@ -94,7 +94,39 @@ static inline void arch_spin_lock(arch_spinlock_t *lock)
 		  [ticket] "=&r" (tmp),
 		  [my_ticket] "=&r" (my_ticket)
 		: [inc] "r" (inc));
-	} else if (LOONGSON_LLSC_WAR) {
+	} else if (LOONGSON_LAMO) {
+#ifdef CONFIG_CPU_SUPPORTS_LAMO_INSTRUCTIONS
+		__asm__ __volatile__ (
+		"	.set push		# arch_spin_lock	\n"
+		"	.set noreorder					\n"
+		"							\n"
+		"1:							\n"
+		"   amadd_sync.w %[ticket], %[inc], %[ticket_ptr]           \n"
+		"	 srl	%[my_ticket], %[ticket], 16		\n"
+		"	andi	%[ticket], %[ticket], 0xffff		\n"
+		"	beq	%[ticket], %[my_ticket], 4f		\n"
+		"	 subu	%[ticket], %[my_ticket], %[ticket]	\n"
+		"2:							\n"
+		"	andi	%[ticket], %[ticket], 0xffff		\n"
+		"	sll	%[ticket], 5				\n"
+		"							\n"
+		"3:	bnez	%[ticket], 3b				\n"
+		"	 subu	%[ticket], 1				\n"
+		"							\n"
+		"	lhu	%[ticket], %[serving_now_ptr]		\n"
+		"	beq	%[ticket], %[my_ticket], 4f		\n"
+		"	 subu	%[ticket], %[my_ticket], %[ticket]	\n"
+		"	b	2b					\n"
+		"	 subu	%[ticket], %[ticket], 1			\n"
+		"4:							\n"
+		"	.set pop					\n"
+		: [ticket_ptr] "+m" (lock->lock),
+		  [serving_now_ptr] "+m" (lock->h.serving_now),
+		  [ticket] "=&r" (tmp),
+		  [my_ticket] "=&r" (my_ticket)
+		: [inc] "r" (inc));
+#endif
+	} else if (LOONGSON_LLSC_WAR && !LOONGSON_LAMO) {
 		__asm__ __volatile__ (
 		"	.set push		# arch_spin_lock	\n"
 		"	.set noreorder					\n"
@@ -360,7 +392,15 @@ static inline void arch_read_unlock(arch_rwlock_t *rw)
 		: "=m" (rw->lock), "=&r" (tmp)
 		: "m" (rw->lock)
 		: "memory");
-	} else if (LOONGSON_LLSC_WAR) {
+	} else if (LOONGSON_LAMO) {
+#ifdef CONFIG_CPU_SUPPORTS_LAMO_INSTRUCTIONS
+		__asm__ __volatile__(
+		" amadd.w $0, %1, %0"
+		: "+ZB" (rw->lock)
+		: "r" (-1)
+		: "memory");
+#endif
+	} else if (LOONGSON_LLSC_WAR && !LOONGSON_LAMO) {
 		__ls3a_war_llsc();
 		do {
 			__asm__ __volatile__(

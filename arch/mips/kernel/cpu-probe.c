@@ -30,6 +30,7 @@
 #include <asm/uaccess.h>
 
 #ifdef CONFIG_CPU_LOONGSON3
+#include <loongson.h>
 static void decode_cfg(struct cpuinfo_mips *c)
 {
 	unsigned int cfg1 = read_cfg(LS_CFG1);
@@ -1437,6 +1438,9 @@ static inline void cpu_probe_loongson(struct cpuinfo_mips *c, unsigned int cpu)
 		decode_configs(c);
 		c->options |= MIPS_CPU_FTLB | MIPS_CPU_TLBINV | MIPS_CPU_LDPTE;
 		c->lses |= MIPS_LSE_CPUCFG;
+		if (read_cfg(LOONGSON_CPUCFG_CONFIG_FIELD2) & MIPS_LSE_LAMO){
+			c->lses |= MIPS_HAS_LSE_LAMO;
+		}
 
 		decode_cfg(c);
 

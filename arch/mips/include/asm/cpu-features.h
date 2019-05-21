@@ -370,6 +370,9 @@
 #ifndef cpu_has_cpucfg
 #define cpu_has_cpucfg     (cpu_data[0].lses & MIPS_LSE_CPUCFG)
 #endif
+#ifndef cpu_has_lamo
+#define cpu_has_lamo	(cpu_data[0].lses & MIPS_HAS_LSE_LAMO)
+#endif
 #endif
 /*
  *  * Guest capabilities

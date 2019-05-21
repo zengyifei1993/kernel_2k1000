@@ -60,7 +60,7 @@ static inline void set_bit(unsigned long nr, volatile unsigned long *addr)
 {
 	unsigned long *m = ((unsigned long *) addr) + (nr >> SZLONG_LOG);
 	int bit = nr & SZLONG_MASK;
-	unsigned long temp;
+	unsigned long temp = 0;
 
 	if (kernel_uses_llsc && R10000_LLSC_WAR) {
 		__asm__ __volatile__(
@@ -96,7 +96,15 @@ static inline void set_bit(unsigned long nr, volatile unsigned long *addr)
 		}
 #endif /* CONFIG_CPU_MIPSR2 */
 	} else if (kernel_uses_llsc) {
-		if (LOONGSON_LLSC_WAR) {
+		if (LOONGSON_LAMO) {
+#ifdef CONFIG_CPU_SUPPORTS_LAMO_INSTRUCTIONS
+			__asm__ __volatile__(
+			"	" __AMOR_SYNC "$zero, %1, %0		\n"
+			: "+ZB" (*m)
+			: "r" (1UL << bit)
+			: "memory");
+#endif
+		} else if (LOONGSON_LLSC_WAR && !LOONGSON_LAMO) {
 			__ls3a_war_llsc();
 			do {
 				__asm__ __volatile__(
@@ -138,7 +146,7 @@ static inline void clear_bit(unsigned long nr, volatile unsigned long *addr)
 {
 	unsigned long *m = ((unsigned long *) addr) + (nr >> SZLONG_LOG);
 	int bit = nr & SZLONG_MASK;
-	unsigned long temp;
+	unsigned long temp = 0;
 
 	if (kernel_uses_llsc && R10000_LLSC_WAR) {
 		__asm__ __volatile__(
@@ -174,7 +182,15 @@ static inline void clear_bit(unsigned long nr, volatile unsigned long *addr)
 		}
 #endif /* CONFIG_CPU_MIPSR2 */
 	} else if (kernel_uses_llsc) {
-		if (LOONGSON_LLSC_WAR) {
+		if (LOONGSON_LAMO) {
+#ifdef CONFIG_CPU_SUPPORTS_LAMO_INSTRUCTIONS
+			__asm__ __volatile__(
+			"	" __AMAND_SYNC "$zero, %1, %0		\n"
+			: "+ZB" (*m)
+			: "r" (~(1UL << bit))
+			: "memory");
+#endif
+		} else if (LOONGSON_LLSC_WAR && !LOONGSON_LAMO) {
 			__ls3a_war_llsc();
 			do {
 				__asm__ __volatile__(
@@ -228,10 +244,10 @@ static inline void clear_bit_unlock(unsigned long nr, volatile unsigned long *ad
 static inline void change_bit(unsigned long nr, volatile unsigned long *addr)
 {
 	int bit = nr & SZLONG_MASK;
+	unsigned long *m = ((unsigned long *) addr) + (nr >> SZLONG_LOG);
+	unsigned long temp = 0;
 
 	if (kernel_uses_llsc && R10000_LLSC_WAR) {
-		unsigned long *m = ((unsigned long *) addr) + (nr >> SZLONG_LOG);
-		unsigned long temp;
 
 		__asm__ __volatile__(
 		"	.set	mips3				\n"
@@ -242,36 +258,41 @@ static inline void change_bit(unsigned long nr, volatile unsigned long *addr)
 		"	.set	mips0				\n"
 		: "=&r" (temp), "+m" (*m)
 		: "ir" (1UL << bit));
-	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR) {
-		unsigned long *m = ((unsigned long *) addr) + (nr >> SZLONG_LOG);
-		unsigned long temp;
-
-		__ls3a_war_llsc();
-		do {
-			__asm__ __volatile__(
-			"	.set	mips3				\n"
-			"	" __LL "%0, %1		# change_bit	\n"
-			"	xor	%0, %2				\n"
-			"	" __SC	"%0, %1				\n"
-			"	.set	mips0				\n"
-			: "=&r" (temp), "+m" (*m)
-			: "ir" (1UL << bit));
-		} while (unlikely(!temp));
-
 	} else if (kernel_uses_llsc) {
-		unsigned long *m = ((unsigned long *) addr) + (nr >> SZLONG_LOG);
-		unsigned long temp;
-
-		do {
+		if (LOONGSON_LAMO) {
+#ifdef CONFIG_CPU_SUPPORTS_LAMO_INSTRUCTIONS
 			__asm__ __volatile__(
-			"	.set	mips3				\n"
-			"	" __LL "%0, %1		# change_bit	\n"
-			"	xor	%0, %2				\n"
-			"	" __SC	"%0, %1				\n"
-			"	.set	mips0				\n"
-			: "=&r" (temp), "+m" (*m)
-			: "ir" (1UL << bit));
-		} while (unlikely(!temp));
+			"	" __AMXOR_SYNC "$zero, %1, %0		\n"
+			: "+ZB" (*m)
+			: "r" (1UL << bit)
+			: "memory");
+#endif
+		} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR && !LOONGSON_LAMO) {
+
+			__ls3a_war_llsc();
+			do {
+				__asm__ __volatile__(
+				"	.set	mips3				\n"
+				"	" __LL "%0, %1		# change_bit	\n"
+				"	xor	%0, %2				\n"
+				"	" __SC	"%0, %1				\n"
+				"	.set	mips0				\n"
+				: "=&r" (temp), "+m" (*m)
+				: "ir" (1UL << bit));
+			} while (unlikely(!temp));
+
+		} else {
+			do {
+				__asm__ __volatile__(
+				"	.set	mips3				\n"
+				"	" __LL "%0, %1		# change_bit	\n"
+				"	xor	%0, %2				\n"
+				"	" __SC	"%0, %1				\n"
+				"	.set	mips0				\n"
+				: "=&r" (temp), "+m" (*m)
+				: "ir" (1UL << bit));
+			} while (unlikely(!temp));
+		}
 	} else
 		__mips_change_bit(nr, addr);
 }
@@ -287,14 +308,14 @@ static inline void change_bit(unsigned long nr, volatile unsigned long *addr)
 static inline int test_and_set_bit(unsigned long nr,
 	volatile unsigned long *addr)
 {
-	int bit = nr & SZLONG_MASK;
+	unsigned long *m = ((unsigned long *) addr) + (nr >> SZLONG_LOG);
+	unsigned long temp = 0;
 	unsigned long res;
+	int bit = nr & SZLONG_MASK;
 
 	smp_mb__before_llsc();
 
 	if (kernel_uses_llsc && R10000_LLSC_WAR) {
-		unsigned long *m = ((unsigned long *) addr) + (nr >> SZLONG_LOG);
-		unsigned long temp;
 
 		__asm__ __volatile__(
 		"	.set	mips3					\n"
@@ -307,41 +328,48 @@ static inline int test_and_set_bit(unsigned long nr,
 		: "=&r" (temp), "+m" (*m), "=&r" (res)
 		: "r" (1UL << bit)
 		: "memory");
-	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR) {
-		unsigned long *m = ((unsigned long *) addr) + (nr >> SZLONG_LOG);
-		unsigned long temp;
-
-		__ls3a_war_llsc();
-		do {
-			__asm__ __volatile__(
-			"	.set	mips3				\n"
-			"	" __LL "%0, %1	# test_and_set_bit	\n"
-			"	or	%2, %0, %3			\n"
-			"	" __SC	"%2, %1				\n"
-			"	.set	mips0				\n"
-			: "=&r" (temp), "+m" (*m), "=&r" (res)
-			: "r" (1UL << bit)
-			: "memory");
-		} while (unlikely(!res));
-
-		res = temp & (1UL << bit);
 	} else if (kernel_uses_llsc) {
-		unsigned long *m = ((unsigned long *) addr) + (nr >> SZLONG_LOG);
-		unsigned long temp;
-
-		do {
+		if (LOONGSON_LAMO) {
+#ifdef CONFIG_CPU_SUPPORTS_LAMO_INSTRUCTIONS
 			__asm__ __volatile__(
-			"	.set	mips3				\n"
-			"	" __LL "%0, %1	# test_and_set_bit	\n"
-			"	or	%2, %0, %3			\n"
-			"	" __SC	"%2, %1				\n"
-			"	.set	mips0				\n"
-			: "=&r" (temp), "+m" (*m), "=&r" (res)
+			"	" __AMOR_SYNC "%1, %2, %0		\n"
+			: "+ZB" (*m), "=&r" (res)
 			: "r" (1UL << bit)
 			: "memory");
-		} while (unlikely(!res));
 
-		res = temp & (1UL << bit);
+			res = res & (1UL << bit);
+#endif
+		} else if (LOONGSON_LLSC_WAR && !LOONGSON_LAMO) {
+
+			__ls3a_war_llsc();
+			do {
+				__asm__ __volatile__(
+				"	.set	mips3				\n"
+				"	" __LL "%0, %1	# test_and_set_bit	\n"
+				"	or	%2, %0, %3			\n"
+				"	" __SC	"%2, %1				\n"
+				"	.set	mips0				\n"
+				: "=&r" (temp), "+m" (*m), "=&r" (res)
+				: "r" (1UL << bit)
+				: "memory");
+			} while (unlikely(!res));
+
+			res = temp & (1UL << bit);
+		} else {
+			do {
+				__asm__ __volatile__(
+				"	.set	mips3				\n"
+				"	" __LL "%0, %1	# test_and_set_bit	\n"
+				"	or	%2, %0, %3			\n"
+				"	" __SC	"%2, %1				\n"
+				"	.set	mips0				\n"
+				: "=&r" (temp), "+m" (*m), "=&r" (res)
+				: "r" (1UL << bit)
+				: "memory");
+			} while (unlikely(!res));
+
+			res = temp & (1UL << bit);
+		}
 	} else
 		res = __mips_test_and_set_bit(nr, addr);
 
@@ -361,12 +389,12 @@ static inline int test_and_set_bit(unsigned long nr,
 static inline int test_and_set_bit_lock(unsigned long nr,
 	volatile unsigned long *addr)
 {
-	int bit = nr & SZLONG_MASK;
 	unsigned long res;
+	unsigned long *m = ((unsigned long *) addr) + (nr >> SZLONG_LOG);
+	unsigned long temp = 0;
+	int bit = nr & SZLONG_MASK;
 
 	if (kernel_uses_llsc && R10000_LLSC_WAR) {
-		unsigned long *m = ((unsigned long *) addr) + (nr >> SZLONG_LOG);
-		unsigned long temp;
 
 		__asm__ __volatile__(
 		"	.set	mips3					\n"
@@ -379,41 +407,48 @@ static inline int test_and_set_bit_lock(unsigned long nr,
 		: "=&r" (temp), "+m" (*m), "=&r" (res)
 		: "r" (1UL << bit)
 		: "memory");
-	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR) {
-		unsigned long *m = ((unsigned long *) addr) + (nr >> SZLONG_LOG);
-		unsigned long temp;
-
-		__ls3a_war_llsc();
-		do {
-			__asm__ __volatile__(
-			"	.set	mips3				\n"
-			"	" __LL "%0, %1	# test_and_set_bit	\n"
-			"	or	%2, %0, %3			\n"
-			"	" __SC	"%2, %1				\n"
-			"	.set	mips0				\n"
-			: "=&r" (temp), "+m" (*m), "=&r" (res)
-			: "r" (1UL << bit)
-			: "memory");
-		} while (unlikely(!res));
-
-		res = temp & (1UL << bit);
 	} else if (kernel_uses_llsc) {
-		unsigned long *m = ((unsigned long *) addr) + (nr >> SZLONG_LOG);
-		unsigned long temp;
-
-		do {
+		if (LOONGSON_LAMO) {
+#ifdef CONFIG_CPU_SUPPORTS_LAMO_INSTRUCTIONS
 			__asm__ __volatile__(
-			"	.set	mips3				\n"
-			"	" __LL "%0, %1	# test_and_set_bit	\n"
-			"	or	%2, %0, %3			\n"
-			"	" __SC	"%2, %1				\n"
-			"	.set	mips0				\n"
-			: "=&r" (temp), "+m" (*m), "=&r" (res)
+			"	" __AMOR_SYNC "%1, %2, %0		\n"
+			: "+ZB" (*m), "=&r" (res)
 			: "r" (1UL << bit)
 			: "memory");
-		} while (unlikely(!res));
 
-		res = temp & (1UL << bit);
+			res = res & (1UL << bit);
+#endif
+		} else if (LOONGSON_LLSC_WAR && !LOONGSON_LAMO) {
+
+			__ls3a_war_llsc();
+			do {
+				__asm__ __volatile__(
+				"	.set	mips3				\n"
+				"	" __LL "%0, %1	# test_and_set_bit	\n"
+				"	or	%2, %0, %3			\n"
+				"	" __SC	"%2, %1				\n"
+				"	.set	mips0				\n"
+				: "=&r" (temp), "+m" (*m), "=&r" (res)
+				: "r" (1UL << bit)
+				: "memory");
+			} while (unlikely(!res));
+
+			res = temp & (1UL << bit);
+		} else {
+			do {
+				__asm__ __volatile__(
+				"	.set	mips3				\n"
+				"	" __LL "%0, %1	# test_and_set_bit	\n"
+				"	or	%2, %0, %3			\n"
+				"	" __SC	"%2, %1				\n"
+				"	.set	mips0				\n"
+				: "=&r" (temp), "+m" (*m), "=&r" (res)
+				: "r" (1UL << bit)
+				: "memory");
+			} while (unlikely(!res));
+
+			res = temp & (1UL << bit);
+		}
 	} else
 		res = __mips_test_and_set_bit_lock(nr, addr);
 
@@ -432,14 +467,14 @@ static inline int test_and_set_bit_lock(unsigned long nr,
 static inline int test_and_clear_bit(unsigned long nr,
 	volatile unsigned long *addr)
 {
+	unsigned long *m = ((unsigned long *) addr) + (nr >> SZLONG_LOG);
+	unsigned long temp = 0;
 	int bit = nr & SZLONG_MASK;
 	unsigned long res;
 
 	smp_mb__before_llsc();
 
 	if (kernel_uses_llsc && R10000_LLSC_WAR) {
-		unsigned long *m = ((unsigned long *) addr) + (nr >> SZLONG_LOG);
-		unsigned long temp;
 
 		__asm__ __volatile__(
 		"	.set	mips3					\n"
@@ -455,8 +490,6 @@ static inline int test_and_clear_bit(unsigned long nr,
 		: "memory");
 #ifdef CONFIG_CPU_MIPSR2
 	} else if (kernel_uses_llsc && __builtin_constant_p(nr)) {
-		unsigned long *m = ((unsigned long *) addr) + (nr >> SZLONG_LOG);
-		unsigned long temp;
 
 		if (LOONGSON_LLSC_WAR) {
 			__ls3a_war_llsc();
@@ -484,10 +517,15 @@ static inline int test_and_clear_bit(unsigned long nr,
 		}
 #endif
 	} else if (kernel_uses_llsc) {
-		unsigned long *m = ((unsigned long *) addr) + (nr >> SZLONG_LOG);
-		unsigned long temp;
-
-		if (LOONGSON_LLSC_WAR) {
+		if (LOONGSON_LAMO) {
+#ifdef CONFIG_CPU_SUPPORTS_LAMO_INSTRUCTIONS
+			__asm__ __volatile__(
+			"	" __AMAND_SYNC "%1, %2, %0		\n"
+			: "+ZB" (*m), "=&r" (temp)
+			: "r" (~(1UL << bit))
+			: "memory");
+#endif
+		} else if (LOONGSON_LLSC_WAR && !LOONGSON_LAMO) {
 			__ls3a_war_llsc();
 			do {
 				__asm__ __volatile__(
@@ -536,14 +574,14 @@ static inline int test_and_clear_bit(unsigned long nr,
 static inline int test_and_change_bit(unsigned long nr,
 	volatile unsigned long *addr)
 {
+	unsigned long *m = ((unsigned long *) addr) + (nr >> SZLONG_LOG);
+	unsigned long temp = 0;
 	int bit = nr & SZLONG_MASK;
 	unsigned long res;
 
 	smp_mb__before_llsc();
 
 	if (kernel_uses_llsc && R10000_LLSC_WAR) {
-		unsigned long *m = ((unsigned long *) addr) + (nr >> SZLONG_LOG);
-		unsigned long temp;
 
 		__asm__ __volatile__(
 		"	.set	mips3					\n"
@@ -556,41 +594,49 @@ static inline int test_and_change_bit(unsigned long nr,
 		: "=&r" (temp), "+m" (*m), "=&r" (res)
 		: "r" (1UL << bit)
 		: "memory");
-	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR) {
-		unsigned long *m = ((unsigned long *) addr) + (nr >> SZLONG_LOG);
-		unsigned long temp;
-
-		__ls3a_war_llsc();
-		do {
-			__asm__ __volatile__(
-			"	.set	mips3				\n"
-			"	" __LL	"%0, %1 # test_and_change_bit	\n"
-			"	xor	%2, %0, %3			\n"
-			"	" __SC	"\t%2, %1			\n"
-			"	.set	mips0				\n"
-			: "=&r" (temp), "+m" (*m), "=&r" (res)
-			: "r" (1UL << bit)
-			: "memory");
-		} while (unlikely(!res));
-
-		res = temp & (1UL << bit);
 	} else if (kernel_uses_llsc) {
-		unsigned long *m = ((unsigned long *) addr) + (nr >> SZLONG_LOG);
-		unsigned long temp;
-
-		do {
+		if (LOONGSON_LAMO) {
+#ifdef CONFIG_CPU_SUPPORTS_LAMO_INSTRUCTIONS
 			__asm__ __volatile__(
-			"	.set	mips3				\n"
-			"	" __LL	"%0, %1 # test_and_change_bit	\n"
-			"	xor	%2, %0, %3			\n"
-			"	" __SC	"\t%2, %1			\n"
-			"	.set	mips0				\n"
-			: "=&r" (temp), "+m" (*m), "=&r" (res)
+			"	" __AMXOR_SYNC "%1, %2, %0		\n"
+			: "+ZB" (*m), "=&r" (res)
 			: "r" (1UL << bit)
 			: "memory");
-		} while (unlikely(!res));
 
-		res = temp & (1UL << bit);
+			res = res & (1UL << bit);
+#endif
+		} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR && !LOONGSON_LAMO) {
+
+			__ls3a_war_llsc();
+			do {
+				__asm__ __volatile__(
+				"	.set	mips3				\n"
+				"	" __LL	"%0, %1 # test_and_change_bit	\n"
+				"	xor	%2, %0, %3			\n"
+				"	" __SC	"\t%2, %1			\n"
+				"	.set	mips0				\n"
+				: "=&r" (temp), "+m" (*m), "=&r" (res)
+				: "r" (1UL << bit)
+				: "memory");
+			} while (unlikely(!res));
+
+			res = temp & (1UL << bit);
+		} else {
+
+			do {
+				__asm__ __volatile__(
+				"	.set	mips3				\n"
+				"	" __LL	"%0, %1 # test_and_change_bit	\n"
+				"	xor	%2, %0, %3			\n"
+				"	" __SC	"\t%2, %1			\n"
+				"	.set	mips0				\n"
+				: "=&r" (temp), "+m" (*m), "=&r" (res)
+				: "r" (1UL << bit)
+				: "memory");
+			} while (unlikely(!res));
+
+			res = temp & (1UL << bit);
+		}
 	} else
 		res = __mips_test_and_change_bit(nr, addr);
 

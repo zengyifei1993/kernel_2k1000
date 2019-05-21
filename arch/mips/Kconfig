@@ -1866,6 +1866,14 @@ config KVM_HOST_FREQ
 	  RTC emulation when determining guest CPU Frequency.  Instead, the guest
 	  processor frequency is automatically derived from the host frequency.
 
+config CPU_SUPPORTS_LAMO_INSTRUCTIONS
+	bool "Loongson support lamo instructions"
+	default n
+	depends on CPU_LOONGSON3 || CPU_LOONGSON2K
+	help
+	  This option enable new atomic instructions which is supported in Loongson3A4000 and later.
+	  You need a special compiler that support these instructions to compile.
+
 choice
 	prompt "Kernel page size"
 	default PAGE_SIZE_4KB

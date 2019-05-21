@@ -37,7 +37,15 @@ static inline unsigned long __xchg_u32(volatile int * m, unsigned int val)
 		: "=&r" (retval), "=m" (*m), "=&r" (dummy)
 		: "R" (*m), "Jr" (val)
 		: "memory");
-	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR) {
+	} else if (LOONGSON_LAMO) {
+#ifdef CONFIG_CPU_SUPPORTS_LAMO_INSTRUCTIONS
+		__asm__ __volatile__ (
+		" amswap_sync.w	%1, %z2, %0		\n"
+		: "+ZB" (*m), "=&r" (retval)
+		: "Jr" (val)
+		: "memory");
+#endif
+	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR && !LOONGSON_LAMO) {
 		unsigned long dummy;
 
 		__ls3a_war_llsc();
@@ -104,7 +112,15 @@ static inline __u64 __xchg_u64(volatile __u64 * m, __u64 val)
 		: "=&r" (retval), "=m" (*m), "=&r" (dummy)
 		: "R" (*m), "Jr" (val)
 		: "memory");
-	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR) {
+	} else if (LOONGSON_LAMO) {
+#ifdef CONFIG_CPU_SUPPORTS_LAMO_INSTRUCTIONS
+		__asm__ __volatile__ (
+		" amswap_sync.d	%1, %z2, %0		\n"
+		: "+ZB" (*m), "=&r" (retval)
+		: "Jr" (val)
+		: "memory");
+#endif
+	} else if (kernel_uses_llsc && LOONGSON_LLSC_WAR && !LOONGSON_LAMO) {
 		unsigned long dummy;
 
 		__ls3a_war_llsc();
