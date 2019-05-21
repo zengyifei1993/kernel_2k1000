@@ -19,6 +19,10 @@
 extern void _save_msa(struct task_struct *);
 extern void _restore_msa(struct task_struct *);
 extern void _init_msa_upper(void);
+#ifdef CONFIG_CPU_HAS_LASX
+extern void _save_lasx(struct task_struct *);
+extern void _restore_lasx(struct task_struct *);
+#endif
 
 extern void read_msa_wr_b(unsigned idx, union fpureg *to);
 extern void read_msa_wr_h(unsigned idx, union fpureg *to);
@@ -138,13 +142,21 @@ static inline int thread_msa_context_live(void)
 static inline void save_msa(struct task_struct *t)
 {
 	if (cpu_has_msa)
+#ifdef CONFIG_CPU_HAS_LASX
+		_save_lasx(t);
+#else
 		_save_msa(t);
+#endif
 }
 
 static inline void restore_msa(struct task_struct *t)
 {
 	if (cpu_has_msa)
+#ifdef CONFIG_CPU_HAS_LASX
+		_restore_lasx(t);
+#else
 		_restore_msa(t);
+#endif
 }
 
 #ifdef TOOLCHAIN_SUPPORTS_MSA
