@@ -15,6 +15,7 @@
 #include <asm/cacheflush.h>
 #include <asm/pgtable-64.h>
 #include <asm/tlbex.h>
+#include <asm/msa.h>
 
 struct kvm_mips_callbacks *kvm_mips_callbacks;
 EXPORT_SYMBOL_GPL(kvm_mips_callbacks);
@@ -48,3 +49,9 @@ EXPORT_SYMBOL(__kvm_save_fpu);
 EXPORT_SYMBOL(__kvm_restore_fpu);
 EXPORT_SYMBOL(__kvm_restore_fcsr);
 EXPORT_SYMBOL(__kvm_save_fcsr);
+#ifdef CONFIG_CPU_HAS_MSA
+EXPORT_SYMBOL(_save_msa);
+#endif
+#ifdef CONFIG_CPU_HAS_LASX
+EXPORT_SYMBOL(_save_lasx);
+#endif
