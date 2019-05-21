@@ -193,11 +193,10 @@ static struct syscore_ops rs780_syscore_ops = {
 	.resume = loongson3_rs780_resume,
 };
 
-static int __init rs780_init_ops(void)
+int __init rs780_init_ops(void)
 {
 	register_syscore_ops(&rs780_syscore_ops);
 	return 0;
 }
 
-device_initcall(rs780_init_ops);
 #endif
