@@ -201,7 +201,7 @@ int loongson_vbios_init(struct loongson_drm_device *ldev)
 #ifdef CONFIG_CPU_LOONGSON2K
 	ldev->vbios = (struct loongson_vbios *)loongson_vbios_default();
 #else
-	if(!vgabios_addr)
+	if(vgabios_addr)
 	{
 		if(loongson_vbios_crc_check((void *)vgabios_addr)||loongson_vbios_title_check((struct loongson_vbios *)vgabios_addr)){
 			DRM_ERROR("UEFI get wrong vbios!");
