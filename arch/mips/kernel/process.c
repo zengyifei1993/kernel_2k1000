@@ -67,7 +67,6 @@ void start_thread(struct pt_regs * regs, unsigned long pc, unsigned long sp)
 	clear_used_math();
 	clear_thread_flag(TIF_MSA_CTX_LIVE);
 	init_dsp();
-	disable_msa();
 	regs->cp0_epc = pc;
 	regs->regs[29] = sp;
 }
