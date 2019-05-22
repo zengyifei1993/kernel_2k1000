@@ -233,12 +233,9 @@ typedef struct {
 #if defined(CONFIG_CPU_HAS_LASX)
 # define ARCH_MIN_TASKALIGN	32
 # define FPU_ALIGN		__aligned(32)
-#elif defined(CONFIG_CPU_HAS_MSA)
+#else
 # define ARCH_MIN_TASKALIGN	16
 # define FPU_ALIGN		__aligned(16)
-#else
-# define ARCH_MIN_TASKALIGN	8
-# define FPU_ALIGN
 #endif
 
 struct mips_abi;
