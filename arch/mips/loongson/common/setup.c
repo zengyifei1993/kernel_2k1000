@@ -118,7 +118,8 @@ void encode_cpucfg_info(struct cpuinfo_mips *c,int cpu)
 			switch (c->processor_id & PRID_REV_MASK) {
 			case PRID_REV_LOONGSON3A_R3_1:
 				cpucfg_regs[cpu].reg[1] |= MIPS_LSE_CMDAP;
-			case PRID_REV_LOONGSON3A_R2:
+			case PRID_REV_LOONGSON3A_R2_0:
+			case PRID_REV_LOONGSON3A_R2_1:
 			case PRID_REV_LOONGSON3A_R3_0:
 				cpucfg_regs[cpu].reg[1] |= MIPS_LSE_CNT64 | MIPS_LSE_LSPREF | MIPS_LSE_LSPREFX |
 							   MIPS_LSE_LLEXC | MIPS_LSE_SCRAND | MIPS_LSE_SFBP;
