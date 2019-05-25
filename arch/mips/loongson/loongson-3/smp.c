@@ -104,15 +104,63 @@ static void loongson3_comp_send_ipi_mask(const struct cpumask *mask, unsigned in
 		loongson3_comp_ipi_send_csr(action, cpu_logical_map(i));
 }
 
-void loongson3_comp_ipi_interrupt(struct pt_regs *regs)
+unsigned int (*read_clear_ipi)(int);
+unsigned int addr_read_clear_ipi(int cpu)
+{
+	unsigned int action = ls64_conf_read32(ipi_status0_regs[cpu_logical_map(cpu)]);
+	ls64_conf_write32((unsigned int)action, ipi_clear0_regs[cpu_logical_map(cpu)]);
+	return action;
+}
+
+unsigned int csr_read_clear_ipi(int cpu)
+{
+	unsigned int action = read_csr(LOONGSON_IPI_STATUS_OFFSET);
+	write_csr(LOONGSON_IPI_CLEAR_OFFSET, (unsigned int)action);
+	return action;
+}
+
+static void handle_io_ipi(unsigned int irqs)
+{
+	int irq, irq1;
+	switch (loongson_pch->board_type) {
+	case RS780E:
+		while ((irq = ffs(irqs))) {
+			irq = irq -1;
+			irqs &= ~(1<<irq);
+			if(irq < 16)
+				do_IRQ(irq);
+			else {
+				irq1 = rs780e_pos2irq[irq - 16];
+				if (likely(irq1 != 0)) do_IRQ(irq1 - 1);
+			}
+		}
+	break;
+	case LS2H:
+		while ((irq = ffs(irqs))) {
+			irq1 = ls2h_pos2irq[irq - 1];
+			if (likely(irq1 != 0)) do_IRQ(irq1 - 1);
+			irqs &= ~(1<<(irq-1));
+		}
+	break;
+	case LS7A:
+		while ((irq = ffs(irqs))) {
+			irq1 = ls7a_ipi_pos2irq[irq-1];
+			if (likely(irq1 != 255)) do_IRQ(irq1);
+			irqs &= ~(1<<(irq-1));
+		}
+		break;
+	default:
+	break;
+	}
+
+}
+
+void loongson3_ipi_interrupt(struct pt_regs *regs)
 {
 	int i, cpu = smp_processor_id();
-	unsigned int action, c0count;
+	unsigned int action, c0count, irqs;
 
-	/* Load the ipi register to figure out what we're supposed to do */
-	action = read_csr(LOONGSON_IPI_STATUS_OFFSET);
-	/* Clear the ipi register to clear the interrupt */
-	write_csr(LOONGSON_IPI_CLEAR_OFFSET, (u32)action);
+	action = read_clear_ipi(cpu);
 
 	if (action & SMP_RESCHEDULE_YOURSELF) {
 		scheduler_ipi();
@@ -130,6 +178,9 @@ void loongson3_comp_ipi_interrupt(struct pt_regs *regs)
 			core0_c0count[i] = c0count;
 		__wbflush(); /* Let others see the result ASAP */
 	}
+
+	irqs = action >> IPI_IRQ_OFFSET;
+	if (irqs) handle_io_ipi(irqs);
 }
 
 /*
@@ -352,69 +403,6 @@ static void loongson3_send_ipi_mask(const struct cpumask *mask, unsigned int act
 	unsigned int i;
 	for_each_cpu(i, mask)
 		ls64_conf_write32((u32)action, ipi_set0_regs[cpu_logical_map(i)]);
-}
-
-void loongson3_ipi_interrupt(struct pt_regs *regs)
-{
-	int i, cpu = smp_processor_id();
-	unsigned int action, c0count, irqs;
-
-	/* Load the ipi register to figure out what we're supposed to do */
-	action = ls64_conf_read32(ipi_status0_regs[cpu_logical_map(cpu)]);
-	irqs = action >> IPI_IRQ_OFFSET;
-	/* Clear the ipi register to clear the interrupt */
-	ls64_conf_write32((u32)action, ipi_clear0_regs[cpu_logical_map(cpu)]);
-
-	if (action & SMP_RESCHEDULE_YOURSELF) {
-		scheduler_ipi();
-	}
-
-	if (action & SMP_CALL_FUNCTION) {
-		smp_call_function_interrupt();
-	}
-
-	if (action & SMP_ASK_C0COUNT) {
-		BUG_ON(cpu != 0);
-		c0count = read_c0_count();
-		c0count = c0count ? c0count : 1;
-		for (i = 1; i < nr_cpu_ids; i++)
-			core0_c0count[i] = c0count;
-		__wbflush(); /* Let others see the result ASAP */
-	}
-
-	if (irqs) {
-		int irq, irq1;
-		switch (loongson_pch->board_type) {
-		case RS780E:
-			while ((irq = ffs(irqs))) {
-				irq = irq -1;
-				irqs &= ~(1<<irq);
-				if(irq < 16)
-					do_IRQ(irq);
-				else {
-					irq1 = rs780e_pos2irq[irq - 16];
-					if (likely(irq1 != 0)) do_IRQ(irq1 - 1);
-				}
-			}
-		break;
-		case LS2H:
-			while ((irq = ffs(irqs))) {
-				irq1 = ls2h_pos2irq[irq - 1];
-				if (likely(irq1 != 0)) do_IRQ(irq1 - 1);
-				irqs &= ~(1<<(irq-1));
-			}
-		break;
-		case LS7A:
-			while ((irq = ffs(irqs))) {
-				irq1 = ls7a_ipi_pos2irq[irq-1];
-				if (likely(irq1 != 255)) do_IRQ(irq1);
-				irqs &= ~(1<<(irq-1));
-			}
-			break;
-		default:
-		break;
-		}
-	}
 }
 
 /*

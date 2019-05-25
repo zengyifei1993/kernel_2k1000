@@ -143,6 +143,26 @@ static struct irq_chip ext_irq_chip = {
 static unsigned int irq_cpu[64] = {[0 ... 63] = -1};
 static unsigned int irq_msi[64] = {[0 ... 63] = -1};
 
+void ext_handle_irqs(unsigned long long irqs, int pic_irq) {
+	unsigned int  irq;
+	unsigned int irq_base = 0;
+	if (pic_irq) {
+		irq_base = LS7A_IOAPIC_IRQ_BASE;
+		if(irqs & 0x80000)
+		{
+			lpc_irq_handler(0, 0);
+			irqs &= ~0x80000;
+			*irq_clear = 0x80000;
+		}
+	}
+
+	while(irqs){
+		irq = __ffs(irqs);
+		irqs &= ~(1ULL<<irq);
+
+		do_IRQ(irq_base + irq);
+	}
+}
 
 void handle_7a_irqs(unsigned long long irqs) {
 	unsigned int  irq;
@@ -266,11 +286,7 @@ void ls7a_ext_irq_dispatch(void)
 		irqs = dread_csr(LOONGSON_EXT_IOI_COREISR64_OFFSET + (i << 3));
 		dwrite_csr(LOONGSON_EXT_IOI_COREISR64_OFFSET + (i << 3), irqs);
 
-		if(i == 1) {
-			handle_7a_irqs(irqs);
-		} else {
-			handle_msi_irqs(irqs);
-		}
+		ext_handle_irqs(irqs, i);
 	}
 }
 
