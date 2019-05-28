@@ -126,10 +126,10 @@ static void __init init_topology_matrix(void)
 extern unsigned int has_systab;
 extern unsigned long systab_addr;
 
-int phy_index = 0;
-int dma_index = 0;
+static int phy_index = 0;
+static int dma_index = 0;
 struct dma_mem_map ls_phy_map[LOONGSON3_BOOT_MEM_MAP], ls_dma_map[LOONGSON3_BOOT_MEM_MAP];
-void __init add_memory_region_dma(struct dma_mem_map *loongson_map, phys_t start, phys_t size, long type, int *index)
+static void __init add_memory_region_dma(struct dma_mem_map *loongson_map, phys_t start, phys_t size, long type, int *index)
 {
 	loongson_map[*index].mem_start = start;
 	loongson_map[*index].mem_size = size;
@@ -234,14 +234,14 @@ static void __init szmem(unsigned int node)
 				break;
 			case SYSTEM_RAM_LOW_DMA:
 				printk("Debug: node_id:%d, mem_type:%d, mem_start:0x%llx, mem_size:0x%llx MB\n",
-					(u32)node_id, mem_type, (node_id << 44) + emap->map[i].mem_start, mem_size);
-				add_memory_region_dma(ls_dma_map, (node_id << 44) + emap->map[i].mem_start,
+					(u32)node_id, mem_type, emap->map[i].mem_start, mem_size);
+				add_memory_region_dma(ls_dma_map, emap->map[i].mem_start,
 					(u64)emap->map[i].mem_size << 20, SYSTEM_RAM_LOW_DMA, &dma_index);
 				break;
 			case SYSTEM_RAM_HIGH_DMA:
 				printk("Debug: node_id:%d, mem_type:%d, mem_start:0x%llx, mem_size:0x%llx MB\n",
-					(u32)node_id, mem_type, (node_id << 44) + emap->map[i].mem_start, mem_size);
-				add_memory_region_dma(ls_dma_map, (node_id << 44) + emap->map[i].mem_start,
+					(u32)node_id, mem_type, emap->map[i].mem_start, mem_size);
+				add_memory_region_dma(ls_dma_map, emap->map[i].mem_start,
 					(u64)emap->map[i].mem_size << 20, SYSTEM_RAM_HIGH_DMA, &dma_index);
 			}
 		}

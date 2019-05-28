@@ -328,7 +328,7 @@ void __init plat_swiotlb_setup(void)
 	swiotlb_init(1);
 	mips_dma_map_ops = &loongson_linear_dma_map_ops.dma_map_ops;
 
-	if(emap->vers >= 2){
+	if(emap->vers >= 2 && ls_dma_map[0].mem_size){
 		loongson_linear_dma_map_ops.phys_to_dma = loongson_phys_to_dma;
 		loongson_linear_dma_map_ops.dma_to_phys = loongson_dma_to_phys;
 	}else{
