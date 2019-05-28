@@ -59,6 +59,8 @@ struct kvm_stats_debugfs_item debugfs_entries[] = {
 	{ "trap_inst",	  VCPU_STAT(trap_inst_exits),	 KVM_STAT_VCPU },
 	{ "msa_fpe",	  VCPU_STAT(msa_fpe_exits),	 KVM_STAT_VCPU },
 	{ "fpe",	  VCPU_STAT(fpe_exits),		 KVM_STAT_VCPU },
+	{ "tlbri",	  VCPU_STAT(tlbri_exits),	 KVM_STAT_VCPU },
+	{ "tlbxi",	  VCPU_STAT(tlbxi_exits),	 KVM_STAT_VCPU },
 	{ "msa_disabled", VCPU_STAT(msa_disabled_exits), KVM_STAT_VCPU },
 	{ "flush_dcache", VCPU_STAT(flush_dcache_exits), KVM_STAT_VCPU },
 #ifdef CONFIG_KVM_MIPS_VZ
@@ -373,7 +375,7 @@ struct kvm_vcpu *kvm_arch_vcpu_create(struct kvm *kvm, unsigned int id)
 	if (err)
 		goto out_free_cpu;
 
-	kvm_debug("kvm @ %p: create cpu %d at %p\n", kvm, id, vcpu);
+	kvm_info("kvm @ %p: create cpu %d at %p arch @ %lx\n", kvm, id, vcpu, (unsigned long)&vcpu->arch);
 
 	/*
 	 * Allocate space for host mode exception handlers that handle
@@ -444,6 +446,7 @@ struct kvm_vcpu *kvm_arch_vcpu_create(struct kvm *kvm, unsigned int id)
 	dump_handler("kvm_tlb_refill", refill_start, refill_end);
 	dump_handler("kvm_gen_exc", gebase + 0x180, gebase + 0x200);
 	dump_handler("kvm_exit", gebase + 0x2000, vcpu->arch.vcpu_run);
+	kvm_info("start %lx end %lx handler %lx\n",(unsigned long)refill_start,(unsigned long)refill_end,(unsigned long)handler);
 
 	/* Invalidate the icache for these ranges */
 	flush_icache_range((unsigned long)gebase,
@@ -462,6 +465,17 @@ struct kvm_vcpu *kvm_arch_vcpu_create(struct kvm *kvm, unsigned int id)
 
 	kvm_debug("Allocated COMM page @ %p\n", vcpu->arch.kseg0_commpage);
 	kvm_mips_commpage_init(vcpu);
+
+	kvm_info("guest cop0 page @ %p gprs @ %p tlb @ %p pc @ %lx\n",
+		  vcpu->arch.cop0, vcpu->arch.gprs, vcpu->arch.guest_tlb,
+		  (unsigned long)&vcpu->arch.pc);
+	kvm_info("pending exception @ %lx\n", (ulong)&vcpu->arch.pending_exceptions);
+	kvm_info("fcr31 @ %lx\n", (ulong)&vcpu->arch.fpu.fcr31);
+	kvm_info("count_bias @ %lx period @ %lx\n", (ulong)&vcpu->arch.count_bias, (ulong)&vcpu->arch.count_period);
+	kvm_info("exit_reason @ %lx\n", (ulong)&vcpu->run->exit_reason);
+	kvm_info("run @ %lx\n", (ulong)vcpu->run);
+	kvm_info("wait @ %lx\n", (ulong)&vcpu->arch.wait);
+	kvm_info("\n\n");
 
 	/* Init */
 	vcpu->arch.last_sched_cpu = -1;
@@ -1093,6 +1107,14 @@ long kvm_arch_vcpu_ioctl(struct file *filp, unsigned int ioctl,
 		vcpu_state.online_vcpus = vcpu->kvm->arch.online_vcpus;
 		vcpu_state.is_migrate = 1;
 		vcpu_state.nodecounter_value =  vcpu->kvm->arch.nodecounter_value;
+		if(current_cpu_type() == CPU_LOONGSON3_COMP) {
+			vcpu_state.stablecounter_value =  drdtime();
+			vcpu_state.stablecounter_offset =  (signed long)dread_csr(0xfffffff8);
+			kvm_info("---stable value %lx offset %lx total %lx\n", (unsigned long)vcpu_state.stablecounter_value,
+						 (signed long)vcpu_state.stablecounter_offset,
+						(unsigned long)(vcpu_state.stablecounter_offset + vcpu_state.stablecounter_value));
+			kvm_info("---stable read total %lx\n", (unsigned long)(drdtime()+dread_csr(0xfffffff8)));
+		}
 
 		vcpu_state.pending_exceptions =  vcpu->arch.pending_exceptions_save;
 		vcpu_state.pending_exceptions_clr =  vcpu->arch.pending_exceptions_clr_save;
@@ -1116,6 +1138,16 @@ long kvm_arch_vcpu_ioctl(struct file *filp, unsigned int ioctl,
                 vcpu->kvm->arch.online_vcpus = vcpu_state.online_vcpus;
                 vcpu->kvm->arch.is_migrate = vcpu_state.is_migrate;
                 vcpu->kvm->arch.nodecounter_value = vcpu_state.nodecounter_value;
+		if(current_cpu_type() == CPU_LOONGSON3_COMP) {
+	                vcpu->kvm->arch.stablecounter_value = vcpu_state.stablecounter_value;
+	                vcpu->kvm->arch.stablecounter_offset = vcpu_state.stablecounter_offset +
+								(vcpu->kvm->arch.stablecounter_value - drdtime());
+			dwrite_csr(0xfffffff8, (unsigned long)vcpu->kvm->arch.stablecounter_offset);
+			kvm_info("---set old stable value %lx offset %lx \n", (unsigned long)vcpu_state.stablecounter_value,
+							(signed long)vcpu_state.stablecounter_offset);
+			kvm_info("---set stable value %lx offset %lx total %lx\n", (unsigned long)drdtime(), (signed long)dread_csr(0xfffffff8),
+							(unsigned long)(drdtime()+dread_csr(0xfffffff8)));
+		}
 
                 vcpu->arch.pending_exceptions = vcpu_state.pending_exceptions;
                 vcpu->arch.pending_exceptions_clr = vcpu_state.pending_exceptions_clr;
@@ -1660,6 +1692,16 @@ int kvm_mips_handle_exit(struct kvm_run *run, struct kvm_vcpu *vcpu)
 	case EXCCODE_FPE:
 		++vcpu->stat.fpe_exits;
 		ret = kvm_mips_callbacks->handle_fpe(vcpu);
+		break;
+
+	case EXCCODE_TLBRI:
+		++vcpu->stat.tlbri_exits;
+		ret = kvm_mips_callbacks->handle_tlbri(vcpu);
+		break;
+
+	case EXCCODE_TLBXI:
+		++vcpu->stat.tlbxi_exits;
+		ret = kvm_mips_callbacks->handle_tlbxi(vcpu);
 		break;
 
 	case EXCCODE_MSADIS:

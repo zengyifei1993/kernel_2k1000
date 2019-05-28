@@ -1947,6 +1947,7 @@ static u64 kvm_vz_get_one_regs[] = {
 #ifdef CONFIG_64BIT
 	KVM_REG_MIPS_CP0_XCONTEXT,
 #endif
+	KVM_REG_MIPS_CP0_GSCAUSE,
 	KVM_REG_MIPS_CP0_ERROREPC,
 
 	KVM_REG_MIPS_COUNT_CTL,
@@ -2122,6 +2123,9 @@ static int kvm_vz_get_one_reg(struct kvm_vcpu *vcpu,
 	case KVM_REG_MIPS_CP0_INDEX:
 		*v = (long)read_gc0_index();
 		break;
+	case KVM_REG_MIPS_CP0_RANDOM:
+		*v = read_gc0_random();
+		break;
 	case KVM_REG_MIPS_CP0_ENTRYLO0:
 		*v = entrylo_kvm_to_user(read_gc0_entrylo0());
 		break;
@@ -2289,6 +2293,9 @@ static int kvm_vz_get_one_reg(struct kvm_vcpu *vcpu,
 		*v = read_gc0_xcontext();
 		break;
 #endif
+	case KVM_REG_MIPS_CP0_GSCAUSE:
+		*v = read_gc0_gscause();
+		break;
 	case KVM_REG_MIPS_CP0_ERROREPC:
 		*v = (long)read_gc0_errorepc();
 		break;
@@ -2344,6 +2351,9 @@ static int kvm_vz_set_one_reg(struct kvm_vcpu *vcpu,
 	switch (reg->id) {
 	case KVM_REG_MIPS_CP0_INDEX:
 		write_gc0_index(v);
+		break;
+	case KVM_REG_MIPS_CP0_RANDOM:
+		write_gc0_random(v);
 		break;
 	case KVM_REG_MIPS_CP0_ENTRYLO0:
 		write_gc0_entrylo0(entrylo_user_to_kvm(v));
@@ -2558,6 +2568,9 @@ static int kvm_vz_set_one_reg(struct kvm_vcpu *vcpu,
 		write_gc0_xcontext(v);
 		break;
 #endif
+	case KVM_REG_MIPS_CP0_GSCAUSE:
+		write_gc0_gscause(v);
+		break;
 	case KVM_REG_MIPS_CP0_ERROREPC:
 		write_gc0_errorepc(v);
 		break;
@@ -2820,6 +2833,7 @@ static int kvm_vz_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 		kvm_restore_gc0_config7(cop0);
 
 	kvm_restore_gc0_index(cop0);
+	kvm_restore_gc0_random(cop0);
 	kvm_restore_gc0_entrylo0(cop0);
 	kvm_restore_gc0_entrylo1(cop0);
 	kvm_restore_gc0_context(cop0);
@@ -2842,6 +2856,7 @@ static int kvm_vz_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 	if (cpu_guest_has_userlocal)
 		kvm_restore_gc0_userlocal(cop0);
 
+	kvm_restore_gc0_gscause(cop0);
 	kvm_restore_gc0_errorepc(cop0);
 
 	/* restore KScratch registers if enabled in guest */
@@ -2905,6 +2920,7 @@ static int kvm_vz_vcpu_put(struct kvm_vcpu *vcpu, int cpu)
 	kvm_lose_fpu(vcpu);
 
 	kvm_save_gc0_index(cop0);
+	kvm_save_gc0_random(cop0);
 	kvm_save_gc0_entrylo0(cop0);
 	kvm_save_gc0_entrylo1(cop0);
 	kvm_save_gc0_context(cop0);
@@ -2947,6 +2963,7 @@ static int kvm_vz_vcpu_put(struct kvm_vcpu *vcpu, int cpu)
 	if (cpu_guest_has_conf7)
 		kvm_save_gc0_config7(cop0);
 
+	kvm_save_gc0_gscause(cop0);
 	kvm_save_gc0_errorepc(cop0);
 
 	/* save KScratch registers if enabled in guest */
@@ -3470,6 +3487,8 @@ static struct kvm_mips_callbacks kvm_vz_callbacks = {
 	.handle_break = kvm_trap_vz_no_handler,
 	.handle_msa_disabled = kvm_trap_vz_handle_msa_disabled,
 	.handle_guest_exit = kvm_trap_vz_handle_guest_exit,
+	.handle_tlbri = kvm_trap_vz_handle_tlb_ld_miss,
+	.handle_tlbxi = kvm_trap_vz_handle_tlb_ld_miss,
 
 	.hardware_enable = kvm_vz_hardware_enable,
 	.hardware_disable = kvm_vz_hardware_disable,

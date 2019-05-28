@@ -2111,6 +2111,9 @@ do {									\
 #define read_gc0_index()		__read_32bit_gc0_register(0, 0)
 #define write_gc0_index(val)		__write_32bit_gc0_register(0, 0, val)
 
+#define read_gc0_random()		__read_32bit_gc0_register(1, 0)
+#define write_gc0_random(val)		__write_32bit_gc0_register(1, 0, val)
+
 #define read_gc0_entrylo0()		__read_ulong_gc0_register(2, 0)
 #define write_gc0_entrylo0(val)		__write_ulong_gc0_register(2, 0, val)
 
@@ -2172,6 +2175,9 @@ do {									\
 #define write_gc0_badinstrp(val)	__write_32bit_gc0_register(8, 2, val)
 
 #define read_gc0_count()		__read_32bit_gc0_register(9, 0)
+
+#define read_gc0_pgd()			__read_ulong_gc0_register(9, 7)
+#define write_gc0_pgd(val)		__write_ulong_gc0_register(9, 7, val)
 
 #define read_gc0_entryhi()		__read_ulong_gc0_register(10, 0)
 #define write_gc0_entryhi(val)		__write_ulong_gc0_register(10, 0, val)
@@ -2255,6 +2261,11 @@ do {									\
 
 #define read_gc0_xcontext()		__read_ulong_gc0_register(20, 0)
 #define write_gc0_xcontext(val)		__write_ulong_gc0_register(20, 0, val)
+
+#ifdef CONFIG_CPU_LOONGSON3
+#define read_gc0_gscause()		__read_32bit_gc0_register(22, 1)
+#define write_gc0_gscause(val)		__write_32bit_gc0_register(22, 1, val)
+#endif
 
 #define read_gc0_perfctrl0()		__read_32bit_gc0_register(25, 0)
 #define write_gc0_perfctrl0(val)	__write_32bit_gc0_register(25, 0, val)

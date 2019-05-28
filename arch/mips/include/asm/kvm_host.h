@@ -32,6 +32,7 @@
 	(KVM_REG_MIPS_CP0 | KVM_REG_SIZE_U64 | (8 * (_R) + (_S)))
 
 #define KVM_REG_MIPS_CP0_INDEX		MIPS_CP0_32(0, 0)
+#define KVM_REG_MIPS_CP0_RANDOM		MIPS_CP0_32(1, 0)
 #define KVM_REG_MIPS_CP0_ENTRYLO0	MIPS_CP0_64(2, 0)
 #define KVM_REG_MIPS_CP0_ENTRYLO1	MIPS_CP0_64(3, 0)
 #define KVM_REG_MIPS_CP0_CONTEXT	MIPS_CP0_64(4, 0)
@@ -70,6 +71,7 @@
 #define KVM_REG_MIPS_CP0_CONFIG7	MIPS_CP0_32(16, 7)
 #define KVM_REG_MIPS_CP0_MAARI		MIPS_CP0_64(17, 2)
 #define KVM_REG_MIPS_CP0_XCONTEXT	MIPS_CP0_64(20, 0)
+#define KVM_REG_MIPS_CP0_GSCAUSE	MIPS_CP0_64(22, 1)
 #define KVM_REG_MIPS_CP0_ERROREPC	MIPS_CP0_64(30, 0)
 #define KVM_REG_MIPS_CP0_KSCRATCH1	MIPS_CP0_64(31, 2)
 #define KVM_REG_MIPS_CP0_KSCRATCH2	MIPS_CP0_64(31, 3)
@@ -174,6 +176,8 @@ struct kvm_vcpu_stat {
 	u64 trap_inst_exits;
 	u64 msa_fpe_exits;
 	u64 fpe_exits;
+	u64 tlbri_exits;
+	u64 tlbxi_exits;
 	u64 msa_disabled_exits;
 	u64 flush_dcache_exits;
 #ifdef CONFIG_KVM_MIPS_VZ
@@ -242,6 +246,8 @@ struct kvm_arch {
 	unsigned char is_migrate;
 	s64 nodecounter_offset;
 	u64 nodecounter_value;
+	s64 stablecounter_offset;
+	u64 stablecounter_value;
 	struct loongson_kvm_7a_ioapic *v_ioapic;
 	struct loongson_kvm_ls3a_ipi *v_gipi;
 	struct loongson_kvm_ls3a_htirq *v_htirq;
@@ -777,6 +783,7 @@ static inline void kvm_change_##name1(struct mips_coproc *cop0,		\
  *    fns_hw/sw    name     type    reg num         select
  */
 __BUILD_KVM_RW_HW(index,          32, MIPS_CP0_TLB_INDEX,    0)
+__BUILD_KVM_RW_HW(random,         32, MIPS_CP0_TLB_RANDOM,   0)
 __BUILD_KVM_RW_HW(entrylo0,       l,  MIPS_CP0_TLB_LO0,      0)
 __BUILD_KVM_RW_HW(entrylo1,       l,  MIPS_CP0_TLB_LO1,      0)
 __BUILD_KVM_RW_HW(context,        l,  MIPS_CP0_TLB_CONTEXT,  0)
@@ -816,6 +823,7 @@ __BUILD_KVM_RW_HW(config6,        32, MIPS_CP0_CONFIG,       6)
 __BUILD_KVM_RW_HW(config7,        32, MIPS_CP0_CONFIG,       7)
 __BUILD_KVM_RW_SW(maari,          l,  MIPS_CP0_LLADDR,       2)
 __BUILD_KVM_RW_HW(xcontext,       l,  MIPS_CP0_TLB_XCONTEXT, 0)
+__BUILD_KVM_RW_HW(gscause,        l,  MIPS_CP0_DIAG,         1)
 __BUILD_KVM_RW_HW(errorepc,       l,  MIPS_CP0_ERROR_PC,     0)
 __BUILD_KVM_RW_HW(kscratch1,      l,  MIPS_CP0_DESAVE,       2)
 __BUILD_KVM_RW_HW(kscratch2,      l,  MIPS_CP0_DESAVE,       3)
@@ -879,6 +887,8 @@ struct kvm_mips_callbacks {
 	int (*handle_trap)(struct kvm_vcpu *vcpu);
 	int (*handle_msa_fpe)(struct kvm_vcpu *vcpu);
 	int (*handle_fpe)(struct kvm_vcpu *vcpu);
+	int (*handle_tlbri)(struct kvm_vcpu *vcpu);
+	int (*handle_tlbxi)(struct kvm_vcpu *vcpu);
 	int (*handle_msa_disabled)(struct kvm_vcpu *vcpu);
 	int (*handle_guest_exit)(struct kvm_vcpu *vcpu);
 	int (*hardware_enable)(void);
