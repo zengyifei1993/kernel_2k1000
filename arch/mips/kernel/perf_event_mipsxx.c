@@ -187,7 +187,7 @@ static int mipsxx_pmu_handle_shared_irq(void);
 static inline bool cpu_is_new_loongson3(void)
 {
 	if (boot_cpu_type() == CPU_LOONGSON3)
-		return  ((boot_cpu_data.processor_id & PRID_REV_MASK) >= PRID_REV_LOONGSON3A_R2);
+		return  ((boot_cpu_data.processor_id & PRID_REV_MASK) >= PRID_REV_LOONGSON3A_R2_0);
 	else
 		return 0;
 }

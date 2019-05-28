@@ -111,7 +111,8 @@ int __init init_node_counter_clocksource(void)
 	switch(current_cpu_type()){
 	case CPU_LOONGSON3:	
 		switch (read_c0_prid() & 0xF) {
-		case PRID_REV_LOONGSON3A_R2:
+		case PRID_REV_LOONGSON3A_R2_0:
+		case PRID_REV_LOONGSON3A_R2_1:
 		case PRID_REV_LOONGSON3A_R3_0:
 		case PRID_REV_LOONGSON3A_R3_1:
 			break;

@@ -233,7 +233,7 @@ void __init prom_init_env(void)
 	if (loongson_dma_mask_bits < 32 || loongson_dma_mask_bits > 64)
 		loongson_dma_mask_bits = 32;
 
-	if (((read_c0_prid() & 0xf) == PRID_REV_LOONGSON3A_R2)
+	if (((read_c0_prid() & 0xf) == PRID_REV_LOONGSON3A_R2_0)
 		|| ((read_c0_prid() & 0xf) == PRID_REV_LOONGSON3A_R3_0)) {
 		eirq_source->dma_noncoherent = 1;
 		loongson3_perf_irq_mask = 0;
@@ -352,7 +352,8 @@ void __init prom_init_env(void)
 			cpu_clock_freq = 797000000;
 			break;
 		case PRID_REV_LOONGSON3A_R1:
-		case PRID_REV_LOONGSON3A_R2:
+		case PRID_REV_LOONGSON3A_R2_0:
+		case PRID_REV_LOONGSON3A_R2_1:
 		case PRID_REV_LOONGSON3A_R3_0:
 		case PRID_REV_LOONGSON3A_R3_1:
 			cpu_clock_freq = 900000000;

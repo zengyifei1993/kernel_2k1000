@@ -213,7 +213,7 @@ void loongson3_arch_func_optimize(unsigned int cpu_type)
 					delay_slot_inst = *p;
 				}
 				p--;
-				if (cpu_type == PRID_REV_LOONGSON3A_R2) {
+				if (cpu_type == PRID_REV_LOONGSON3A_R2_0) {
 					uasm_i_mfc0(&p, V0, C0_STATUS);
 					uasm_i_di(&p, 0);
 				}

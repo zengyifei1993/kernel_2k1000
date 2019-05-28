@@ -119,7 +119,8 @@ static void wait_for_wakeup_events(void)
 		default:
 			LOONGSON_CHIPCFG(0) &= ~0x7;
 			break;
-		case PRID_REV_LOONGSON3A_R2:
+		case PRID_REV_LOONGSON3A_R2_0:
+		case PRID_REV_LOONGSON3A_R2_1:
 		case PRID_REV_LOONGSON3B_R1:
 		case PRID_REV_LOONGSON3B_R2:
 			LOONGSON_FREQCTRL(0) &= ~0x7;
@@ -145,7 +146,8 @@ static inline void stop_perf_counters(void)
 		__write_64bit_c0_register($25, 0, 0xc0000000);
 		__write_64bit_c0_register($25, 2, 0x40000000);
 		break;
-	case PRID_REV_LOONGSON3A_R2:
+	case PRID_REV_LOONGSON3A_R2_0:
+	case PRID_REV_LOONGSON3A_R2_1:
 		__write_64bit_c0_register($25, 0, 0xc0000000);
 		__write_64bit_c0_register($25, 2, 0xc0000000);
 		__write_64bit_c0_register($25, 4, 0xc0000000);
@@ -175,7 +177,8 @@ static void loongson_suspend_enter(void)
 		wait_for_wakeup_events();
 		LOONGSON_CHIPCFG(0) = cached_cpu_freq;
 		break;
-	case PRID_REV_LOONGSON3A_R2:
+	case PRID_REV_LOONGSON3A_R2_0:
+	case PRID_REV_LOONGSON3A_R2_1:
 	case PRID_REV_LOONGSON3B_R1:
 	case PRID_REV_LOONGSON3B_R2:
 		cached_cpu_freq = LOONGSON_FREQCTRL(0);
