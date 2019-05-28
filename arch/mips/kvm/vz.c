@@ -164,7 +164,7 @@ static inline unsigned int kvm_vz_config2_user_wrmask(struct kvm_vcpu *vcpu)
 static inline unsigned int kvm_vz_config3_user_wrmask(struct kvm_vcpu *vcpu)
 {
 	unsigned int mask = kvm_vz_config3_guest_wrmask(vcpu) | MIPS_CONF_M |
-		MIPS_CONF3_ULRI | MIPS_CONF3_CTXTC;
+		MIPS_CONF3_LPA | MIPS_CONF3_ULRI | MIPS_CONF3_CTXTC;
 
 	/* Permit MSA to be present if MSA is supported */
 	if (kvm_mips_guest_can_have_msa(&vcpu->arch))
@@ -1222,7 +1222,7 @@ static enum emulation_result kvm_vz_gpsi_cop0(union mips_instruction inst,
 				    (sel == 0))) {	/* ErrCtl */
 				val = cop0->reg[rd][sel];
 			} else if (rd == MIPS_CP0_CONFIG && sel == 6) {
-				val = cop0->reg[rd][sel];       // GSConfig
+				val = read_c0_config6();       // GSConfig
 			} else if (rd == MIPS_CP0_DIAG && sel == 0) {
 				val = cop0->reg[rd][sel];       // Diag
 			} else {
@@ -1291,7 +1291,10 @@ static enum emulation_result kvm_vz_gpsi_cop0(union mips_instruction inst,
 				   (sel == 0)) {	/* ErrCtl */
 				/* ignore the written value */
 			} else if (rd == MIPS_CP0_CONFIG && sel == 6) {
-				/* GSConfig ignore */
+				/* GSconfig Sign extend */
+				if (inst.c0r_format.rs == mtc_op)
+					val = (int)val;
+				cop0->reg[rd][sel] = val;
 			} else if (rd == MIPS_CP0_DIAG && sel == 0) {
 				if (val & 0x2) {
 					/* flush btb */
@@ -1559,6 +1562,12 @@ static enum emulation_result kvm_trap_vz_handle_gsfc(u32 cause, u32 *opc,
 				kvm_lose_fpu(vcpu);
 
 			write_gc0_status(val);
+		} else if ((rd == MIPS_CP0_TLB_PGGRAIN) && (sel == 1)) {
+			u32 old_val = read_gc0_pagegrain();
+
+			kvm_debug("page gain old %x set %x\n", old_val, val);
+			/* ELPA enable */
+			write_gc0_pagegrain(val);
 		} else if ((rd == MIPS_CP0_CAUSE) && (sel == 0)) {
 			u32 old_cause = read_gc0_cause();
 			u32 change = old_cause ^ val;
