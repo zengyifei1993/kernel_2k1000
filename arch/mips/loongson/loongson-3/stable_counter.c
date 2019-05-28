@@ -216,9 +216,11 @@ int __init init_stable_clocksource(void)
 		/* Loongson3A2000 and Loongson3A3000 has no stable counter */
         return -ENXIO;
 	case CPU_LOONGSON3_COMP:
-        if (stable_enable() == 0)
+        if (stable_enable() == 0) {
             csrc_stable_counter.read = stable_counter_csr_read;
-        break;
+            break;
+        } else
+            return -ENXIO;
     default:
         return -ENXIO;
 	}
