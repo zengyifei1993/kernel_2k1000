@@ -177,36 +177,36 @@ int __init ls7a_pcibios_map_irq(const struct pci_dev *dev, u8 slot, u8 pin)
 
 int __init rs780_pcibios_map_irq(const struct pci_dev *dev, u8 slot, u8 pin)
 {
-#ifndef CONFIG_KVM_GUEST_LS3A3000
-	print_fixup_info(dev);
-	return dev->irq;
-#else
 	int irq = 0;
-	switch (dev->vendor){
-        case 0x1af4:
-            if (dev->device == 0x1000)
-                irq = VIRTDEV_NET_VIRTIO_IRQ;
-            else if (dev->device == 0x1001)
-                irq = VIRTDEV_BLK_VIRTIO_IRQ;
-            else if (dev->device == 0x1002)
-                irq = VIRTDEV_BALLOON_VIRTIO_IRQ;
-            else if (dev->device == 0x1003)
-                irq = VIRTDEV_SERIAL_VIRTIO_IRQ;
-            else if (dev->device == 0x1004)
-                irq = VIRTDEV_SCSI_VIRTIO_IRQ;
-            else if (dev->device == 0x1050)
-                irq = VIRTDEV_GPU_VIRTIO_IRQ;
-        break;
-        case 0x1b36:
-            if (dev->device == 0x100)
-                irq = VIRTDEV_QXL_IRQ;
-        break;
-        default:
-		irq = VIRTDEV_IRQ_DEFAULT;
-        break;
-    }
+	if(cpu_has_vz) {
+		print_fixup_info(dev);
+		return dev->irq;
+	} else {
+		switch (dev->vendor) {
+	        case 0x1af4:
+	            if (dev->device == 0x1000)
+	                irq = VIRTDEV_NET_VIRTIO_IRQ;
+	            else if (dev->device == 0x1001)
+	                irq = VIRTDEV_BLK_VIRTIO_IRQ;
+	            else if (dev->device == 0x1002)
+	                irq = VIRTDEV_BALLOON_VIRTIO_IRQ;
+	            else if (dev->device == 0x1003)
+	                irq = VIRTDEV_SERIAL_VIRTIO_IRQ;
+	            else if (dev->device == 0x1004)
+	                irq = VIRTDEV_SCSI_VIRTIO_IRQ;
+	            else if (dev->device == 0x1050)
+	                irq = VIRTDEV_GPU_VIRTIO_IRQ;
+	        break;
+	        case 0x1b36:
+	            if (dev->device == 0x100)
+	                irq = VIRTDEV_QXL_IRQ;
+	        break;
+	        default:
+			irq = VIRTDEV_IRQ_DEFAULT;
+	        break;
+	    }
+	}
 	return irq;
-#endif
 }
 
 static void pci_fixup_radeon(struct pci_dev *pdev)

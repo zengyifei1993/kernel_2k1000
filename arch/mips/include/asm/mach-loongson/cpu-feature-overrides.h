@@ -54,5 +54,8 @@
 #define cpu_has_ebase_wg	1
 #define cpu_has_segments	0
 
+#define cpu_guest_has_htw 1
+#define cpu_guest_has_rw_llb 1
+
 extern int loongson3_perf_irq_mask;
 #endif /* __ASM_MACH_LOONGSON_CPU_FEATURE_OVERRIDES_H */

@@ -12,11 +12,7 @@ extern unsigned long long smp_group[4];
 extern struct plat_smp_ops *mp_ops;
 
 unsigned int irq_cpu[16] = {[0 ... 15] = -1};
-#ifdef CONFIG_KVM_GUEST_LS3A3000
 unsigned int ht_irq[] = {0, 1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
-#else
-unsigned int ht_irq[] = {0, 1, 3, 4, 5, 6, 7, 8, 12, 14, 15};
-#endif
 unsigned int local_irq = 1<<0 | 1<<1 | 1<<2 | 1<<7 | 1<<8 | 1<<12;
 
 static int bootcore_int_mask2 = 1;
@@ -165,7 +161,9 @@ void rs780_irq_router_init(void)
 void __init rs780_init_irq(void)
 {
 	int prid = read_c0_prid();
-	if(((prid & 0xff00) == PRID_IMP_LOONGSON2) && ((prid & 0xff) <= PRID_REV_LOONGSON3A_R3_1)) {
+	if((current_cpu_type() == CPU_LOONGSON3_COMP) ||
+		(((prid & 0xff00) == PRID_IMP_LOONGSON2) &&
+		((prid & 0xff) <= PRID_REV_LOONGSON3A_R3_1))) {
 		pr_info("Do not supports HT MSI interrupt, disabling RS780E MSI Interrupt.\n");
 		ls3a_msi_enabled = 0;
 	} else {

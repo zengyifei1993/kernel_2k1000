@@ -1959,6 +1959,9 @@ static struct notifier_block kvm_mips_csr_die_notifier = {
 static int __init kvm_mips_init(void)
 {
 	int ret;
+	
+	if(!cpu_has_vz)
+		return  0;
 
 	if(current_cpu_type() == CPU_LOONGSON3) {
 		build_lsvz_guest_mode_reenter();

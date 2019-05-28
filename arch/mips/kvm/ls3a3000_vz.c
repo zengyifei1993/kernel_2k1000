@@ -1173,11 +1173,6 @@ static void kvm_vz_dequeue_timer_int_cb(struct kvm_vcpu *vcpu)
 	kvm_vz_dequeue_irq(vcpu, MIPS_EXC_INT_TIMER);
 }
 
-#define MIPS_EXC_INT_HT          11
-#define MIPS_EXC_INT_PM          12
-#define MIPS_EXC_INT_FREQ        13
-#define MIPS_EXC_INT_IPI         14
-
 static void kvm_vz_queue_io_int_cb(struct kvm_vcpu *vcpu,
 				   struct kvm_mips_interrupt *irq)
 {

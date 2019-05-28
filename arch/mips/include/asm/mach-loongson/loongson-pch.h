@@ -516,7 +516,6 @@ struct platform_controller_hub {
 
 extern struct platform_controller_hub *loongson_pch;
 
-#ifdef CONFIG_KVM_GUEST_LS3A3000
 enum virtdev_irq {
 	VIRTDEV_QXL_IRQ = 3,
 	VIRTDEV_BLK_VIRTIO_IRQ,
@@ -530,7 +529,6 @@ enum virtdev_irq {
 	VIRTDEV_IRQ_DEFAULT = 14,
 	VIRTDEV_IRQ_MAX = 15,
 };
-#endif
 
 /* gpio data */
 struct platform_gpio_data {
