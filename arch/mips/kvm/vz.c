@@ -25,8 +25,11 @@
 #include <asm/time.h>
 #include <asm/tlb.h>
 #include <asm/tlbex.h>
+#include <asm/mipsregs.h>
 
 #include <linux/kvm_host.h>
+#include <loongson.h>
+#include <mmzone.h>
 
 #include "interrupt.h"
 
@@ -921,6 +924,226 @@ static void kvm_write_maari(struct kvm_vcpu *vcpu, unsigned long val)
 		kvm_write_sw_gc0_maari(cop0, val);
 }
 
+struct mailbox_val {
+	union {
+		struct {
+			u32 lo;
+			u32 hi;
+		};
+		u64 mailval;
+	};
+	u32 flags;
+};
+
+struct mailbox_val mval[NR_CPUS][4] = {};
+
+static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
+					      u32 *opc, u32 cause,
+					      struct kvm_run *run,
+					      struct kvm_vcpu *vcpu)
+{
+	enum emulation_result er = EMULATE_DONE;
+	u32 rs, rd;
+	unsigned long curr_pc;
+	void *data = run->mmio.data;
+
+	++vcpu->stat.lsvz_gpsi_lwc2_exits;
+	/*
+	 * Update PC and hold onto current PC in case there is
+	 * an error and we want to rollback the PC
+	 */
+	curr_pc = vcpu->arch.pc;
+	er = update_pc(vcpu, cause);
+	if (er == EMULATE_FAIL)
+		return er;
+
+	rs = inst.loongson3_lscsr_format.rs;
+	rd = inst.loongson3_lscsr_format.rd;
+	switch (inst.loongson3_lscsr_format.fr) {
+		/* RDCSR */
+		case 0x0:
+			++vcpu->stat.lsvz_rdcsr_exits;
+			if(vcpu->arch.gprs[rs] == 0x8) {
+				++vcpu->stat.lsvz_rdcsr_cpu_feature_exits;
+				vcpu->arch.gprs[rd] = read_csr(LOONGSON_CPU_FEATURE_OFFSET);
+				/*Attention for not return some feature for guest,such as TEMPERATURE and EXT_IOI */
+				vcpu->arch.gprs[rd] &= ~(LOONGSON_CPU_FEATURE_TEMP | LOONGSON_CPU_FEATURE_EXT_IOI);
+//				vcpu->arch.gprs[rd] &= ~(LOONGSON_CPU_FEATURE_EXT_IOI);
+			} else if(vcpu->arch.gprs[rs] == 0x428) {
+				++vcpu->stat.lsvz_rdcsr_cpu_temperature_exits;
+				vcpu->arch.gprs[rd] = dread_csr(LOONGSON_CPU_TEMPERATURE_OFFSET);
+			} else if(vcpu->arch.gprs[rs] == 0x424) {
+				++vcpu->stat.lsvz_rdcsr_other_func_exits;
+				kvm_info("Not implement for now rdcsr %lx  @ %lxcpu %d\n",vcpu->arch.gprs[rs], curr_pc, vcpu->vcpu_id);
+			} else if(vcpu->arch.gprs[rs] == 0x1000){
+				/* read ipi status */
+				++vcpu->stat.lsvz_rdcsr_ipi_access_exits;
+				vcpu->arch.io_pc = vcpu->arch.pc;
+				vcpu->arch.pc = curr_pc;
+
+				run->mmio.len = 4;
+				/*First get data*/
+				vcpu->arch.io_gpr = rd;
+				vcpu->mmio_needed = 2;	/* signed */
+
+				/*then get guest phys*/
+				run->mmio.phys_addr = ((unsigned long)(vcpu->vcpu_id / 4) << NODE_ADDRSPACE_SHIFT) | LOONGSON3_REG_BASE |
+							 ((vcpu->vcpu_id % 4) << 8) | vcpu->arch.gprs[rs];
+
+				er = EMULATE_DO_MMIO;
+				run->mmio.is_write = 0;
+				vcpu->mmio_is_write = 0;
+			} else {
+				kvm_info("Not implement rdcsr %lx @ %lx cpu %d\n", vcpu->arch.gprs[rs], curr_pc, vcpu->vcpu_id);
+			}
+
+			break;
+		/* WRCSR */
+		case 0x1:
+			++vcpu->stat.lsvz_wrcsr_exits;
+			run->mmio.len = 4;
+			/*Get data*/
+			*(u32 *)data = vcpu->arch.gprs[rd];
+			if((vcpu->arch.gprs[rs] == 0x1004) || (vcpu->arch.gprs[rs] == 0x100c)) {
+				/*write current vcpu ipi clear/enable */
+				/*get guest phys*/
+				run->mmio.phys_addr = ((unsigned long)(vcpu->vcpu_id / 4) << NODE_ADDRSPACE_SHIFT) | LOONGSON3_REG_BASE |
+							 (vcpu->vcpu_id << 8) | vcpu->arch.gprs[rs] | ((vcpu->vcpu_id % 4) << 8);
+//				kvm_info("----wrcsr phys_addr:%llx %lx--rs %lx cpu %d\n",run->mmio.phys_addr, curr_pc, vcpu->arch.gprs[rs], vcpu->vcpu_id);
+				er = EMULATE_DO_MMIO;
+				run->mmio.is_write = 1;
+				vcpu->mmio_needed = 1;
+				vcpu->mmio_is_write = 1;
+			} else if (vcpu->arch.gprs[rs] == 0x1040) {
+				/*write ipi send reg */
+				int cpu = ((vcpu->arch.gprs[rd] & 0xffffffff) >> 16) & 0x3ff;
+				int action = (vcpu->arch.gprs[rd] & 0xffff);
+				*(u32 *)data = (1 << action);
+				// set ipi_set_reg
+				run->mmio.phys_addr = ((unsigned long)(cpu / 4) << NODE_ADDRSPACE_SHIFT) | LOONGSON3_REG_BASE |
+							 0x1000 | ((cpu % 4) << 8) | 0x8;
+//				kvm_info("--vcpu %d set cpu %d action %x\n", vcpu->vcpu_id, cpu, 1 << action);
+				er = EMULATE_DO_MMIO;
+				run->mmio.is_write = 1;
+				vcpu->mmio_needed = 1;
+				vcpu->mmio_is_write = 1;
+			} else {
+				kvm_info("Not implement--wrcsr @ %lx--rs %lx cpu %d\n", curr_pc, vcpu->arch.gprs[rs], vcpu->vcpu_id);
+			}
+
+			break;
+		/* DRDCSR */
+		case 0x2:
+			++vcpu->stat.lsvz_drdcsr_exits;
+
+			if(vcpu->arch.gprs[rs] == 0x420) {
+				vcpu->arch.gprs[rd] = dread_csr(LOONGSON_OTHER_FUNC_OFFSET);
+			} else if(vcpu->arch.gprs[rs] == 0x408) {
+				/* dread node counterv */
+			} else if((vcpu->arch.gprs[rs] & 0x1f00) == 0x1800) {
+				/*ext ioi mode for 7A */
+				vcpu->arch.gprs[rd] = dread_csr(LOONGSON_CPU_TEMPERATURE_OFFSET);
+			} else {
+				kvm_info("drdcsr rs %lx @ %lx\n",vcpu->arch.gprs[rs], curr_pc);
+				vcpu->arch.io_pc = vcpu->arch.pc;
+				vcpu->arch.pc = curr_pc;
+
+				run->mmio.len = 8;
+				/*First get data*/
+				vcpu->arch.io_gpr = rd;
+				vcpu->mmio_needed = 2;	/* signed */
+				/*Then get guest phys*/
+				run->mmio.phys_addr = ((unsigned long)(vcpu->vcpu_id / 4) << NODE_ADDRSPACE_SHIFT) | LOONGSON3_REG_BASE |
+							 vcpu->arch.gprs[rs] | ((vcpu->vcpu_id % 4) << 8);
+
+				er = EMULATE_DO_MMIO;
+				run->mmio.is_write = 0;
+				vcpu->mmio_is_write = 0;
+			}
+
+			break;
+		/* DWRCSR */
+		case 0x3:
+			++vcpu->stat.lsvz_dwrcsr_exits;
+			run->mmio.len = 8;
+			/*First get data*/
+			*(u64 *)data = vcpu->arch.gprs[rd];
+			/*process mailbox buf write*/
+			if(vcpu->arch.gprs[rs] == 0x1020) {
+				/*then get guest phys*/
+				run->mmio.phys_addr = ((unsigned long)(vcpu->vcpu_id / 4) << NODE_ADDRSPACE_SHIFT) | LOONGSON3_REG_BASE |
+								 vcpu->arch.gprs[rs] | ((vcpu->vcpu_id % 4) << 8);
+				er = EMULATE_DO_MMIO;
+				run->mmio.is_write = 1;
+				vcpu->mmio_needed = 1;
+				vcpu->mmio_is_write = 1;
+			} else if((vcpu->arch.gprs[rs] & 0x1f00) == 0x1800) {
+				/*ext ioi mode for 7A dwrite */
+				kvm_info("Not implement dwrcsr %lx @ %lx for now\n",vcpu->arch.gprs[rs], curr_pc);
+			} else if(vcpu->arch.gprs[rs] == 0x1158) {
+				/*7A any send */
+				kvm_info("Not implement dwrcsr %lx @ %lx for now\n",vcpu->arch.gprs[rs], curr_pc);
+		        } else if(vcpu->arch.gprs[rs] == 0x1048) {
+				/*process mailbox send write*/
+				int cpu = ((vcpu->arch.gprs[rd] & 0xffffffff) >> 16) & 0x3ff;
+				int mailbox = ((vcpu->arch.gprs[rd] & 0xffffffff) >> 3) & 0xf;
+				int mail_hi = ((vcpu->arch.gprs[rd] & 0xffffffff) >> 2) & 0x1;
+
+				mval[cpu][mailbox].flags = vcpu->arch.gprs[rd] & 0xffffffff;
+				//check for high value
+				if(mail_hi) {
+					mval[cpu][mailbox].hi = vcpu->arch.gprs[rd] >> 32;
+					er = EMULATE_DONE;
+				} else {
+					mval[cpu][mailbox].lo = vcpu->arch.gprs[rd] >> 32;
+					*(u64 *)data = mval[cpu][mailbox].mailval;
+					kvm_info("---dwrcsr--cpu %d mailbox %d val %llx\n", cpu, mailbox, mval[cpu][mailbox].mailval);
+					//pass through the initialize period
+					if((mailbox == 0) && (mval[cpu][mailbox].mailval == 0)) {
+						er = EMULATE_DONE;
+					} else {
+						run->mmio.phys_addr = ((unsigned long)(cpu / 4) << NODE_ADDRSPACE_SHIFT) |
+									 LOONGSON3_REG_BASE | 0x1000 |
+									 ((cpu % 4) << 8) | (0x20 + mailbox * 8);
+
+						er = EMULATE_DO_MMIO;
+						run->mmio.is_write = 1;
+						vcpu->mmio_needed = 1;
+						vcpu->mmio_is_write = 1;
+					}
+				}
+			} else {
+				kvm_err("Should depend on the condition for dwrcsr %lx",vcpu->arch.gprs[rs]);
+			}
+
+			break;
+                /* CPUCFG read */
+		case 0x8:
+			++vcpu->stat.lsvz_cpucfg_exits;
+			vcpu->arch.gprs[rd] = read_cfg(vcpu->arch.gprs[rs]);
+			break;
+                /* Stable counter read */
+		case 0x9:
+			++vcpu->stat.lsvz_stable_counter_exits;
+			vcpu->arch.gprs[rd] = drdtime();
+//			vcpu->arch.gprs[rs] = rdcsr();
+			break;
+		default:
+			kvm_info("lwc2 emulate not impl %d rs %lx @%lx\n",inst.loongson3_lscsr_format.fr, vcpu->arch.gprs[rs], curr_pc);
+			er = EMULATE_FAIL;
+			break;
+	}
+	/* Rollback PC only if emulation was unsuccessful */
+	if (er == EMULATE_FAIL) {
+		kvm_err("[%#lx]%s: unsupported lwc2 instruction 0x%08x 0x%08x\n",
+			curr_pc, __func__, inst.word, inst.loongson3_lscsr_format.fr);
+
+		vcpu->arch.pc = curr_pc;
+	}
+
+	return er;
+}
+
 static enum emulation_result kvm_vz_gpsi_cop0(union mips_instruction inst,
 					      u32 *opc, u32 cause,
 					      struct kvm_run *run,
@@ -1209,6 +1432,9 @@ static enum emulation_result kvm_trap_vz_handle_gpsi(u32 cause, u32 *opc,
 		return EMULATE_FAIL;
 
 	switch (inst.r_format.opcode) {
+	case lwc2_op:
+		er = kvm_vz_gpsi_lwc2(inst, opc, cause, run, vcpu);
+		break;
 	case cop0_op:
 		er = kvm_vz_gpsi_cop0(inst, opc, cause, run, vcpu);
 		break;
@@ -1512,6 +1738,9 @@ static int kvm_trap_vz_handle_guest_exit(struct kvm_vcpu *vcpu)
 		ret = RESUME_GUEST;
 	} else if (er == EMULATE_HYPERCALL) {
 		ret = kvm_mips_handle_hypcall(vcpu);
+	} else if (er == EMULATE_DO_MMIO) {
+		vcpu->run->exit_reason = KVM_EXIT_MMIO;
+		ret = RESUME_HOST;
 	} else {
 		vcpu->run->exit_reason = KVM_EXIT_INTERNAL_ERROR;
 		ret = RESUME_HOST;

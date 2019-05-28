@@ -210,6 +210,17 @@ struct kvm_vcpu_stat {
 	u64 lsvz_ls3a_ht_read_exits;
 	u64 lsvz_ls3a_router_write_exits;
 	u64 lsvz_ls3a_router_read_exits;
+	u64 lsvz_gpsi_lwc2_exits;
+	u64 lsvz_rdcsr_exits;
+	u64 lsvz_rdcsr_cpu_feature_exits;
+	u64 lsvz_rdcsr_cpu_temperature_exits;
+	u64 lsvz_rdcsr_other_func_exits;
+	u64 lsvz_rdcsr_ipi_access_exits;
+	u64 lsvz_wrcsr_exits;
+	u64 lsvz_drdcsr_exits;
+	u64 lsvz_dwrcsr_exits;
+	u64 lsvz_cpucfg_exits;
+	u64 lsvz_stable_counter_exits;
 #endif
 	u64 halt_successful_poll;
 	u64 halt_attempted_poll;
