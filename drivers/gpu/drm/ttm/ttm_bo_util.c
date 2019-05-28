@@ -510,7 +510,8 @@ pgprot_t ttm_io_prot(uint32_t caching_flags, pgprot_t tmp)
 		tmp = pgprot_noncached(tmp);
 #endif
 #if defined(__sparc__) || defined(__mips__)
-	tmp = pgprot_noncached(tmp);
+	if(cpu_has_vz)
+		tmp = pgprot_noncached(tmp);
 #endif
 	return tmp;
 }

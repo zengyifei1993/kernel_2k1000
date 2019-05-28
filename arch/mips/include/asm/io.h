@@ -27,6 +27,7 @@
 #include <asm/pgtable-bits.h>
 #include <asm/processor.h>
 #include <asm/string.h>
+#include <asm/cpu-type.h>
 
 #include <ioremap.h>
 #include <mangle-port.h>
@@ -197,6 +198,9 @@ static inline void __iomem * __ioremap_mode(phys_t offset, unsigned long size,
 		 */
 		if (flags == _CACHE_UNCACHED)
 			base = (u64) IO_BASE;
+		if((cpu_data[0].cputype == CPU_LOONGSON3_COMP) && !cpu_has_vz)
+			base = CAC_BASE;
+
 		return (void __iomem *) (unsigned long) (base + offset);
 	} else if (__builtin_constant_p(offset) &&
 		   __builtin_constant_p(size) && __builtin_constant_p(flags)) {
