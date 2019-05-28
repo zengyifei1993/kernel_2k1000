@@ -23,9 +23,9 @@ extern void __init prom_init_numa_memory(void);
 /* Loongson CPU address windows config space base address */
 unsigned long __maybe_unused _loongson_addrwincfg_base;
 
-extern void loongson3_comp_ipi_interrupt(struct pt_regs *regs);
-extern void loongson3_ipi_interrupt(struct pt_regs *regs);
-extern void	(*loongson3_ipi)(struct pt_regs *regs);
+extern unsigned int (*read_clear_ipi)(int);
+extern unsigned int addr_read_clear_ipi(int cpu);
+extern unsigned int csr_read_clear_ipi(int cpu);
 
 static void __init mips_nmi_setup(void)
 {
@@ -65,10 +65,10 @@ void __init prom_init(void)
 #if defined(CONFIG_SMP)
 	if ((current_cpu_type() == CPU_LOONGSON3_COMP) &&
 		(read_csr(LOONGSON_CPU_FEATURE_OFFSET) & LOONGSON_CPU_FEATURE_IPI_PERCORE)) {
-		loongson3_ipi = loongson3_comp_ipi_interrupt;
+		read_clear_ipi = csr_read_clear_ipi;
 		register_smp_ops(&loongson3_comp_smp_ops);
 	} else {
-		loongson3_ipi = loongson3_ipi_interrupt;
+		read_clear_ipi = addr_read_clear_ipi;
 		register_smp_ops(&loongson3_smp_ops);
 	}
 #endif

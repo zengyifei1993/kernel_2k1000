@@ -20,7 +20,7 @@ int ls3a_msi_enabled = 0;
 EXPORT_SYMBOL(ls3a_msi_enabled);
 extern unsigned char ls7a_ipi_irq2pos[];
 extern unsigned int ls2h_irq2pos[];
-extern void	(*loongson3_ipi)(struct pt_regs *regs);
+extern void loongson3_ipi_interrupt(struct pt_regs *regs);
 
 unsigned int ext_ini_en[MAX_32ARRAY_SIZE];
 unsigned char first_online_cpu_of_node[MAX_NUMNODES] = {LS_IOI_INV_CPU_ID};
@@ -96,9 +96,6 @@ int ext_set_irq_affinity(struct irq_data *d, const struct cpumask *affinity,
 	unsigned long flags;
 	unsigned short pos_off;
 
-	if ((loongson_pch == &ls7a_pch && ls7a_ipi_irq2pos[d->irq] < 0) || (loongson_pch == &ls2h_pch && ls2h_irq2pos[d->irq - LS2H_PCH_IRQ_BASE] < 0))
-		return -EINVAL;
-
 	if (!config_enabled(CONFIG_SMP))
 		return -EPERM;
 
@@ -134,12 +131,12 @@ int ext_set_irq_affinity(struct irq_data *d, const struct cpumask *affinity,
 int plat_set_irq_affinity(struct irq_data *d, const struct cpumask *affinity,
 			  bool force)
 {
-	if ((loongson_pch == &ls7a_pch && ls7a_ipi_irq2pos[d->irq] < 0) || (loongson_pch == &ls2h_pch && ls2h_irq2pos[d->irq - LS2H_PCH_IRQ_BASE] < 0))
+	if ((loongson_pch == &ls7a_pch && ls7a_ipi_irq2pos[d->irq] == 255) || (loongson_pch == &ls2h_pch && ls2h_irq2pos[d->irq - LS2H_PCH_IRQ_BASE] == 0))
 		return -EINVAL;
 
 	if (!config_enabled(CONFIG_SMP))
 		return -EPERM;
-	
+
 	if (cpumask_empty(affinity)) {
 		return -EINVAL;
 	}
@@ -147,7 +144,7 @@ int plat_set_irq_affinity(struct irq_data *d, const struct cpumask *affinity,
 	if (!cpumask_subset(affinity, cpu_online_mask)) {
 		return -EINVAL;
 	}
-	
+
 	cpumask_copy(d->affinity, affinity);
 
 	return IRQ_SET_MASK_OK_NOCOPY;
@@ -165,7 +162,7 @@ void mach_irq_dispatch(unsigned int pending)
 		do_IRQ(LOONGSON_TIMER_IRQ);
 #if defined(CONFIG_SMP)
 	if (pending & CAUSEF_IP6)
-		loongson3_ipi(NULL);
+		loongson3_ipi_interrupt(NULL);
 #endif
 #ifdef CONFIG_KVM_GUEST_LS3A3000
 	pending = read_c0_cause() & read_c0_status() & ST0_IM;
