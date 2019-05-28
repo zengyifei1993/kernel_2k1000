@@ -22,6 +22,31 @@
 #include <asm/mipsmtregs.h>
 #endif
 
+/* preprocessor replaces the fp in ".set fp=64" with $30 otherwise */
+#undef fp
+
+/*
+ * Helper macros for generating raw instruction encodings.
+ */
+#ifdef CONFIG_CPU_MICROMIPS
+	.macro	insn32_if_mm enc
+	.insn
+	.hword ((\enc) >> 16)
+	.hword ((\enc) & 0xffff)
+	.endm
+
+	.macro	insn_if_mips enc
+	.endm
+#else
+	.macro	insn32_if_mm enc
+	.endm
+
+	.macro	insn_if_mips enc
+	.insn
+	.word (\enc)
+	.endm
+#endif
+
 #ifdef CONFIG_MIPS_MT_SMTC
 	.macro	local_irq_enable reg=t0
 	mfc0	\reg, CP0_TCSTATUS
@@ -328,6 +353,73 @@
 	insert.d $w\wd[\n], $1
 	.set	pop
 	.endm
+
+	.macro	xvld_b	wd, off, base
+	.set	push
+	.set	mips32r2
+	.set	fp=64
+	.set	msa
+	xvld.b	$w\wd, \off(\base)
+	.set	pop
+	.endm
+
+	.macro	xvst_b	wd, off, base
+	.set	push
+	.set	mips32r2
+	.set	fp=64
+	.set	msa
+	xvst.b	$w\wd, \off(\base)
+	.set	pop
+	.endm
+
+	.macro xvsd wd, off, base, sel
+	.set	push
+	.set	noat
+	SET_HARDFLOAT
+	PTR_ADDU $1, \base, \off
+	insn_if_mips 0xf8380894 | (\wd << 6) | (\sel << 16)
+	.set	pop
+	.endm
+    //TODO: change xvst to pseudo code, AND DON'T USE $1 ANYMORE
+
+	.macro xinsert_d wd, n
+	.set	push
+	.set	noat
+	SET_HARDFLOAT
+	insn_if_mips 0x79380819 | (\n << 16) | (\wd << 6)
+	.set	pop
+	.endm
+    //TODO: xinsert_d pseudo code is what?
+
+	.macro xvcopy_s_d ws, n
+	.set	push
+	.set	noat
+	SET_HARDFLOAT
+	insn_if_mips 0x78b80059 | (\n << 16) | (\ws << 11)
+	.set	pop
+	.endm
+    //TODO: xvcopy_s_d pseudo code is what?
+
+	.macro  xvst_b_off wd, off
+	.set	push
+	.set	noat
+	.word	0xe8000819 | (\wd << 6) | (\off << 16)
+	.set	pop
+	.endm
+
+	.macro  xvld_b_off wd, off
+	.set	push
+	.set	noat
+	.word	0xc8000819 | (\wd << 6) | (\off << 16)
+	.set	pop
+	.endm
+
+	.macro	xvseli_d patt, ws, wd
+	.set	push
+	.set	noat
+	.word	0xed00000a | (\wd << 6) | (\ws << 11) | (\patt << 16)
+	.set	pop
+	.endm
 #else
 
 #ifdef CONFIG_CPU_MICROMIPS
@@ -487,6 +579,70 @@
 	.set	noat
 	SET_HARDFLOAT
 	.word	INSERT_D_MSA_INSN | (\n << 16) | (\wd << 6)
+	.set	pop
+	.endm
+
+	.macro	xvld_b	wd, off, base
+	.set	push
+	.set	noat
+	SET_HARDFLOAT
+	PTR_ADDU $1, \base, \off
+	insn_if_mips 0xc8000819 | (\wd << 6)
+	.set	pop
+	.endm
+
+	.macro	xvst_b	wd, off, base
+	.set	push
+	.set	noat
+	SET_HARDFLOAT
+	PTR_ADDU $1, \base, \off
+	insn_if_mips 0xe8000819 | (\wd << 6)
+	.set	pop
+	.endm
+
+	.macro xvsd wd, off, base, sel
+	.set	push
+	.set	noat
+	SET_HARDFLOAT
+    	PTR_ADDU $1, \base, \off
+	insn_if_mips 0xf8380894 | (\wd << 6) | (\sel << 16)
+	.set	pop
+	.endm
+
+	.macro xinsert_d wd, n
+	.set	push
+	.set	noat
+	SET_HARDFLOAT
+	insn_if_mips 0x79380819 | (\n << 16) | (\wd << 6)
+	.set	pop
+	.endm
+
+	.macro xvcopy_s_d ws, n
+	.set	push
+	.set	noat
+	SET_HARDFLOAT
+	insn_if_mips 0x78b80059 | (\n << 16) | (\ws << 11)
+	.set	pop
+	.endm
+
+	.macro  xvst_b_off wd, off
+	.set	push
+	.set	noat
+	.word	0xe8000819 | (\wd << 6) | (\off << 16)
+	.set	pop
+	.endm
+
+	.macro  xvld_b_off wd, off
+	.set	push
+	.set	noat
+	.word	0xc8000819 | (\wd << 6) | (\off << 16)
+	.set	pop
+	.endm
+
+	.macro	xvseli_d patt, ws, wd
+	.set	push
+	.set	noat
+	.word	0xed00000a | (\wd << 6) | (\ws << 11) | (\patt << 16)
 	.set	pop
 	.endm
 #endif

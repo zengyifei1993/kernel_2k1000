@@ -712,50 +712,6 @@ END(_init_msa_upper)
 #endif /* CONFIG_CPU_HAS_MSA */
 
 #ifdef CONFIG_CPU_HAS_LASX
-	.macro  xvst_b wd, off, base
-	.set	push
-	.set	noat
-	PTR_ADDIU $1, \base, \off
-	.word	0xe8000819 | (\wd << 6)
-	.set	pop
-	.endm
-
-	.macro  xvst_b_off wd, off
-	.set	push
-	.set	noat
-	.word	0xe8000819 | (\wd << 6) | (\off << 16)
-	.set	pop
-	.endm
-
-	.macro  xvld_b wd, off, base
-	.set	push
-	.set	noat
-	PTR_ADDU $1, \base, \off
-	.word	0xc8000819 | (\wd << 6)
-	.set	pop
-	.endm
-
-	.macro  xvld_b_off wd, off
-	.set	push
-	.set	noat
-	.word	0xc8000819 | (\wd << 6) | (\off << 16)
-	.set	pop
-	.endm
-
-	.macro  xinsert_d wd, n
-	.set	push
-	.set	noat
-	.word	0x79380819 | (\wd << 6) | (\n << 16)
-	.set	pop
-	.endm
-
-	.macro	xvseli_d patt, ws, wd
-	.set	push
-	.set	noat
-	.word	0xed00000a | (\wd << 6) | (\ws << 11) | (\patt << 16)
-	.set	pop
-	.endm
-
 	.macro	lasx_init_upper	wd
 	.set	push
 	.set	noat
