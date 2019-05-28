@@ -1676,8 +1676,6 @@ static void  build_loongson3_tlb_refill_handler(void)
 
 	if(check_for_high_segbits){
 		uasm_l_large_segbits_fault(&l, p);
-		if (loongson_llsc_war())
-			uasm_i_sync(&p, 0);
 		UASM_i_LA(&p, K1, (unsigned long)tlb_do_page_fault_0);
 		uasm_i_jr(&p, K1);
 		uasm_i_nop(&p);
