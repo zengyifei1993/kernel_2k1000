@@ -98,7 +98,6 @@ static struct insn insn_table[]  = {
 	{ insn_j,  M(j_op, 0, 0, 0, 0, 0),  JIMM },
 	{ insn_jal,  M(jal_op, 0, 0, 0, 0, 0),	JIMM },
 	{ insn_jalr,  M(spec_op, 0, 0, 0, 0, jalr_op), RS | RD },
-	{ insn_j,  M(j_op, 0, 0, 0, 0, 0),  JIMM },
 	{ insn_jr,  M(spec_op, 0, 0, 0, 0, jr_op),  RS },
 	{ insn_lb, M(lb_op, 0, 0, 0, 0, 0), RS | RT | SIMM },
 	{ insn_lbu, M(lbu_op, 0, 0, 0, 0, 0), RS | RT | SIMM },

@@ -56,6 +56,7 @@
 #define C0_BADVADDR	8, 0
 #define C0_BADINSTR	8, 1
 #define C0_BADINSTRP	8, 2
+#define C0_PGD		9, 7
 #define C0_ENTRYHI	10, 0
 #define C0_GUESTCTL1	10, 4
 #define C0_STATUS	12, 0
@@ -473,12 +474,22 @@ void *kvm_mips_build_tlb_refill_exception(void *addr, void *handler)
 	u32 *p = addr;
 	struct uasm_label labels[2];
 	struct uasm_reloc relocs[2];
+	unsigned int jump_target;
+	unsigned int j_inst = 0x08000000;
+#ifndef CONFIG_CPU_LOONGSON3
 	struct uasm_label *l = labels;
 	struct uasm_reloc *r = relocs;
+#endif
 
 	memset(labels, 0, sizeof(labels));
 	memset(relocs, 0, sizeof(relocs));
 
+#ifdef CONFIG_CPU_LOONGSON3
+	jump_target = (((unsigned long)addr + 0x8)& 0x0fffffff) >> 2;
+	*p = j_inst | jump_target;
+	p++;
+	uasm_i_nop(&p);
+#endif
 	/* Save guest k1 into scratch register */
 	UASM_i_MTC0(&p, K1, scratch_tmp[0], scratch_tmp[1]);
 
@@ -493,7 +504,17 @@ void *kvm_mips_build_tlb_refill_exception(void *addr, void *handler)
 	 * assume symmetry and just disable preemption to silence the warning.
 	 */
 	preempt_disable();
+#ifdef CONFIG_CPU_LOONGSON3
+	UASM_i_MFC0(&p, K1, C0_PGD);
 
+	uasm_i_lddir(&p, K0, K1, 3);  /* global page dir */
+#ifndef __PAGETABLE_PMD_FOLDED
+	uasm_i_lddir(&p, K1, K0, 1);  /* middle page dir */
+#endif
+	uasm_i_ldpte(&p, K1, 0);      /* even */
+	uasm_i_ldpte(&p, K1, 1);      /* odd */
+	uasm_i_tlbwr(&p);
+#else
 	/*
 	 * Now for the actual refill bit. A lot of this can be common with the
 	 * Linux TLB refill handler, however we don't need to handle so many
@@ -516,6 +537,7 @@ void *kvm_mips_build_tlb_refill_exception(void *addr, void *handler)
 	build_get_ptep(&p, K0, K1);
 	build_update_entries(&p, K0, K1);
 	build_tlb_write_entry(&p, &l, &r, tlb_random);
+#endif
 
 	preempt_enable();
 
@@ -529,6 +551,7 @@ void *kvm_mips_build_tlb_refill_exception(void *addr, void *handler)
 
 	/* Jump to guest */
 	uasm_i_eret(&p);
+	uasm_resolve_relocs(relocs, labels);
 
 	return p;
 }
