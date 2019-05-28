@@ -32,8 +32,11 @@ DEFINE_SPINLOCK(ls7a_dc_writelock);
 unsigned long ls7a_rwflags;
 DEFINE_RWLOCK(ls7a_rwlock);
 
+u32 node_id_offset;
+#define NODE_ID_OFFSET_ADDR	0x90000E001001041CULL
 static void ls7a_early_config(void)
 {
+	node_id_offset = (*(volatile u32 *)NODE_ID_OFFSET_ADDR >> 8) & 0x1F;
 }
 
 static void __init ls7a_arch_initcall(void)

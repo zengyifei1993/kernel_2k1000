@@ -223,13 +223,26 @@ static phys_addr_t loongson_rs780_dma_to_phys(struct device *dev, dma_addr_t dad
 	return daddr;
 }
 
+extern u32 node_id_offset;
 static dma_addr_t loongson_ls7a_phys_to_dma(struct device *dev, phys_addr_t paddr)
 {
+#ifdef CONFIG_PHYS48_TO_HT40
+	long nid;
+	 /* We extract 2bit node id (bit 44~47, only bit 44~45 used now) from
+	  * Loongson3's 48bit address space and embed it into 40bit */
+	nid = (paddr >> 44) & 0x3;
+	paddr = ((nid << 44 ) ^ paddr) | (nid << (36 + node_id_offset));
+#endif
 	return paddr;
 }
 
 static phys_addr_t loongson_ls7a_dma_to_phys(struct device *dev, dma_addr_t daddr)
 {
+#ifdef CONFIG_PHYS48_TO_HT40
+	long nid;
+	nid = (daddr >> (36 + node_id_offset)) & 0x3;
+	daddr = ((nid << (36 + node_id_offset)) ^ daddr) | (nid << 44);
+#endif
 	return daddr;
 }
 
