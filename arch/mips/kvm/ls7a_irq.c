@@ -236,6 +236,7 @@ struct loongson_kvm_7a_ioapic *kvm_create_ls7a_ioapic(struct kvm *kvm)
 {
 	struct loongson_kvm_7a_ioapic *s;
 	int ret;
+	unsigned long ls7a_ioapic_reg_base;
 
 	s = kzalloc(sizeof(struct loongson_kvm_7a_ioapic), GFP_KERNEL);
 	if (!s)
@@ -243,12 +244,18 @@ struct loongson_kvm_7a_ioapic *kvm_create_ls7a_ioapic(struct kvm *kvm)
 	spin_lock_init(&s->lock);
 	s->kvm = kvm;
 
+	if(current_cpu_type() == CPU_LOONGSON3_COMP) {
+		ls7a_ioapic_reg_base = LS3A4000_LS7A_IOAPIC_GUEST_REG_BASE;
+	} else {
+		ls7a_ioapic_reg_base = LS7A_IOAPIC_GUEST_REG_BASE;
+	}
+
 	/*
 	 * Initialize PIO device
 	 */
 	kvm_iodevice_init(&s->dev_ls7a_ioapic, &kvm_ls7a_ioapic_ops);
 	mutex_lock(&kvm->slots_lock);
-	ret = kvm_io_bus_register_dev(kvm, KVM_PIO_BUS, LS7A_IOAPIC_GUSET_REG_BASE, 0x1000,
+	ret = kvm_io_bus_register_dev(kvm, KVM_PIO_BUS, ls7a_ioapic_reg_base, 0x1000,
 				      &s->dev_ls7a_ioapic);
 	if (ret < 0)
 		goto fail_unlock;

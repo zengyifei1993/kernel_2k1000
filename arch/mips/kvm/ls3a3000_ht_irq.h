@@ -28,6 +28,7 @@
 #include "iodev.h"
 
 #define HT_CONTROL_REGS_BASE            0x0effb000000UL
+#define LS3A4000_HT_CONTROL_REGS_BASE            0x0efdfb000000UL
 #define HT_CONTROL_REGS_SIZE            0x100
 #define HT_LINK_CONFIG_REG              0x44
 #define HT_IRQ_VECTOR_REG0              0x80

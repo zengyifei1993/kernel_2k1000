@@ -34,6 +34,7 @@
 #include "interrupt.h"
 
 #include "trace.h"
+#include "ls3a3000_ipi.h"
 
 /* Pointers to last VCPU loaded on each physical CPU */
 static struct kvm_vcpu *last_vcpu[NR_CPUS];
@@ -1055,10 +1056,17 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 				/*Then get guest phys*/
 				run->mmio.phys_addr = ((unsigned long)(vcpu->vcpu_id / 4) << NODE_ADDRSPACE_SHIFT) | LOONGSON3_REG_BASE |
 							 vcpu->arch.gprs[rs] | ((vcpu->vcpu_id % 4) << 8);
-
-				er = EMULATE_DO_MMIO;
-				run->mmio.is_write = 0;
-				vcpu->mmio_is_write = 0;
+				if(ls3a_ipi_in_kernel(vcpu->kvm)) {
+					ls3a_ipi_lock(vcpu->kvm->arch.v_gipi);
+					ls3a_gipi_readl(vcpu->kvm->arch.v_gipi,run->mmio.phys_addr,run->mmio.len,&vcpu->arch.gprs[rd]);
+					ls3a_ipi_unlock(vcpu->kvm->arch.v_gipi);
+					vcpu->arch.pc = vcpu->arch.io_pc;
+					vcpu->mmio_needed = 0;
+				} else {
+					er = EMULATE_DO_MMIO;
+					run->mmio.is_write = 0;
+					vcpu->mmio_is_write = 0;
+				}
 			}
 
 			break;
@@ -1105,11 +1113,17 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 						run->mmio.phys_addr = ((unsigned long)(cpu / 4) << NODE_ADDRSPACE_SHIFT) |
 									 LOONGSON3_REG_BASE | 0x1000 |
 									 ((cpu % 4) << 8) | (0x20 + mailbox * 8);
-
-						er = EMULATE_DO_MMIO;
-						run->mmio.is_write = 1;
-						vcpu->mmio_needed = 1;
-						vcpu->mmio_is_write = 1;
+						if(ls3a_ipi_in_kernel(vcpu->kvm)) {
+							ls3a_ipi_lock(vcpu->kvm->arch.v_gipi);
+							ls3a_gipi_writel(vcpu->kvm->arch.v_gipi,run->mmio.phys_addr,run->mmio.len,data);
+							ls3a_ipi_unlock(vcpu->kvm->arch.v_gipi);
+					 		er = EMULATE_DONE;
+						} else {
+							er = EMULATE_DO_MMIO;
+							run->mmio.is_write = 1;
+							vcpu->mmio_needed = 1;
+							vcpu->mmio_is_write = 1;
+						}
 					}
 				}
 			} else {

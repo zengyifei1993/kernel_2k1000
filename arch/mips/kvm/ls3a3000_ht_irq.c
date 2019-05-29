@@ -209,6 +209,7 @@ struct loongson_kvm_ls3a_htirq *kvm_create_ls3a_ht_irq(struct kvm *kvm)
 {
         struct loongson_kvm_ls3a_htirq *s;
         int ret;
+	unsigned long ht_control_reg_base;
 
         s = kzalloc(sizeof(struct loongson_kvm_ls3a_htirq), GFP_KERNEL);
         if (!s)
@@ -216,10 +217,16 @@ struct loongson_kvm_ls3a_htirq *kvm_create_ls3a_ht_irq(struct kvm *kvm)
         spin_lock_init(&s->lock);
         s->kvm = kvm;
 
+	if(current_cpu_type() == CPU_LOONGSON3_COMP) {
+		ht_control_reg_base = LS3A4000_HT_CONTROL_REGS_BASE;
+	} else {
+		ht_control_reg_base = HT_CONTROL_REGS_BASE;
+	}
 
         kvm_iodevice_init(&s->dev_ls3a_ht_irq, &kvm_ls3a_ht_irq_ops);
         mutex_lock(&kvm->slots_lock);
-        ret = kvm_io_bus_register_dev(kvm, KVM_PIO_BUS, HT_CONTROL_REGS_BASE, 0x100,
+
+        ret = kvm_io_bus_register_dev(kvm, KVM_PIO_BUS, ht_control_reg_base, 0x100,
                                       &s->dev_ls3a_ht_irq);
         if (ret < 0)
                 goto fail_unlock;
