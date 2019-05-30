@@ -225,7 +225,7 @@ LEAF(_save_fp)
 	sll	t0, t0, 5
 	bgez	t0, 1f
 	cfc1	t0, fcr31
-
+#if 	FPU_REG_WIDTH == 64
 	gssqc1	$f1, $f0, THREAD_FPR0(a0)
 	gssqc1	$f3, $f2, THREAD_FPR2(a0)
 
@@ -248,6 +248,24 @@ LEAF(_save_fp)
 	gssqc1	$f31, $f30, THREAD_FPR30(a0)
 	jr	ra
 	sw	t0, THREAD_FCR31(a0)
+#else
+	sdc1	$f1,  THREAD_FPR1(a0)
+	sdc1	$f3,  THREAD_FPR3(a0)
+	sdc1	$f5,  THREAD_FPR5(a0)
+	sdc1	$f7,  THREAD_FPR7(a0)
+	sdc1	$f9,  THREAD_FPR9(a0)
+	sdc1	$f11, THREAD_FPR11(a0)
+	sdc1	$f13, THREAD_FPR13(a0)
+	sdc1	$f15, THREAD_FPR15(a0)
+	sdc1	$f17, THREAD_FPR17(a0)
+	sdc1	$f19, THREAD_FPR19(a0)
+	sdc1	$f21, THREAD_FPR21(a0)
+	sdc1	$f23, THREAD_FPR23(a0)
+	sdc1	$f25, THREAD_FPR25(a0)
+	sdc1	$f27, THREAD_FPR27(a0)
+	sdc1	$f29, THREAD_FPR29(a0)
+	sdc1	$f31, THREAD_FPR31(a0)
+#endif
 1:
 	sdc1	$f0, THREAD_FPR0(a0)
 	sdc1	$f2, THREAD_FPR2(a0)
@@ -287,6 +305,7 @@ LEAF(_restore_fp)
 	bgez	t0, 1f
 	lw	t0, THREAD_FCR31(a0)
 
+#if 	FPU_REG_WIDTH == 64
 	gslqc1	$f1, $f0, THREAD_FPR0(a0)
 	gslqc1	$f3, $f2, THREAD_FPR2(a0)
 
@@ -309,6 +328,25 @@ LEAF(_restore_fp)
 	gslqc1	$f31, $f30, THREAD_FPR30(a0)
 	jr	ra
 	ctc1	t0, fcr31
+#else
+	ldc1	$f1,  THREAD_FPR1(a0)
+	ldc1	$f3,  THREAD_FPR3(a0)
+	ldc1	$f5,  THREAD_FPR5(a0)
+	ldc1	$f7,  THREAD_FPR7(a0)
+	ldc1	$f9,  THREAD_FPR9(a0)
+	ldc1	$f11, THREAD_FPR11(a0)
+	ldc1	$f13, THREAD_FPR13(a0)
+	ldc1	$f15, THREAD_FPR15(a0)
+	ldc1	$f17, THREAD_FPR17(a0)
+	ldc1	$f19, THREAD_FPR19(a0)
+	ldc1	$f21, THREAD_FPR21(a0)
+	ldc1	$f23, THREAD_FPR23(a0)
+	ldc1	$f25, THREAD_FPR25(a0)
+	ldc1	$f27, THREAD_FPR27(a0)
+	ldc1	$f29, THREAD_FPR29(a0)
+	ldc1	$f31, THREAD_FPR31(a0)
+#endif
+
 1:
 	ldc1	$f0, THREAD_FPR0(a0)
 	ldc1	$f2, THREAD_FPR2(a0)
