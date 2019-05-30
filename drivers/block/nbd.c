@@ -616,7 +616,11 @@ static int __nbd_ioctl(struct block_device *bdev, struct nbd_device *nbd,
 		fsync_bdev(bdev);
 		mutex_lock(&nbd->tx_lock);
 		blk_rq_init(NULL, &sreq);
+#ifdef __GENKSYMS__
 		sreq.cmd_type = REQ_TYPE_SPECIAL;
+#else
+		sreq.cmd_type = REQ_TYPE_DRV_PRIV;
+#endif
 		nbd_cmd(&sreq) = NBD_CMD_DISC;
 
 		/* Check again after getting mutex back.  */
