@@ -33,7 +33,11 @@ unsigned long ls7a_rwflags;
 DEFINE_RWLOCK(ls7a_rwlock);
 
 u32 node_id_offset;
+#ifdef CONFIG_KVM_GUEST_LS3A3000
+#define NODE_ID_OFFSET_ADDR	0x900000E01001041CULL
+#else
 #define NODE_ID_OFFSET_ADDR	0x90000E001001041CULL
+#endif
 static void ls7a_early_config(void)
 {
 	node_id_offset = (*(volatile u32 *)NODE_ID_OFFSET_ADDR >> 8) & 0x1F;

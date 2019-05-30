@@ -1925,6 +1925,9 @@ out_fail:
 }
 
 #define NODE_COUNTER_ADDR 0x900000003FF00408UL
+#define NODE_ID_OFFSET_ADDR 0x900000E01001041CULL
+#define LS3A4000_NODE_ID_OFFSET_ADDR 0x90000E001001041CULL
+
 cycle_t node_counter_read_for_guest(void)
 {
 	cycle_t count;
@@ -1967,6 +1970,7 @@ enum emulation_result kvm_mips_emulate_load(union mips_instruction inst,
 	unsigned int imme;
 	unsigned long ls7a_ioapic_reg_base;
 	unsigned long ht_control_reg_base;
+	unsigned long dma_nodeid_offset_base;
 
 	rt = inst.i_format.rt;
 	op = inst.i_format.opcode;
@@ -1988,9 +1992,11 @@ enum emulation_result kvm_mips_emulate_load(union mips_instruction inst,
 	if(current_cpu_type() == CPU_LOONGSON3_COMP) {
 		ls7a_ioapic_reg_base = LS3A4000_LS7A_IOAPIC_GUEST_REG_BASE;
 		ht_control_reg_base = LS3A4000_HT_CONTROL_REGS_BASE;
+		dma_nodeid_offset_base = LS3A4000_NODE_ID_OFFSET_ADDR;
 	} else {
 		ls7a_ioapic_reg_base = LS7A_IOAPIC_GUEST_REG_BASE;
 		ht_control_reg_base = HT_CONTROL_REGS_BASE;
+		dma_nodeid_offset_base = NODE_ID_OFFSET_ADDR;
 	}
 
 	if((vcpu->arch.gprs[rs] + offset) == NODE_COUNTER_ADDR) {
@@ -2008,6 +2014,16 @@ enum emulation_result kvm_mips_emulate_load(union mips_instruction inst,
 		++vcpu->stat.lsvz_nc_exits;
 
 		vcpu->arch.is_nodecounter = 1;
+		vcpu->arch.pc = vcpu->arch.io_pc;
+		return EMULATE_DONE;
+	}
+
+	/* For 7A DMA NODE ID READ */
+	if((vcpu->arch.gprs[rs] + offset) == dma_nodeid_offset_base) {
+		if(dma_nodeid_offset_base == NODE_ID_OFFSET_ADDR)
+			vcpu->arch.gprs[rt] = 0x200;
+		else
+			vcpu->arch.gprs[rt] = 0x800;
 		vcpu->arch.pc = vcpu->arch.io_pc;
 		return EMULATE_DONE;
 	}
