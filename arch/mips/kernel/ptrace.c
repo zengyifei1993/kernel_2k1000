@@ -590,6 +590,9 @@ enum mips_regset {
 	REGSET_FPR,
 #ifdef CONFIG_CPU_HAS_MSA
 	REGSET_MSA,
+#ifdef CONFIG_CPU_HAS_LASX
+	REGSET_LASX,
+#endif
 #endif
 };
 
@@ -656,6 +659,14 @@ static int msa_get(struct task_struct *target,
 		/* Copy scalar FP context, fill the rest with 0xff */
 		err = copy_pad_fprs(target, regset, &pos, &count,
 				    &kbuf, &ubuf, 8);
+#if 0
+#ifdef CONFIG_CPU_HAS_LASX
+	} else if (!test_tsk_thread_flag(target, TIF_MSA_XCTX_LIVE)) {
+		/* Copy MSA 128 Bit context, fill the rest with 0xff */
+		err = copy_pad_fprs(target, regset, &pos, &count,
+				    &kbuf, &ubuf, 16);
+#endif
+#endif
 	} else if (sizeof(target->thread.fpu.fpr[0]) == regset->size) {
 		/* Trivially copy the vector registers */
 		err = user_regset_copyout(&pos, &count, &kbuf, &ubuf,
@@ -786,6 +797,16 @@ static const struct user_regset mips64_regsets[] = {
 		.get		= msa_get,
 		.set		= msa_set,
 	},
+#ifdef CONFIG_CPU_HAS_LASX
+	[REGSET_LASX] = {
+		.core_note_type	= NT_MIPS_LASX,
+		.n		= NUM_FPU_REGS + 1,
+		.size		= 32,
+		.align		= 32,
+		.get		= msa_get,
+		.set		= msa_set,
+	},
+#endif
 #endif
 };
 
