@@ -119,6 +119,7 @@ static inline void arch_spin_lock(arch_spinlock_t *lock)
 		"	b	2b					\n"
 		"	 subu	%[ticket], %[ticket], 1			\n"
 		"4:							\n"
+			__LS_WAR_LLSC
 		"	.set pop					\n"
 		: [ticket_ptr] "+m" (lock->lock),
 		  [serving_now_ptr] "+m" (lock->h.serving_now),
