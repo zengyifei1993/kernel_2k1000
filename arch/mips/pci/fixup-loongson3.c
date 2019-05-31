@@ -159,20 +159,26 @@ int __init ls7a_pcibios_map_irq(const struct pci_dev *dev, u8 slot, u8 pin)
 {
 	struct pci_bus  *bus = dev->bus;
 	unsigned char busnum = dev->bus->number;
+	unsigned char pci_line = 0;
 	int fn = dev->devfn & 7;
 	int irq = 0;
 
-	if(busnum != 0)
-	{
-		while(bus->parent->parent)
-			bus = bus->parent;
-		slot = bus->self->devfn >> 3;
-		fn = bus->self->devfn & 7;
+	pci_read_config_byte(dev, PCI_INTERRUPT_LINE, &pci_line);
+	if (pci_line == 0 || pci_line == 0xff) {
+		if(busnum != 0)
+		{
+			while(bus->parent->parent)
+				bus = bus->parent;
+			slot = bus->self->devfn >> 3;
+			fn = bus->self->devfn & 7;
+		}
+
+		irq = ls7a_get_irq_by_devfn(slot, fn);
+
+		return LS7A_IOAPIC_IRQ_BASE + irq;
+	} else {
+		return pci_line;
 	}
-
-	irq = ls7a_get_irq_by_devfn(slot, fn);
-
-	return LS7A_IOAPIC_IRQ_BASE + irq;
 }
 
 int __init rs780_pcibios_map_irq(const struct pci_dev *dev, u8 slot, u8 pin)
