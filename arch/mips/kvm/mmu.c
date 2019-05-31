@@ -1002,6 +1002,13 @@ int kvm_mips_handle_vz_root_tlb_fault(unsigned long badvaddr,
 {
 	int ret;
 
+	if(current_cpu_type() == CPU_LOONGSON3_COMP) {
+		if (kvm_is_visible_gfn(vcpu->kvm, badvaddr >> PAGE_SHIFT) == 0) {
+			++vcpu->stat.lsvz_mmio_exits;
+			ret = RESUME_HOST;
+		}
+	}
+
 	ret = kvm_mips_map_page(vcpu, badvaddr, write_fault, NULL, NULL);
 	if (ret)
 		return ret;

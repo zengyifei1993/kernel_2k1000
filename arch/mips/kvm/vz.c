@@ -231,11 +231,19 @@ static void kvm_vz_queue_io_int_cb(struct kvm_vcpu *vcpu,
 		break;
 
 	case 3:
-		kvm_vz_queue_irq(vcpu, MIPS_EXC_INT_IPI_1);
+		kvm_vz_queue_irq(vcpu, MIPS_EXC_INT_HT);
 		break;
 
 	case 4:
-		kvm_vz_queue_irq(vcpu, MIPS_EXC_INT_IPI_2);
+		kvm_vz_queue_irq(vcpu, MIPS_EXC_INT_PM);
+		break;
+
+	case 5:
+		kvm_vz_queue_irq(vcpu, MIPS_EXC_INT_FREQ);
+		break;
+
+	case 6:
+		kvm_vz_queue_irq(vcpu, MIPS_EXC_INT_IPI);
 		break;
 
 	default:
@@ -259,11 +267,21 @@ static void kvm_vz_dequeue_io_int_cb(struct kvm_vcpu *vcpu,
 		break;
 
 	case -3:
-		kvm_vz_dequeue_irq(vcpu, MIPS_EXC_INT_IPI_1);
+		kvm_vz_dequeue_irq(vcpu, MIPS_EXC_INT_HT);
 		break;
 
 	case -4:
-		kvm_vz_dequeue_irq(vcpu, MIPS_EXC_INT_IPI_2);
+		kvm_vz_dequeue_irq(vcpu, MIPS_EXC_INT_PM);
+		break;
+
+	case -5:
+		kvm_vz_dequeue_irq(vcpu, MIPS_EXC_INT_FREQ);
+		break;
+
+	case -6:
+		kvm_vz_dequeue_irq(vcpu, MIPS_EXC_INT_IPI);
+ 		break;
+ 
 		break;
 
 	default:
@@ -275,8 +293,10 @@ static void kvm_vz_dequeue_io_int_cb(struct kvm_vcpu *vcpu,
 static u32 kvm_vz_priority_to_irq[MIPS_EXC_MAX] = {
 	[MIPS_EXC_INT_TIMER] = C_IRQ5,
 	[MIPS_EXC_INT_IO]    = C_IRQ0,
-	[MIPS_EXC_INT_IPI_1] = C_IRQ1,
-	[MIPS_EXC_INT_IPI_2] = C_IRQ2,
+	[MIPS_EXC_INT_HT]    = C_IRQ1,
+	[MIPS_EXC_INT_IPI]   = C_IRQ4,
+	[MIPS_EXC_INT_PM]    = C_IRQ2,
+	[MIPS_EXC_INT_FREQ]  = C_IRQ3,
 };
 
 static int kvm_vz_irq_deliver_cb(struct kvm_vcpu *vcpu, unsigned int priority,
@@ -291,8 +311,10 @@ static int kvm_vz_irq_deliver_cb(struct kvm_vcpu *vcpu, unsigned int priority,
 		break;
 
 	case MIPS_EXC_INT_IO:
-	case MIPS_EXC_INT_IPI_1:
-	case MIPS_EXC_INT_IPI_2:
+	case MIPS_EXC_INT_HT:
+	case MIPS_EXC_INT_IPI:
+	case MIPS_EXC_INT_PM:
+	case MIPS_EXC_INT_FREQ:
 		if (cpu_has_guestctl2)
 			set_c0_guestctl2(irq);
 		else
@@ -330,8 +352,10 @@ static int kvm_vz_irq_clear_cb(struct kvm_vcpu *vcpu, unsigned int priority,
 		break;
 
 	case MIPS_EXC_INT_IO:
-	case MIPS_EXC_INT_IPI_1:
-	case MIPS_EXC_INT_IPI_2:
+	case MIPS_EXC_INT_HT:
+	case MIPS_EXC_INT_IPI:
+	case MIPS_EXC_INT_PM:
+	case MIPS_EXC_INT_FREQ:
 		/* Clear GuestCtl2.VIP irq if not using Hardware Clear */
 		if (cpu_has_guestctl2) {
 			if (!(read_c0_guestctl2() & (irq << 14)))
@@ -974,6 +998,10 @@ static enum emulation_result kvm_vz_gpsi_cop0(union mips_instruction inst,
 				   (rd == MIPS_CP0_ERRCTL &&
 				    (sel == 0))) {	/* ErrCtl */
 				val = cop0->reg[rd][sel];
+			} else if (rd == MIPS_CP0_CONFIG && sel == 6) {
+				val = cop0->reg[rd][sel];       // GSConfig
+			} else if (rd == MIPS_CP0_DIAG && sel == 0) {
+				val = cop0->reg[rd][sel];       // Diag
 			} else {
 				val = 0;
 				er = EMULATE_FAIL;
@@ -1039,6 +1067,38 @@ static enum emulation_result kvm_vz_gpsi_cop0(union mips_instruction inst,
 			} else if (rd == MIPS_CP0_ERRCTL &&
 				   (sel == 0)) {	/* ErrCtl */
 				/* ignore the written value */
+			} else if (rd == MIPS_CP0_CONFIG && sel == 6) {
+				/* GSConfig ignore */
+			} else if (rd == MIPS_CP0_DIAG && sel == 0) {
+				if (val & 0x2) {
+					/* flush btb */
+					write_c0_diag(2);
+				}
+				if (val & 0x4) {
+					/* flush itlb */
+					write_c0_diag(LOONGSON_DIAG_ITLB);
+				}
+				if (val & 0x8) {
+					/* flush dtlb */
+					write_c0_diag(LOONGSON_DIAG_DTLB);
+				}
+				if (val & 0x100) {
+					/* flush VTLB */
+					uint32_t gIndex = read_gc0_index();
+					write_gc0_index(0);
+					guest_tlbinvf();
+					write_gc0_index(gIndex);
+				}
+				if (val & 0x200) {
+					/* flush FTLB */
+					uint32_t gIndex = read_gc0_index();
+					uint32_t i;
+					for (i=64;i<64+2048;i+=8) {
+						write_gc0_index(i);
+						guest_tlbinvf();
+					}
+					write_gc0_index(gIndex);
+				}
 			} else {
 				er = EMULATE_FAIL;
 			}
@@ -1404,6 +1464,8 @@ static int kvm_trap_vz_handle_guest_exit(struct kvm_vcpu *vcpu)
 			MIPS_GCTL0_GEXC) >> MIPS_GCTL0_GEXC_SHIFT;
 	int ret = RESUME_GUEST;
 
+   	vcpu->arch.is_hypcall = 0;
+
 	trace_kvm_exit(vcpu, KVM_TRACE_EXIT_GEXCCODE_BASE + gexccode);
 	switch (gexccode) {
 	case MIPS_GCTL0_GEXC_GPSI:
@@ -1415,6 +1477,7 @@ static int kvm_trap_vz_handle_guest_exit(struct kvm_vcpu *vcpu)
 		er = kvm_trap_vz_handle_gsfc(cause, opc, vcpu);
 		break;
 	case MIPS_GCTL0_GEXC_HC:
+		vcpu->arch.is_hypcall = 1;
 		++vcpu->stat.vz_hc_exits;
 		er = kvm_trap_vz_handle_hc(cause, opc, vcpu);
 		break;
@@ -2685,8 +2748,9 @@ static int kvm_vz_vcpu_put(struct kvm_vcpu *vcpu, int cpu)
 	}
 
 	/* save HTW registers if enabled in guest */
-	if (cpu_guest_has_htw &&
-	    kvm_read_sw_gc0_config3(cop0) & MIPS_CONF3_PW) {
+	if ((current_cpu_type() == CPU_LOONGSON3_COMP) ||
+		(cpu_guest_has_htw &&
+	    kvm_read_sw_gc0_config3(cop0) & MIPS_CONF3_PW)) {
 		kvm_save_gc0_pwbase(cop0);
 		kvm_save_gc0_pwfield(cop0);
 		kvm_save_gc0_pwsize(cop0);

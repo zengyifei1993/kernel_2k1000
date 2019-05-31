@@ -334,7 +334,8 @@ static void rtas_event_scan(struct work_struct *w)
 /* Cancel the rtas event scan work */
 void rtas_cancel_event_scan(void)
 {
-	cancel_delayed_work_sync(&event_scan_work);
+	if(!cpu_has_vz)
+		cancel_delayed_work_sync(&event_scan_work);
 }
 EXPORT_SYMBOL_GPL(rtas_cancel_event_scan);
 
@@ -354,6 +355,9 @@ static int hotplug_notifier_call(struct notifier_block *nb,
 
 static int __init rtas_event_scan_init(void)
 {
+	if(cpu_has_vz)
+		return 0;
+
 	/* Make room for the sequence number */
 	event_scan = RTAS_EVENT_SCAN;
 	rtas_event_scan_rate = RTAS_EVENT_SCAN_RATE;

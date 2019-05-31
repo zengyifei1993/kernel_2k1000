@@ -26,4 +26,4 @@ obj-$(CONFIG_PCI)  += ls3a-pci.o
 
 obj-$(CONFIG_USE_OF)  += dts/
 
-obj-$(CONFIG_KVM_GUEST_LS3A3000) += rtasd.o
+obj-$(CONFIG_MEMORY_HOTPLUG) += rtasd.o

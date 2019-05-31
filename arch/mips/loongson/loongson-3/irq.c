@@ -150,11 +150,8 @@ int plat_set_irq_affinity(struct irq_data *d, const struct cpumask *affinity,
 	return IRQ_SET_MASK_OK_NOCOPY;
 }
 
-#ifdef CONFIG_KVM_GUEST_LS3A3000
-#define UNUSED_IPS (CAUSEF_IP1 | CAUSEF_IP0)
-#else
+#define UNUSED_IPS_GUEST (CAUSEF_IP1 | CAUSEF_IP0)
 #define UNUSED_IPS (CAUSEF_IP5 | CAUSEF_IP4 | CAUSEF_IP1 | CAUSEF_IP0)
-#endif
 
 void mach_irq_dispatch(unsigned int pending)
 {
@@ -164,58 +161,67 @@ void mach_irq_dispatch(unsigned int pending)
 	if (pending & CAUSEF_IP6)
 		loongson3_ipi_interrupt(NULL);
 #endif
-#ifdef CONFIG_KVM_GUEST_LS3A3000
-	pending = read_c0_cause() & read_c0_status() & ST0_IM;
-	if (pending & CAUSEF_IP5)
-		loongson_nodecounter_adjust();
-	if (pending & CAUSEF_IP4) {
-		lsvirt_button_poweroff();
-	}
-#endif
+	if(!cpu_has_vz) {
+		pending = read_c0_cause() & read_c0_status() & ST0_IM;
+		if (pending & CAUSEF_IP5)
+			loongson_nodecounter_adjust();
+		pending = read_c0_cause() & read_c0_status() & ST0_IM;
+		if (pending & CAUSEF_IP4) {
+			lsvirt_button_poweroff();
+		}
+ 	}
 	if (pending & CAUSEF_IP3)
 		loongson_pch->irq_dispatch();
 	if (pending & CAUSEF_IP2)
 	{
-#ifndef CONFIG_KVM_GUEST_LS3A3000
-		int cpu = cpu_logical_map(smp_processor_id());
-		int irqs, irq, irqs_pci, irq_lpc;
+		if(cpu_has_vz) {
+			int cpu = cpu_logical_map(smp_processor_id());
+			int irqs, irq, irqs_pci, irq_lpc;
 
-		if(cpu == loongson_boot_cpu_id)
-		{
-			int core_index = loongson_boot_cpu_id % cores_per_node;
-			irqs_pci = LOONGSON_INT_ROUTER_ISR(core_index) & 0xf0;
-			irq_lpc = LOONGSON_INT_ROUTER_ISR(core_index) & 0x400;
-			if(irqs_pci)
+			if(cpu == loongson_boot_cpu_id)
 			{
-				while ((irq = ffs(irqs_pci)) != 0) {
-					do_IRQ(irq - 1 + SYS_IRQ_BASE);
-					irqs_pci &= ~(1 << (irq-1));
-				}
-			}
-			else if(irq_lpc)
-			{
-				if(ls_lpc_reg_base == LS3_LPC_REG_BASE)
+				int core_index = loongson_boot_cpu_id % cores_per_node;
+				irqs_pci = LOONGSON_INT_ROUTER_ISR(core_index) & 0xf0;
+				irq_lpc = LOONGSON_INT_ROUTER_ISR(core_index) & 0x400;
+				if(irqs_pci)
 				{
-					irqs = ls2h_readl(LS_LPC_INT_ENA) & ls2h_readl(LS_LPC_INT_STS) & 0xfeff;
-					if (irqs) {
-						while ((irq = ffs(irqs)) != 0) {
-							do_IRQ(irq - 1);
-							irqs &= ~(1 << (irq-1));
-						}
+					while ((irq = ffs(irqs_pci)) != 0) {
+						do_IRQ(irq - 1 + SYS_IRQ_BASE);
+						irqs_pci &= ~(1 << (irq-1));
 					}
 				}
+				else if(irq_lpc)
+				{
+					if(ls_lpc_reg_base == LS3_LPC_REG_BASE)
+					{
+						irqs = ls2h_readl(LS_LPC_INT_ENA) & ls2h_readl(LS_LPC_INT_STS) & 0xfeff;
+						if (irqs) {
+							while ((irq = ffs(irqs)) != 0) {
+								do_IRQ(irq - 1);
+								irqs &= ~(1 << (irq-1));
+							}
+						}
+					}
 
-				do_IRQ(LOONGSON_UART_IRQ);
+					do_IRQ(LOONGSON_UART_IRQ);
+				}
 			}
-		}
-		else
-#endif
+			else
+				do_IRQ(LOONGSON_UART_IRQ);
+		} else
 			do_IRQ(LOONGSON_UART_IRQ);
 	}
-	if (pending & UNUSED_IPS) {
-		printk(KERN_ERR "%s : spurious interrupt\n", __func__);
-		spurious_interrupt();
-	}
+	if(cpu_has_vz) {	
+		if (pending & UNUSED_IPS) {
+			printk(KERN_ERR "%s : spurious interrupt\n", __func__);
+			spurious_interrupt();
+		}
+	} else {
+		if (pending & UNUSED_IPS_GUEST) {
+			printk(KERN_ERR "%s : spurious interrupt\n", __func__);
+			spurious_interrupt();
+		}
+ 	}
 }
 
 static struct irqaction cascade_irqaction = {
@@ -305,11 +311,10 @@ void __init mach_init_irq(void)
 		*(volatile u32 *)intenset_addr = 1 << 10;
 	}
 
-#ifndef CONFIG_KVM_GUEST_LS3A3000
-	set_c0_status(STATUSF_IP2 | STATUSF_IP6);
-#else
-	set_c0_status(STATUSF_IP2  | STATUSF_IP4 | STATUSF_IP5 | STATUSF_IP6);
-#endif
+	if(!cpu_has_vz)
+		set_c0_status(STATUSF_IP2  | STATUSF_IP4 | STATUSF_IP5 | STATUSF_IP6);
+	else
+		set_c0_status(STATUSF_IP2 | STATUSF_IP6);
 }
 
 #ifdef CONFIG_HOTPLUG_CPU

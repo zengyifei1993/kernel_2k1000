@@ -192,6 +192,7 @@ static inline void build_set_exc_base(u32 **p, unsigned int reg)
 		/* Set WG so that all the bits get written */
 		uasm_i_ori(p, reg, reg, MIPS_EBASE_WG);
 		UASM_i_MTC0(p, reg, C0_EBASE);
+		UASM_i_MTC0(p, reg, C0_EBASE);
 	} else {
 		uasm_i_mtc0(p, reg, C0_EBASE);
 	}
@@ -307,7 +308,10 @@ static void *kvm_mips_build_enter_guest(void *addr)
 
 #ifdef CONFIG_KVM_MIPS_VZ
 	/* Save normal linux process pgd (VZ guarantees pgd_reg is set) */
-	UASM_i_MFC0(&p, K0, c0_kscratch(), pgd_reg);
+	if (cpu_has_ldpte)
+		UASM_i_MFC0(&p, K0, C0_PWBASE);
+	else
+		UASM_i_MFC0(&p, K0, c0_kscratch(), pgd_reg);
 	UASM_i_SW(&p, K0, offsetof(struct kvm_vcpu_arch, host_pgd), K1);
 
 	/*
@@ -846,6 +850,7 @@ static void *kvm_mips_build_ret_from_exit(void *addr)
 	uasm_il_bnez(&p, &r, T0, label_return_to_host);
 	 uasm_i_nop(&p);
 
+	uasm_i_sw(&p, ZERO, offsetof(struct kvm_vcpu_arch, is_hypcall), K1);
 	p = kvm_mips_build_ret_to_guest(p);
 
 	uasm_l_return_to_host(&l, p);

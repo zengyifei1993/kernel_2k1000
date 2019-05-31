@@ -13,11 +13,10 @@ static inline void fb_pgprotect(struct file *file, struct vm_area_struct *vma,
 
 static inline int fb_is_primary_device(struct fb_info *info)
 {
-#ifdef CONFIG_KVM_GUEST_LS3A3000
-	return 1;
-#else
-	return 0;
-#endif
+	if(!cpu_has_vz)
+		return 1;
+	else
+		return 0;
 }
 
 #endif /* _ASM_FB_H_ */

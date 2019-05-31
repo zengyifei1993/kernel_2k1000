@@ -320,6 +320,9 @@ static struct clocksource csrc_hpet = {
 
 int __init init_hpet_clocksource(void)
 {
+	if(!cpu_has_vz)
+		return 0;
+
 	if (!hpet_enabled)
 		return -EBUSY;
 

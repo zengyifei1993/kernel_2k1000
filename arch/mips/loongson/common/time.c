@@ -91,7 +91,8 @@ void __init plat_time_init(void)
 	loongson3_init_clock();
 
 #if defined(CONFIG_RS780_HPET) || defined(CONFIG_LS7A_HPET)
-	setup_hpet_timer();
+	if(cpu_has_vz)
+		setup_hpet_timer();
 #else
 	setup_mfgpt0_timer();
 #endif
