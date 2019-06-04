@@ -1257,11 +1257,65 @@ static const struct mips_perf_event loongson3_cache_map2
 	},
 },
 };
-/* LS2K */
-static const struct mips_perf_event loongson2k_cache_map
+static const struct mips_perf_event loongson_new_cache_map
 				[PERF_COUNT_HW_CACHE_MAX]
 				[PERF_COUNT_HW_CACHE_OP_MAX]
 				[PERF_COUNT_HW_CACHE_RESULT_MAX] = {
+[C(L1D)] = {
+	/*
+	 * Like some other architectures (e.g. ARM), the performance
+	 * counters don't differentiate between read and write
+	 * accesses/misses, so this isn't strictly correct, but it's the
+	 * best we can do. Writes and reads get combined.
+	 */
+	[C(OP_READ)] = {
+		[C(RESULT_ACCESS)]	= { 0x1e, CNTR_ALL },
+		[C(RESULT_MISS)]        = { 0x1f, CNTR_ALL },
+	},
+	[C(OP_WRITE)] = {
+		[C(RESULT_ACCESS)]	= { 0x1e, CNTR_ALL },
+		[C(RESULT_MISS)]        = { 0x1f, CNTR_ALL },
+	},
+},
+[C(L1I)] = {
+	[C(OP_READ)] = {
+		[C(RESULT_ACCESS)]	= { 0x1c, CNTR_ALL },
+		[C(RESULT_MISS)]	= { 0x1d, CNTR_ALL },
+	},
+	[C(OP_WRITE)] = {
+		[C(RESULT_ACCESS)]	= { 0x1c, CNTR_ALL },
+		[C(RESULT_MISS)]        = { 0x1d, CNTR_ALL },
+	},
+},
+[C(LL)] = {
+	[C(OP_READ)] = {
+		[C(RESULT_ACCESS)]	= { 0x2e, CNTR_ALL },
+		[C(RESULT_MISS)]        = { 0x2f, CNTR_ALL },
+	},
+	[C(OP_WRITE)] = {
+		[C(RESULT_ACCESS)]	= { 0x2e, CNTR_ALL },
+		[C(RESULT_MISS)]        = { 0x2f, CNTR_ALL },
+	},
+},
+[C(DTLB)] = {
+	[C(OP_READ)] = {
+		[C(RESULT_ACCESS)]	= { 0xb4, CNTR_ALL },
+	},
+	[C(OP_WRITE)] = {
+		[C(RESULT_ACCESS)]	= { 0xb5, CNTR_ALL },
+	},
+},
+[C(BPU)] = {
+	/* Using the same code for *HW_BRANCH* */
+	[C(OP_READ)] = {
+		[C(RESULT_ACCESS)]      = { 0x02, CNTR_EVEN },
+		[C(RESULT_MISS)]        = { 0x08, CNTR_ODD },
+	},
+	[C(OP_WRITE)] = {
+		[C(RESULT_ACCESS)]      = { 0x02, CNTR_EVEN },
+		[C(RESULT_MISS)]        = { 0x08, CNTR_ODD },
+	},
+},
 };
 
 /* BMIPS5000 */
@@ -1896,12 +1950,12 @@ init_hw_perf_events(void)
 	case CPU_LOONGSON3_COMP:
 		mipspmu.name = "mips/loongson_rev2+";
 		mipspmu.general_event_map = &loongson_new_event_map;
-		mipspmu.cache_event_map = &loongson3_cache_map2;
+		mipspmu.cache_event_map = &loongson_new_cache_map;
 		break;
 	case CPU_LOONGSON2K:
 		mipspmu.name = "mips/loongson2k";
 		mipspmu.general_event_map = &loongson_new_event_map;
-		mipspmu.cache_event_map = &loongson2k_cache_map;
+		mipspmu.cache_event_map = &loongson_new_cache_map;
 		break;
 	case CPU_CAVIUM_OCTEON:
 	case CPU_CAVIUM_OCTEON_PLUS:
