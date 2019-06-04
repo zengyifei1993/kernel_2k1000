@@ -122,7 +122,7 @@ uint64_t ls3a_ht_intctl_read(struct kvm *kvm, gpa_t addr, unsigned size,void* va
 void ls3a_ht_intctl_write(struct kvm *kvm, gpa_t addr,unsigned size, const void *val)
 {
         uint32_t regnum;
-        uint64_t offset,data;
+        uint64_t offset,data,cont=0;
 	uint8_t *mem;
 	struct loongson_kvm_ls3a_htirq *s = ls3a_ht_irqchip(kvm);
 
@@ -140,10 +140,13 @@ void ls3a_ht_intctl_write(struct kvm *kvm, gpa_t addr,unsigned size, const void 
         case HT_IRQ_VECTOR_REG5:
         case HT_IRQ_VECTOR_REG6:
         case HT_IRQ_VECTOR_REG7:
-                if(4 == size){
+                while(size >= 4){
                         regnum = (offset - HT_IRQ_VECTOR_REG0)/4;
-                        *(uint32_t *)(mem + offset) &= ~((uint32_t)data);
+                        *(uint32_t *)(mem + offset) &= ~((uint32_t)(data>>(32*cont)));
                         ht_update_irqreg(kvm,regnum,0);
+			offset += 4;
+			size -= 4;
+			cont++;
                 }
                 break;
         case HT_IRQ_ENABLE_REG0:
@@ -154,10 +157,13 @@ void ls3a_ht_intctl_write(struct kvm *kvm, gpa_t addr,unsigned size, const void 
         case HT_IRQ_ENABLE_REG5:
         case HT_IRQ_ENABLE_REG6:
         case HT_IRQ_ENABLE_REG7:
-                if(4  == size){
+                while(size >= 4){
                         regnum = (offset - HT_IRQ_ENABLE_REG0)/4;
-                        *(uint32_t *)(mem + offset) = (uint32_t)data;
+                        *(uint32_t *)(mem + offset) = (uint32_t)(data>>(32*cont));
                         ht_update_irqreg(kvm,regnum,0);
+			offset += 4;
+			size -= 4;
+			cont++;
                 }
                 break;
         default:

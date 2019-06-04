@@ -78,12 +78,10 @@ struct loongson_kvm_ls3a_routerirq{
 	struct kvm *kvm;
 	struct kvm_io_device dev_ls3a_router_irq;
 	uint8_t ls3a_router_reg[0x100];
-	uint32_t core_irq_mask[4][4];
 };
 
 struct routerirq_state{
 	uint8_t ls3a_router_reg[0x100];
-	uint32_t core_irq_mask[4][4];
 };
 
 static inline struct loongson_kvm_ls3a_routerirq *ls3a_router_irqchip(struct kvm *kvm)
