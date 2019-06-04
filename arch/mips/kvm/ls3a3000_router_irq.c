@@ -35,9 +35,10 @@ INT_ROUTER_REGS_CORE3_INTISR,
 
 void route_update_reg(struct kvm *kvm,int irqnum,int level)
 {
-        uint32_t inten,irtr,irq_nr,i,j;
+        uint32_t inten,irtr,i;
 	struct kvm_mips_interrupt irq;
 	struct loongson_kvm_ls3a_routerirq *s = ls3a_router_irqchip(kvm);
+	uint8_t core_mask,irq_nr,ip_num=2;
 	uint8_t *mem = s->ls3a_router_reg;
 
         if(irqnum < 0 || irqnum >= 32)
@@ -45,38 +46,55 @@ void route_update_reg(struct kvm *kvm,int irqnum,int level)
         inten = *(uint32_t *)(mem + INT_ROUTER_REGS_EN);
         irtr = *(uint8_t *)(mem + irqnum);
         irq_nr = ((irtr >> 4) & 0xf); //core irq pin HT route to
+	core_mask = irtr & 0xf;
         if(inten & (1UL << irqnum)){
+		switch(irq_nr){
+			case 1:
+				ip_num = 2;
+				break;
+			case 2:
+				ip_num = 3;
+				break;
+			case 4:
+				ip_num = 4;
+				break;
+			case 8:
+				ip_num = 5;
+				break;
+			default:
+				for(i=0;i<4;i++){
+					if((1<<i) & irq_nr){
+						ip_num = i + 2;
+					}
+				}
+				break;
+		}
                 if(level == 1){
                         *(uint32_t *)(mem + INT_ROUTER_REGS_ISR) |= (1ULL<<irqnum);
                 }else{
                         *(uint32_t *)(mem + INT_ROUTER_REGS_ISR) &= (~(1ULL<<irqnum));
                 }
-                for(i=0;i<4;i++){
-                        for(j=0;j<4;j++){
-                                if((1UL << j) & irq_nr){
-                                        if((s->core_irq_mask[i][j]) & (1ULL << irqnum)){
-                                                if(level == 1){
-                                                        *(uint32_t *)(mem + core_route_state[i]) |= (1ULL<<irqnum);
-							irq.cpu = i;
-							irq.irq = j+2;
-                                                        //qemu_irq_raise(s->env[i]->irq[j+2]);
-							kvm_vcpu_ioctl_interrupt(kvm->vcpus[i],&irq);
-                                                }else{
-                                                        *(uint32_t *)(mem + core_route_state[i]) &= (~(1ULL<<irqnum));
-                                                        if( *(uint32_t *)(mem + core_route_state[i]) == 0){
-								irq.cpu = i;
-								irq.irq = -(j+2);
-								kvm_vcpu_ioctl_interrupt(kvm->vcpus[i],&irq);
-                                                                //qemu_irq_lower(s->env[i]->irq[j+2]);
-                                                        }
-                                                }
-                                        }else{
-                                                *(uint32_t *)(mem + core_route_state[i]) &= (~(1ULL<<irqnum));
-                                        }
-                                }
-                        }
-                }
+		for(i=0;i<4;i++){
+			if(core_mask & (1UL << i)){
+				if(level == 1){
+					*(uint32_t *)(mem + core_route_state[i]) |= (1ULL<<irqnum);
+					irq.cpu = i;
+					irq.irq = ip_num;
+					kvm_vcpu_ioctl_interrupt(kvm->vcpus[i],&irq);
+				}else{
+					*(uint32_t *)(mem + core_route_state[i]) &= (~(1ULL<<irqnum));
+					if( *(uint32_t *)(mem + core_route_state[i]) == 0){
+						irq.cpu = i;
+						irq.irq = -ip_num;
+						kvm_vcpu_ioctl_interrupt(kvm->vcpus[i],&irq);
+					}
+				}
+				goto func_end;
+			}
+		}
         }
+func_end:
+	return;
 }
 
 uint64_t ls3a_router_intctl_read(struct kvm *kvm, gpa_t addr, unsigned size,void *val)
@@ -110,7 +128,7 @@ uint64_t ls3a_router_intctl_read(struct kvm *kvm, gpa_t addr, unsigned size,void
 int ls3a_router_intctl_write(struct kvm *kvm , gpa_t addr, unsigned size, const void *val)
 {
         uint64_t val_data,offset;
-        int i,j,k,change;
+        int i,change;
         uint8_t old;
 	uint8_t *mem;
         struct loongson_kvm_ls3a_routerirq *s = ls3a_router_irqchip(kvm);
@@ -124,19 +142,9 @@ int ls3a_router_intctl_write(struct kvm *kvm , gpa_t addr, unsigned size, const 
                         if(offset + i <= 0x20){
                                 old = *(uint8_t *)(mem + offset + i);
                                 if(old != (uint8_t)(val_data >> (i*8))){
+					route_update_reg(kvm,offset+i,0);
                                         *(uint8_t *)(mem + offset) = (uint8_t)(val_data >> (i*8));
-                                        for(j=0;j<4;j++){
-                                                for(k=0;k<4;k++){
-                                                        if((((val_data >>4)&0xfULL)&(1<<k))&&((val_data&0xfULL)&(1<<j))){
-                                                                route_update_reg(kvm,offset+i,0);
-                                                                s->core_irq_mask[j][k] |= (1UL << (offset+i));
-                                                                route_update_reg(kvm,offset+i,1);
-                                                        }else{
-                                                                s->core_irq_mask[j][k] &= (~(1UL << (offset+i)));
-                                                                //DPRINTF("set core %d,int %d,disable route %d\n",j,k,offset+i);
-                                                        }
-                                                }
-                                        }
+					route_update_reg(kvm,offset+i,1);
                                 }
                         }
                 }
@@ -219,10 +227,8 @@ int kvm_get_ls3a_router_irq(struct kvm *kvm, struct routerirq_state *state)
 {
         struct loongson_kvm_ls3a_routerirq *ls3a_router_irq = ls3a_router_irqchip(kvm);
         uint8_t *router_irq_reg =  ls3a_router_irq->ls3a_router_reg;
-	uint32_t *core_irq_mask =  (uint32_t *)(ls3a_router_irq->core_irq_mask);
         ls3a_router_irq_lock(ls3a_router_irq);
         memcpy(state->ls3a_router_reg, router_irq_reg, 0x100);
-        memcpy(state->core_irq_mask, core_irq_mask, 64);
         ls3a_router_irq_unlock(ls3a_router_irq);
         kvm->stat.lsvz_kvm_get_ls3a_router_irq++;
         return 0;
@@ -232,13 +238,11 @@ int kvm_set_ls3a_router_irq(struct kvm *kvm, struct routerirq_state *state)
 {
         struct loongson_kvm_ls3a_routerirq *ls3a_router_irq = ls3a_router_irqchip(kvm);
         uint8_t *router_irq_reg =  ls3a_router_irq->ls3a_router_reg;
-	uint32_t *core_irq_mask = (uint32_t *)(ls3a_router_irq->core_irq_mask);
-        if ((!router_irq_reg) || (!core_irq_mask))
+        if (!router_irq_reg)
                 return -EINVAL;
 
         ls3a_router_irq_lock(ls3a_router_irq);
         memcpy(router_irq_reg, state->ls3a_router_reg, 0x100);
-        memcpy(core_irq_mask, state->core_irq_mask, 64);
         ls3a_router_irq_unlock(ls3a_router_irq);
         kvm->stat.lsvz_kvm_set_ls3a_router_irq++;
         return 0;
