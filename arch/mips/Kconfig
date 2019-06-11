@@ -2352,6 +2352,16 @@ config HW_PERF_EVENTS
 	  Enable hardware performance counter support for perf events. If
 	  disabled, perf events will use software events only.
 
+config DMI
+    default y
+    select DMI_SCAN_MACHINE_NON_EFI_FALLBACK
+    bool "Enable DMI scanning" if EXPERT
+    ---help---
+      Enabled scanning of DMI to identify machine quirks. Say Y
+      here unless you have verified that your setup is not
+      affected by entries in the DMI blacklist. Required by PNP
+      BIOS code.
+
 source "mm/Kconfig"
 
 config SMP
