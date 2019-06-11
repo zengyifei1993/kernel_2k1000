@@ -113,7 +113,7 @@ void local_flush_tlb_all(void)
 	if (cpu_has_tlbinv) {
 		emulate_tlb_ops(0, 1088, 0, 0, 0x5002, 2);
 #else
-	if (cpu_has_tlbinv & !entry) {
+	if (cpu_has_tlbinv && !entry) {
 		if (current_cpu_data.tlbsizevtlb) {
 			write_c0_index(0);
 			mtc0_tlbw_hazard();
