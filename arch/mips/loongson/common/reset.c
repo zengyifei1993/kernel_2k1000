@@ -80,7 +80,11 @@ static void loongson_halt(void)
 	}
 }
 
-#define HT_MEM_BASE_ADDR                0x900000e000000000
+#ifdef CONFIG_KVM_GUEST_LS3A3000
+#define HT_MEM_BASE_ADDR                0x900000e000000000UL
+#else
+#define HT_MEM_BASE_ADDR                0x90000e0000000000UL
+#endif
 #define PM_ADDR                         0x10080000
 #define LsVirt_PM_BASE                  HT_MEM_BASE_ADDR + PM_ADDR
 #define LsVirt_PM_CNT_IRQ_CLEAR         (LsVirt_PM_BASE + 0x18)
