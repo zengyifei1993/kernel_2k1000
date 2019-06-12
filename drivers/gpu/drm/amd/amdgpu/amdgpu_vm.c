@@ -1082,7 +1082,7 @@ static int amdgpu_vm_bo_split_mapping(struct amdgpu_device *adev,
 		if (r)
 			return r;
 
-		pfn += last - start + 1;
+		pfn += (last - start + 1) / (PAGE_SIZE / AMDGPU_GPU_PAGE_SIZE);
 		if (nodes && nodes->size == pfn) {
 			pfn = 0;
 			++nodes;
