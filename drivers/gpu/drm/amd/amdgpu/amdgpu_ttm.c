@@ -147,6 +147,12 @@ static int amdgpu_init_mem_type(struct ttm_bo_device *bdev, uint32_t type,
 		man->flags = TTM_MEMTYPE_FLAG_MAPPABLE;
 		man->available_caching = TTM_PL_MASK_CACHING;
 		man->default_caching = TTM_PL_FLAG_CACHED;
+#ifdef CONFIG_CPU_LOONGSON3
+		if (plat_device_is_coherent(NULL)) {
+			man->available_caching = TTM_PL_FLAG_CACHED;
+			man->default_caching = TTM_PL_FLAG_CACHED;
+		}
+#endif
 		break;
 	case TTM_PL_TT:
 		man->func = &amdgpu_gtt_mgr_func;
@@ -154,6 +160,12 @@ static int amdgpu_init_mem_type(struct ttm_bo_device *bdev, uint32_t type,
 		man->available_caching = TTM_PL_MASK_CACHING;
 		man->default_caching = TTM_PL_FLAG_CACHED;
 		man->flags = TTM_MEMTYPE_FLAG_MAPPABLE | TTM_MEMTYPE_FLAG_CMA;
+#ifdef CONFIG_CPU_LOONGSON3
+		if (plat_device_is_coherent(NULL)) {
+			man->available_caching = TTM_PL_FLAG_CACHED;
+			man->default_caching = TTM_PL_FLAG_CACHED;
+		}
+#endif
 		break;
 	case TTM_PL_VRAM:
 		/* "On-card" video ram */
@@ -191,6 +203,10 @@ static void amdgpu_evict_flags(struct ttm_buffer_object *bo,
 		.lpfn = 0,
 		.flags = TTM_PL_MASK_CACHING | TTM_PL_FLAG_SYSTEM
 	};
+#ifdef CONFIG_CPU_LOONGSON3
+	if(plat_device_is_coherent(NULL))
+		placements.flags &= ~(TTM_PL_FLAG_UNCACHED | TTM_PL_FLAG_WC);
+#endif
 	unsigned i;
 
 	if (!amdgpu_ttm_bo_is_amdgpu_bo(bo)) {
@@ -384,6 +400,10 @@ static int amdgpu_move_vram_ram(struct ttm_buffer_object *bo,
 	placements.fpfn = 0;
 	placements.lpfn = adev->mc.gtt_size >> PAGE_SHIFT;
 	placements.flags = TTM_PL_MASK_CACHING | TTM_PL_FLAG_TT;
+#ifdef CONFIG_CPU_LOONGSON3
+	if(plat_device_is_coherent(NULL))
+		placements.flags &= ~(TTM_PL_FLAG_UNCACHED | TTM_PL_FLAG_WC);
+#endif
 	r = ttm_bo_mem_space(bo, &placement, &tmp_mem,
 			     interruptible, no_wait_gpu);
 	if (unlikely(r)) {
@@ -431,6 +451,10 @@ static int amdgpu_move_ram_vram(struct ttm_buffer_object *bo,
 	placements.fpfn = 0;
 	placements.lpfn = adev->mc.gtt_size >> PAGE_SHIFT;
 	placements.flags = TTM_PL_MASK_CACHING | TTM_PL_FLAG_TT;
+#ifdef CONFIG_CPU_LOONGSON3
+	if(plat_device_is_coherent(NULL))
+		placements.flags &= ~(TTM_PL_FLAG_UNCACHED | TTM_PL_FLAG_WC);
+#endif
 	r = ttm_bo_mem_space(bo, &placement, &tmp_mem,
 			     interruptible, no_wait_gpu);
 	if (unlikely(r)) {

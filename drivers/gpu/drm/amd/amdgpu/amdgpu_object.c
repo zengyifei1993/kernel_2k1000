@@ -143,7 +143,11 @@ static void amdgpu_ttm_placement_init(struct amdgpu_device *adev,
 		places[c].fpfn = 0;
 		places[c].lpfn = 0;
 		places[c].flags = TTM_PL_FLAG_TT;
+#ifdef CONFIG_CPU_LOONGSON3
+		if (!plat_device_is_coherent(NULL) && (flags & AMDGPU_GEM_CREATE_CPU_GTT_USWC))
+#else
 		if (flags & AMDGPU_GEM_CREATE_CPU_GTT_USWC)
+#endif
 			places[c].flags |= TTM_PL_FLAG_WC |
 				TTM_PL_FLAG_UNCACHED;
 		else
@@ -155,7 +159,11 @@ static void amdgpu_ttm_placement_init(struct amdgpu_device *adev,
 		places[c].fpfn = 0;
 		places[c].lpfn = 0;
 		places[c].flags = TTM_PL_FLAG_SYSTEM;
+#ifdef CONFIG_CPU_LOONGSON3
+		if (!plat_device_is_coherent(NULL) && (flags & AMDGPU_GEM_CREATE_CPU_GTT_USWC))
+#else
 		if (flags & AMDGPU_GEM_CREATE_CPU_GTT_USWC)
+#endif
 			places[c].flags |= TTM_PL_FLAG_WC |
 				TTM_PL_FLAG_UNCACHED;
 		else
