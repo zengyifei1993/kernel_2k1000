@@ -1236,7 +1236,7 @@ static enum emulation_result kvm_vz_gpsi_cop0(union mips_instruction inst,
 				    (sel == 0))) {	/* ErrCtl */
 				val = cop0->reg[rd][sel];
 			} else if (rd == MIPS_CP0_CONFIG && sel == 6) {
-				val = read_c0_config6();       // GSConfig
+				val = cop0->reg[rd][sel];
 			} else if (rd == MIPS_CP0_DIAG && sel == 0) {
 				val = cop0->reg[rd][sel];       // Diag
 			} else {
