@@ -271,7 +271,7 @@ fail_unlock:
 }
 
 
-int kvm_get_ls7a_ioapic(struct kvm *kvm, struct kvm_ls7a_ioapic_state *state)
+int kvm_get_ls7a_ioapic(struct kvm *kvm, struct kvm_loongson_ls7a_ioapic_state *state)
 {
 	struct loongson_kvm_7a_ioapic *ls7a_ioapic = ls7a_ioapic_irqchip(kvm);
 	struct kvm_ls7a_ioapic_state *ioapic_state =  &(ls7a_ioapic->ls7a_ioapic);
@@ -282,7 +282,7 @@ int kvm_get_ls7a_ioapic(struct kvm *kvm, struct kvm_ls7a_ioapic_state *state)
 	return 0;
 }
 
-int kvm_set_ls7a_ioapic(struct kvm *kvm, struct kvm_ls7a_ioapic_state *state)
+int kvm_set_ls7a_ioapic(struct kvm *kvm, struct kvm_loongson_ls7a_ioapic_state *state)
 {
 	struct loongson_kvm_7a_ioapic *ls7a_ioapic = ls7a_ioapic_irqchip(kvm);
 	struct kvm_ls7a_ioapic_state *ioapic_state =  &(ls7a_ioapic->ls7a_ioapic);
