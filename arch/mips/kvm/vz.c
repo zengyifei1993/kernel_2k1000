@@ -3247,8 +3247,8 @@ static int kvm_vz_hardware_enable(void)
 		kvm_vz_local_flush_roottlb_all_guests();
 
 		GUESTID_MASK = current_cpu_data.guestid_mask;
-		GUESTID_FIRST_VERSION = GUESTID_MASK + 1;
-		GUESTID_VERSION_MASK = ~GUESTID_MASK;
+		GUESTID_FIRST_VERSION = (unsigned long)(GUESTID_MASK + 1);
+		GUESTID_VERSION_MASK = (unsigned long)~GUESTID_MASK;
 
 		current_cpu_data.guestid_cache = GUESTID_FIRST_VERSION;
 	}
