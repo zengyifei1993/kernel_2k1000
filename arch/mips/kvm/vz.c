@@ -1310,35 +1310,58 @@ static enum emulation_result kvm_vz_gpsi_cop0(union mips_instruction inst,
 					val = (int)val;
 				cop0->reg[rd][sel] = val;
 			} else if (rd == MIPS_CP0_DIAG && sel == 0) {
+				unsigned long flags;
+				local_irq_save(flags);
 				if (val & 0x2) {
 					/* flush btb */
-					write_c0_diag(2);
+					change_c0_diag(2, 2);
 				}
 				if (val & 0x4) {
 					/* flush itlb */
-					write_c0_diag(LOONGSON_DIAG_ITLB);
+					change_c0_diag(LOONGSON_DIAG_ITLB, LOONGSON_DIAG_ITLB);
 				}
 				if (val & 0x8) {
 					/* flush dtlb */
-					write_c0_diag(LOONGSON_DIAG_DTLB);
+					change_c0_diag(LOONGSON_DIAG_DTLB, LOONGSON_DIAG_DTLB);
 				}
-				if (val & 0x100) {
+				if (val & 0x1000) {
 					/* flush VTLB */
 					uint32_t gIndex = read_gc0_index();
+					unsigned int guestctl1;
+
+					guestctl1 = read_c0_guestctl1();
+					guestctl1 = (guestctl1 & ~MIPS_GCTL1_RID) |
+						((guestctl1 & MIPS_GCTL1_ID) >> MIPS_GCTL1_ID_SHIFT)
+									     << MIPS_GCTL1_RID_SHIFT;
+					write_c0_guestctl1(guestctl1);
 					write_gc0_index(0);
 					guest_tlbinvf();
 					write_gc0_index(gIndex);
+					clear_c0_guestctl1(MIPS_GCTL1_RID);
+					change_c0_diag(LOONGSON_DIAG_ITLB, LOONGSON_DIAG_ITLB);
 				}
-				if (val & 0x200) {
+				if (val & 0x2000) {
 					/* flush FTLB */
 					uint32_t gIndex = read_gc0_index();
 					uint32_t i;
-					for (i=64;i<64+2048;i+=8) {
+					unsigned int guestctl1;
+					guestctl1 = read_c0_guestctl1();
+					guestctl1 = (guestctl1 & ~MIPS_GCTL1_RID) |
+						((guestctl1 & MIPS_GCTL1_ID) >> MIPS_GCTL1_ID_SHIFT)
+									     << MIPS_GCTL1_RID_SHIFT;
+					write_c0_guestctl1(guestctl1);
+					for (i=current_cpu_data.tlbsizevtlb;
+					     i < (current_cpu_data.tlbsizevtlb +
+						     current_cpu_data.tlbsizeftlbsets);
+					     i++) {
 						write_gc0_index(i);
 						guest_tlbinvf();
 					}
 					write_gc0_index(gIndex);
+					clear_c0_guestctl1(MIPS_GCTL1_RID);
+					change_c0_diag(LOONGSON_DIAG_ITLB, LOONGSON_DIAG_ITLB);
 				}
+				local_irq_restore(flags);
 			} else {
 				er = EMULATE_FAIL;
 			}
@@ -3137,6 +3160,36 @@ static int kvm_vz_hardware_enable(void)
 
 		/* Flush moved entries in new (guest) context */
 		kvm_vz_local_flush_guesttlb_all();
+		break;
+	case CPU_LOONGSON3_COMP:
+		/*
+		 * ImgTec cores tend to use a shared root/guest TLB. To avoid
+		 * overlap of root wired and guest entries, the guest TLB may
+		 * need resizing.
+		 */
+		mmu_size = current_cpu_data.tlbsizevtlb;
+		ftlb_size = current_cpu_data.tlbsize - mmu_size;
+
+		/* Try switching to maximum guest VTLB size for flush */
+		guest_mmu_size = kvm_vz_resize_guest_vtlb(mmu_size);
+		current_cpu_data.guest.tlbsize = guest_mmu_size + ftlb_size;
+		kvm_vz_local_flush_guesttlb_all();
+
+		//FTLB startup at fixed point 64
+		guest_mmu_size = mmu_size - num_wired_entries();
+		guest_mmu_size = kvm_vz_resize_guest_vtlb(guest_mmu_size);
+		current_cpu_data.guest.tlbsize = guest_mmu_size + ftlb_size;
+
+		/*
+		 * Write the VTLB size, but if another CPU has already written,
+		 * check it matches or we won't provide a consistent view to the
+		 * guest. If this ever happens it suggests an asymmetric number
+		 * of wired entries.
+		 */
+		if (cmpxchg(&kvm_vz_guest_vtlb_size, 0, guest_mmu_size) &&
+		    WARN(guest_mmu_size != kvm_vz_guest_vtlb_size,
+			 "Available guest VTLB size mismatch"))
+			return -EINVAL;
 		break;
 	default:
 		/*
