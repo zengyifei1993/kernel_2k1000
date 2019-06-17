@@ -2926,6 +2926,11 @@ static int kvm_vz_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 	if (cpu_guest_has_badinstrp)
 		kvm_restore_gc0_badinstrp(cop0);
 
+	if (cpu_guest_has_nestfeatures) {
+		kvm_restore_gc0_nestexc(cop0);
+		kvm_restore_gc0_nestepc(cop0);
+	}
+
 	if (cpu_guest_has_segments) {
 		kvm_restore_gc0_segctl0(cop0);
 		kvm_restore_gc0_segctl1(cop0);
@@ -3032,6 +3037,11 @@ static int kvm_vz_vcpu_put(struct kvm_vcpu *vcpu, int cpu)
 		kvm_save_gc0_badinstr(cop0);
 	if (cpu_guest_has_badinstrp)
 		kvm_save_gc0_badinstrp(cop0);
+
+	if (cpu_guest_has_nestfeatures) {
+		kvm_save_gc0_nestexc(cop0);
+		kvm_save_gc0_nestepc(cop0);
+	}
 
 	if (cpu_guest_has_segments) {
 		kvm_save_gc0_segctl0(cop0);
