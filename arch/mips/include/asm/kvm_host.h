@@ -486,7 +486,7 @@ struct kvm_vcpu_arch {
 
 #ifdef CONFIG_KVM_MIPS_VZ
 	/* vcpu's vzguestid is different on each host cpu in an smp system */
-	u32 vzguestid[NR_CPUS];
+	u64 vzguestid[NR_CPUS];
 
 	u64 vpid[NR_CPUS];
 
