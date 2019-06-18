@@ -25,13 +25,12 @@ typedef struct gipi_single {
     uint32_t set;
     uint32_t clear;
     uint64_t buf[8];
-    int64_t irq;
 } gipi_single;
 
 typedef struct gipiState gipiState;
 
 struct gipiState {
-    gipi_single core[8];
+    gipi_single core[16];
 };
 
 struct loongson_kvm_ls3a_ipi {
@@ -102,8 +101,8 @@ void ls3a_ipi_lock(struct loongson_kvm_ls3a_ipi *s);
 void ls3a_ipi_unlock(struct loongson_kvm_ls3a_ipi *s);
 
 
-int kvm_set_ls3a_ipi(struct kvm *kvm, gipiState *state);
-int kvm_get_ls3a_ipi(struct kvm *kvm, gipiState *state);
+int kvm_set_ls3a_ipi(struct kvm *kvm, struct loongson_gipiState *state);
+int kvm_get_ls3a_ipi(struct kvm *kvm, struct loongson_gipiState *state);
 
 void kvm_destroy_ls3a_ipi(struct loongson_kvm_ls3a_ipi *vipi);
 #endif

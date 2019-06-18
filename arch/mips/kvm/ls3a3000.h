@@ -37,14 +37,4 @@ int kvm_mips_guesttlb_lookup(struct kvm_vcpu *vcpu, unsigned long entryhi);
 int kvm_mips_gva_to_hpa(struct kvm_vcpu *vcpu, unsigned long gva, unsigned long  *phpa);
 int kvm_mips_handle_ls3a3000_vz_root_tlb_fault(unsigned long badvaddr,
                                       struct kvm_vcpu *vcpu, bool write_fault);
-
-
-
-typedef struct kvm_ls3a_irq_state {
-	struct kvm_ls7a_ioapic_state ls7a_ioapic;
-       	gipiState ls3a_gipistate;
-	uint8_t ht_irq_reg[0x100];
-	struct routerirq_state ls3a_route;
-}Ls3aIrqState;
-
 #endif

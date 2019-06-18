@@ -103,8 +103,8 @@ static inline int ls7a_ioapic_in_kernel(struct kvm *kvm)
 	return ret;
 }
 
-int kvm_set_ls7a_ioapic(struct kvm *kvm, struct kvm_ls7a_ioapic_state *state);
-int kvm_get_ls7a_ioapic(struct kvm *kvm, struct kvm_ls7a_ioapic_state *state);
+int kvm_set_ls7a_ioapic(struct kvm *kvm, struct kvm_loongson_ls7a_ioapic_state *state);
+int kvm_get_ls7a_ioapic(struct kvm *kvm, struct kvm_loongson_ls7a_ioapic_state *state);
 struct loongson_kvm_7a_ioapic *kvm_create_ls7a_ioapic(struct kvm *kvm);
 int kvm_ls7a_ioapic_set_irq(struct kvm *kvm, int irq, int level);
 

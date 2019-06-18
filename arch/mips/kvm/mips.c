@@ -1028,6 +1028,56 @@ int kvm_vm_ioctl_irq_line(struct kvm *kvm, struct kvm_irq_level *irq_level,
 	return -EINVAL;
 }
 
+static int kvm_vm_ioctl_get_irqchip(struct kvm *kvm, struct loongson_kvm_irqchip *chip)
+{
+	int r;
+
+	r = 0;
+	switch(chip->chip_id){
+	case KVM_IRQCHIP_LS7A_IOAPIC:
+		r = kvm_get_ls7a_ioapic(kvm, &(chip->chip.ls7a_ioapic));
+		break;
+	case KVM_IRQCHIP_LS3A_GIPI:
+		r = kvm_get_ls3a_ipi(kvm, &(chip->chip.ls3a_gipistate));
+		break;
+	case KVM_IRQCHIP_LS3A_HT_IRQ:
+		r = kvm_get_ls3a_ht_irq(kvm,chip->chip.ht_irq_reg);
+		break;
+	case KVM_IRQCHIP_LS3A_ROUTE:
+		r = kvm_get_ls3a_router_irq(kvm,chip->chip.ls3a_router_reg);
+		break;
+	default:
+		r = -EINVAL;
+		break;
+	}
+	return r;
+
+}
+
+static int kvm_vm_ioctl_set_irqchip(struct kvm *kvm, struct loongson_kvm_irqchip *chip)
+{
+	int r;
+
+	r = 0;
+	switch (chip->chip_id) {
+	case KVM_IRQCHIP_LS7A_IOAPIC:
+		r = kvm_set_ls7a_ioapic(kvm, &(chip->chip.ls7a_ioapic));
+		break;
+	case KVM_IRQCHIP_LS3A_GIPI:
+		r = kvm_set_ls3a_ipi(kvm, &(chip->chip.ls3a_gipistate));
+		break;
+	case KVM_IRQCHIP_LS3A_HT_IRQ:
+		r = kvm_set_ls3a_ht_irq(kvm,chip->chip.ht_irq_reg);
+		break;
+	case KVM_IRQCHIP_LS3A_ROUTE:
+		r = kvm_set_ls3a_router_irq(kvm,chip->chip.ls3a_router_reg);
+		break;
+	default:
+		r = -EINVAL;
+		break;
+	}
+	return r;
+}
 
 long kvm_arch_vcpu_ioctl(struct file *filp, unsigned int ioctl,
 			 unsigned long arg)
@@ -1270,9 +1320,10 @@ long kvm_arch_vm_ioctl(struct file *filp, unsigned int ioctl, unsigned long arg)
 		break;
 	}
 	case KVM_GET_IRQCHIP: {
-		struct kvm_ls3a_irq_state *chip;
+		struct loongson_kvm_irqchip *chip;
+	
 
-		chip = memdup_user(argp, sizeof(struct kvm_ls3a_irq_state));
+		chip = memdup_user(argp, sizeof(struct loongson_kvm_irqchip));
 		if (IS_ERR(chip)) {
 			r = PTR_ERR(chip);
 			goto out;
@@ -1281,20 +1332,10 @@ long kvm_arch_vm_ioctl(struct file *filp, unsigned int ioctl, unsigned long arg)
 		r = -ENXIO;
 		if (!ls7a_ioapic_in_kernel(kvm))
 			goto get_irqchip_out;
-		r = kvm_get_ls7a_ioapic(kvm, &(chip->ls7a_ioapic));
+		r= kvm_vm_ioctl_get_irqchip(kvm,chip);
 		if (r)
 			goto get_irqchip_out;
-		r = kvm_get_ls3a_ipi(kvm, &(chip->ls3a_gipistate));
-		if (r)
-			goto get_irqchip_out;
-		r = kvm_get_ls3a_ht_irq(kvm,chip->ht_irq_reg);
-		if (r)
-			goto get_irqchip_out;
-		r = kvm_get_ls3a_router_irq(kvm,&(chip->ls3a_route));
-		if (r)
-			goto get_irqchip_out;
-		r = -EFAULT;
-		if (copy_to_user(argp, chip, sizeof (struct kvm_ls3a_irq_state)))
+		if (copy_to_user(argp, chip, sizeof (struct loongson_kvm_irqchip)))
 			goto get_irqchip_out;
 		r = 0;
 	get_irqchip_out:
@@ -1302,9 +1343,9 @@ long kvm_arch_vm_ioctl(struct file *filp, unsigned int ioctl, unsigned long arg)
 		break;
 	}
 	case KVM_SET_IRQCHIP: {
-		struct kvm_ls3a_irq_state *chip;
+		struct loongson_kvm_irqchip *chip;
 
-		chip = memdup_user(argp, sizeof(struct kvm_ls3a_irq_state));
+		chip = memdup_user(argp, sizeof(struct loongson_kvm_irqchip));
 		if (IS_ERR(chip)) {
 			r = PTR_ERR(chip);
 			goto out;
@@ -1313,16 +1354,7 @@ long kvm_arch_vm_ioctl(struct file *filp, unsigned int ioctl, unsigned long arg)
 		r = -ENXIO;
 		if (!ls7a_ioapic_in_kernel(kvm))
 			goto set_irqchip_out;
-		r = kvm_set_ls7a_ioapic(kvm, &(chip->ls7a_ioapic));
-		if (r)
-			goto set_irqchip_out;
-		r = kvm_set_ls3a_ipi(kvm, &(chip->ls3a_gipistate));
-		if (r)
-			goto set_irqchip_out;
-		r = kvm_set_ls3a_ht_irq(kvm,chip->ht_irq_reg);
-		if (r)
-			goto set_irqchip_out;
-		r = kvm_set_ls3a_router_irq(kvm,&(chip->ls3a_route));
+		r= kvm_vm_ioctl_set_irqchip(kvm,chip);
 		if (r)
 			goto set_irqchip_out;
 		r = 0;

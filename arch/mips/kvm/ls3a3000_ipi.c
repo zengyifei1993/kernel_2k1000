@@ -174,7 +174,7 @@ fail_unlock:
 	return NULL;
 }
 
-int kvm_get_ls3a_ipi(struct kvm *kvm, gipiState *state)
+int kvm_get_ls3a_ipi(struct kvm *kvm, struct loongson_gipiState *state)
 {
 	struct loongson_kvm_ls3a_ipi *ipi = ls3a_ipi_irqchip(kvm);
 	gipiState *ipi_state =  &(ipi->ls3a_gipistate);
@@ -184,7 +184,7 @@ int kvm_get_ls3a_ipi(struct kvm *kvm, gipiState *state)
 	return 0;
 }
 
-int kvm_set_ls3a_ipi(struct kvm *kvm, gipiState *state)
+int kvm_set_ls3a_ipi(struct kvm *kvm, struct loongson_gipiState *state)
 {
  	struct loongson_kvm_ls3a_ipi *ipi = ls3a_ipi_irqchip(kvm);
 	gipiState *ipi_state =  &(ipi->ls3a_gipistate);

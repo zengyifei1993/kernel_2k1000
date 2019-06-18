@@ -80,10 +80,6 @@ struct loongson_kvm_ls3a_routerirq{
 	uint8_t ls3a_router_reg[0x100];
 };
 
-struct routerirq_state{
-	uint8_t ls3a_router_reg[0x100];
-};
-
 static inline struct loongson_kvm_ls3a_routerirq *ls3a_router_irqchip(struct kvm *kvm)
 {
 	return kvm->arch.v_routerirq;
@@ -104,6 +100,6 @@ int ls3a_router_intctl_write(struct kvm *kvm , gpa_t addr, unsigned size, const 
 void ls3a_router_irq_lock(struct loongson_kvm_ls3a_routerirq *s);
 void ls3a_router_irq_unlock(struct loongson_kvm_ls3a_routerirq *s);
 struct loongson_kvm_ls3a_routerirq *kvm_create_ls3a_router_irq(struct kvm *kvm);
-int kvm_get_ls3a_router_irq(struct kvm *kvm, struct routerirq_state *state);
-int kvm_set_ls3a_router_irq(struct kvm *kvm, struct routerirq_state *state);
+int kvm_get_ls3a_router_irq(struct kvm *kvm, uint8_t *state);
+int kvm_set_ls3a_router_irq(struct kvm *kvm, uint8_t *state);
 #endif

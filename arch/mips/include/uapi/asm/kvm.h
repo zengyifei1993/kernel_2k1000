@@ -224,4 +224,50 @@ struct kvm_mips_interrupt {
 	__u32 irq;
 };
 
+#define KVM_IRQCHIP_LS7A_IOAPIC	0x0
+#define KVM_IRQCHIP_LS3A_GIPI	0x1
+#define KVM_IRQCHIP_LS3A_HT_IRQ	0x2
+#define KVM_IRQCHIP_LS3A_ROUTE	0x3
+
+struct kvm_loongson_ls7a_ioapic_state {
+    __u64 int_mask; /*0x020 interrupt mask register*/
+    __u64 htmsi_en;/*0x040 1=msi*/
+    __u64 intedge; /*0x060 edge=1 level  =0*/
+    __u64 intclr; /*0x080 for clean edge int,set 1 clean,set 0 is noused*/
+    __u64 auto_crtl0; /*0x0c0*/
+    __u64 auto_crtl1; /*0x0e0*/
+    __u8 route_entry[64]; /*0x100 - 0x140*/
+    __u8 htmsi_vector[64]; /*0x200 - 0x240*/
+    __u64 intisr_chip0; /*0x300*/
+    __u64 intisr_chip1;/*0x320*/
+    __u64 last_intirr;	/* edge detection */
+    __u64 intirr; /* 0x380 interrupt request register */
+    __u64 intisr; /* 0x3a0 interrupt service register */
+    __u64 int_polarity; /*0x3e0 interrupt level polarity selection register 0 for high level tirgger*/
+};
+
+struct loongson_gipi_single {
+    __u32 status;
+    __u32 en;
+    __u32 set;
+    __u32 clear;
+    __u64 buf[8];
+};
+
+struct loongson_gipiState {
+    struct loongson_gipi_single core[16];
+};
+
+struct loongson_kvm_irqchip {
+	__u32 chip_id;
+	__u32 node;
+	union {
+		__u8 dummy[1024];  /* reserving space */
+		struct kvm_loongson_ls7a_ioapic_state ls7a_ioapic;
+		struct loongson_gipiState ls3a_gipistate;
+		__u8 ht_irq_reg[0x100];
+		__u8 ls3a_router_reg[0x100];;
+	} chip;
+};
+
 #endif /* __LINUX_KVM_MIPS_H */

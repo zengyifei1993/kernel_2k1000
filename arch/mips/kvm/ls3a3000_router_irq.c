@@ -223,18 +223,18 @@ fail_unlock:
         return NULL;
 }
 
-int kvm_get_ls3a_router_irq(struct kvm *kvm, struct routerirq_state *state)
+int kvm_get_ls3a_router_irq(struct kvm *kvm, uint8_t *state)
 {
         struct loongson_kvm_ls3a_routerirq *ls3a_router_irq = ls3a_router_irqchip(kvm);
         uint8_t *router_irq_reg =  ls3a_router_irq->ls3a_router_reg;
         ls3a_router_irq_lock(ls3a_router_irq);
-        memcpy(state->ls3a_router_reg, router_irq_reg, 0x100);
+        memcpy(state, router_irq_reg, 0x100);
         ls3a_router_irq_unlock(ls3a_router_irq);
         kvm->stat.lsvz_kvm_get_ls3a_router_irq++;
         return 0;
 }
 
-int kvm_set_ls3a_router_irq(struct kvm *kvm, struct routerirq_state *state)
+int kvm_set_ls3a_router_irq(struct kvm *kvm, uint8_t *state)
 {
         struct loongson_kvm_ls3a_routerirq *ls3a_router_irq = ls3a_router_irqchip(kvm);
         uint8_t *router_irq_reg =  ls3a_router_irq->ls3a_router_reg;
@@ -242,7 +242,7 @@ int kvm_set_ls3a_router_irq(struct kvm *kvm, struct routerirq_state *state)
                 return -EINVAL;
 
         ls3a_router_irq_lock(ls3a_router_irq);
-        memcpy(router_irq_reg, state->ls3a_router_reg, 0x100);
+        memcpy(router_irq_reg, state, 0x100);
         ls3a_router_irq_unlock(ls3a_router_irq);
         kvm->stat.lsvz_kvm_set_ls3a_router_irq++;
         return 0;
