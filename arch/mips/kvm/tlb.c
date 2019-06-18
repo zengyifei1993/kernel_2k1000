@@ -427,6 +427,10 @@ void kvm_vz_local_flush_roottlb_all_guests(void)
 		mtc0_tlbw_hazard();
 		tlb_write_indexed();
 	}
+#ifdef CONFIG_CPU_LOONGSON3
+	//Should clear DIAG.MID after tlbr
+	change_c0_diag(0xc0000, 0x0);
+#endif
 
 	write_c0_entryhi(old_entryhi);
 	write_c0_pagemask(old_pagemask);
