@@ -23,7 +23,6 @@ extern unsigned int ls2h_irq2pos[];
 extern void loongson3_ipi_interrupt(struct pt_regs *regs);
 
 unsigned int ext_ini_en[MAX_32ARRAY_SIZE];
-unsigned char first_online_cpu_of_node[MAX_NUMNODES] = {LS_IOI_INV_CPU_ID};
 
 static DEFINE_SPINLOCK(affinity_lock);
 
@@ -40,13 +39,16 @@ void any_send(unsigned int off, unsigned int data, unsigned int cpu)
 
 static void set_irq_route(int pos, const struct cpumask *affinity)
 {
-	int i, k, pos_off;
-	unsigned int nodemap[LS_ANYSEND_HANDLE_IRQS] = {0};
-	unsigned char coremap[LS_ANYSEND_HANDLE_IRQS][MAX_NUMNODES] = {{0},{0},{0},{0}}; 
+	int k, pos_off;
+	unsigned int nodemap[LS_ANYSEND_HANDLE_IRQS];
+	unsigned char coremap[LS_ANYSEND_HANDLE_IRQS][MAX_NUMNODES];
 	unsigned long data = 0;
-	unsigned int blk_bit_set = 0;
+	int package = -1;
+	int cpu;
 
 	pos_off = pos & (~3); /* get pos of aligned 4 irqs */
+	memset(nodemap, 0, sizeof(unsigned int) * LS_ANYSEND_HANDLE_IRQS);
+	memset(coremap, 0, sizeof(unsigned char) * LS_ANYSEND_HANDLE_IRQS * MAX_NUMNODES);
 
 	/* calculate nodemap and coremap of 4 irqs including target irq */
 	for (k = 0; k < LS_ANYSEND_HANDLE_IRQS; k++) {
@@ -57,34 +59,34 @@ static void set_irq_route(int pos, const struct cpumask *affinity)
 			struct irq_desc *desc = irq_to_desc(pos_off + k);
 			affinity_tmp = desc->irq_data.affinity;
 		}
-		for (i = 0; i < nr_cpus_loongson; i++) {
-			if (cpumask_test_cpu(i, affinity_tmp)) {
-				nodemap[k] |= (1 << (i / cores_per_node));
-				coremap[k][i / cores_per_node] |= (1 << (i % cores_per_node));
-			}
+		
+		for_each_cpu(cpu, affinity_tmp) {
+			nodemap[k] |= (1 << (__cpu_logical_map[cpu] / cores_per_node));
+			coremap[k][__cpu_logical_map[cpu] / cores_per_node] |= (1 << (__cpu_logical_map[cpu] % cores_per_node));
 		}
 	}
-
-	blk_bit_set = (unsigned int)(1 << LS_ANYSEND_BLOCK_SHIFT);
 
 	/* csr write access to force current interrupt route completed on every core */
-	for (i = 0; i < nr_cpus_loongson; i++) {
-		if (cpumask_test_cpu(i, cpu_online_mask)) {
-			any_send(LOONGSON_EXT_IOI_BOUNCE64_OFFSET, LS_ANYSEND_IOI_EN32_DATA, i);
-		}
-	}
+	for_each_cpu(cpu, cpu_online_mask)
+		any_send(LOONGSON_EXT_IOI_BOUNCE64_OFFSET, LS_ANYSEND_IOI_EN32_DATA, __cpu_logical_map[cpu]);
 
-	/* !!!! Only support 32bit data write, need to update 4 irqs route reg one time */	
-	for (i = 0; i < nr_nodes_loongson; i++) {
-		for (k = 0; k < LS_ANYSEND_HANDLE_IRQS; k++) {
-			if (nodemap[k] & (1 << i)) {
-				/* target node only set itself to avoid unreasonable transfer */
-				data |= ((unsigned long)(coremap[k][i] | ((1 << i) << LS_IOI_CPUNODE_SHIFT_IN_ROUTE)) << (LS_ANYSEND_ROUTE_DATA_POS(k)));
-			} else {
-				data |= ((unsigned long)(nodemap[k] << LS_IOI_CPUNODE_SHIFT_IN_ROUTE) << (LS_ANYSEND_ROUTE_DATA_POS(k)));
+	for_each_cpu(cpu, cpu_online_mask) {
+		if (package != cpu_data[cpu].package) {
+
+			package = cpu_data[cpu].package;
+			data = 0;
+
+			/* !!!! Only support 32bit data write, need to update 4 irqs route reg one time */
+			for (k = 0; k < LS_ANYSEND_HANDLE_IRQS; k++) {
+				if ((nodemap[k] & (1 << package)) && (__cpu_logical_map[cpu] != loongson_boot_cpu_id)) {
+					/* target node only set itself to avoid unreasonable transfer */
+					data |= ((unsigned long)(coremap[k][package] | ((1 << package) << LS_IOI_CPUNODE_SHIFT_IN_ROUTE)) << (LS_ANYSEND_ROUTE_DATA_POS(k)));
+				} else {
+					data |= ((unsigned long)(coremap[k][package] | (nodemap[k] << LS_IOI_CPUNODE_SHIFT_IN_ROUTE)) << (LS_ANYSEND_ROUTE_DATA_POS(k)));
+				}
 			}
+			any_send(LOONGSON_EXT_IOI_ROUTE_OFFSET + pos_off, data, __cpu_logical_map[cpu]);
 		}
-		any_send(LOONGSON_EXT_IOI_ROUTE_OFFSET + pos_off, data, first_online_cpu_of_node[i]);
 	}
 
 }

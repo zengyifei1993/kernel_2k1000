@@ -24,7 +24,6 @@ extern unsigned long long smp_group[4];
 static irqreturn_t lpc_irq_handler(int irq, void *data);
 extern struct plat_smp_ops *mp_ops;
 extern int ext_set_irq_affinity(struct irq_data *d, const struct cpumask *affinity, bool force);
-extern unsigned char first_online_cpu_of_node[MAX_NUMNODES];
 
 static DEFINE_SPINLOCK(pch_irq_lock);
 extern int ls3a_msi_enabled;
@@ -306,17 +305,10 @@ static void init_7a_irq(int dev, int irq, struct irq_chip *pirq_chip) {
 
 static void ext_ioi_init(void)
 {
-	int i, j;
+	int i, j, cpu;
 	unsigned int data = 0;
 	unsigned int tmp = 0;
-
-	/* calculate nodemap and coremap of target pos */
-	for (i = 0; i < nr_cpus_loongson; i++) {
-		if (cpumask_test_cpu(i, cpu_online_mask)) {
-			if (LS_IOI_INV_CPU_ID == first_online_cpu_of_node[i / cores_per_node])
-				first_online_cpu_of_node[i / cores_per_node] = i;
-		}
-	}
+	int package = -1;
 
 	tmp = (unsigned int)(read_csr(LS_ANYSEND_OTHER_FUNC_OFFSET) | LS_ANYSEND_OTHER_FUNC_EXT_IOI);
 
@@ -325,20 +317,23 @@ static void ext_ioi_init(void)
 		ext_ini_en[i] = LS_ANYSEND_IOI_EN32_DATA;
 	}
 
-	for (i = 0; i < nr_nodes_loongson; i++) {
-		if (first_online_cpu_of_node[i] != LS_IOI_INV_CPU_ID) {
-
-			any_send(LS_ANYSEND_OTHER_FUNC_OFFSET, tmp, first_online_cpu_of_node[i]);
+	for_each_cpu(i, cpu_possible_mask) {
+		int cur_package = __cpu_logical_map[i] / cores_per_package;
+		if (package != cur_package) {
+			package = cur_package;
+			cpu = __cpu_logical_map[i];
+ 
+			any_send(LS_ANYSEND_OTHER_FUNC_OFFSET, tmp, cpu);
 
 			for(j = 0; j < LS_ANYSEND_IOI_NODEMAP_ITEMS; j++) {
-				data |= ((((j << 1) + 1) << LS_IOI_NODEMAP_BITS_PER_ENTRY) | (j << 1));
-				any_send(LOONGSON_EXT_IOI_NODEMAP_OFFSET, data, first_online_cpu_of_node[i]);
+				data = ((((j << 1) + 1) << LS_IOI_NODEMAP_BITS_PER_ENTRY) | (j << 1));
+				any_send(LOONGSON_EXT_IOI_NODEMAP_OFFSET + j*4, data, cpu);
 			}
 
-			EXT_IOI_REGS_INIT(LS_ANYSEND_IOI_EN_ITEMS, LOONGSON_EXT_IOI_EN64_OFFSET, LS_ANYSEND_IOI_EN32_DATA, first_online_cpu_of_node[i]);
-			EXT_IOI_REGS_INIT(LS_ANYSEND_IOI_IPMAP_ITEMS, LOONGSON_EXT_IOI_MAP_OFFSET, LS_ANYSEND_IOI_IPMAP_DATA, first_online_cpu_of_node[i]);
-			EXT_IOI_REGS_INIT(LS_ANYSEND_IOI_ROUTE_ITEMS, LOONGSON_EXT_IOI_ROUTE_OFFSET, LS_ANYSEND_IOI_ROUTE_DATA, first_online_cpu_of_node[i]);
-			EXT_IOI_REGS_INIT(LS_ANYSEND_IOI_BOUNCE_ITEMS, LOONGSON_EXT_IOI_BOUNCE64_OFFSET, LS_ANYSEND_IOI_BOUNCE_DATA, first_online_cpu_of_node[i]);
+			EXT_IOI_REGS_INIT(LS_ANYSEND_IOI_EN_ITEMS, LOONGSON_EXT_IOI_EN64_OFFSET, LS_ANYSEND_IOI_EN32_DATA, cpu);
+			EXT_IOI_REGS_INIT(LS_ANYSEND_IOI_IPMAP_ITEMS, LOONGSON_EXT_IOI_MAP_OFFSET, LS_ANYSEND_IOI_IPMAP_DATA, cpu);
+			EXT_IOI_REGS_INIT(LS_ANYSEND_IOI_ROUTE_ITEMS, LOONGSON_EXT_IOI_ROUTE_OFFSET, LS_ANYSEND_IOI_ROUTE_DATA, cpu);
+			EXT_IOI_REGS_INIT(LS_ANYSEND_IOI_BOUNCE_ITEMS, LOONGSON_EXT_IOI_BOUNCE64_OFFSET, LS_ANYSEND_IOI_BOUNCE_DATA, cpu);
 		}
 	}
 	loongson_pch->irq_dispatch = ls7a_ext_irq_dispatch;
