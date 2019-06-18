@@ -1006,6 +1006,7 @@ int kvm_mips_handle_vz_root_tlb_fault(unsigned long badvaddr,
 		if (kvm_is_visible_gfn(vcpu->kvm, badvaddr >> PAGE_SHIFT) == 0) {
 			++vcpu->stat.lsvz_mmio_exits;
 			ret = RESUME_HOST;
+			return ret;
 		}
 	}
 
