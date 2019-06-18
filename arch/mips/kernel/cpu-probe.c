@@ -514,6 +514,8 @@ static inline unsigned int decode_config5(struct cpuinfo_mips *c)
 		c->options |= MIPS_CPU_VP;
 	if (config5 & MIPS_CONF5_CA2)
 		c->ases |= MIPS_ASE_MIPS16E2;
+	if (config5 & MIPS_CONF5_NF)
+		c->options |= MIPS_CPU_NF;
 
 	return config5 & MIPS_CONF_M;
 }
@@ -706,6 +708,9 @@ static inline unsigned int decode_guest_config5(struct cpuinfo_mips *c)
 
 	if (config5 & MIPS_CONF5_MVH)
 		c->guest.options |= MIPS_CPU_MVH;
+
+	if (config5 & MIPS_CONF5_NF)
+		c->guest.options |= MIPS_CPU_NF;
 
 	if (config5 & MIPS_CONF_M)
 		c->guest.conf |= BIT(6);

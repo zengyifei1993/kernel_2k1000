@@ -378,6 +378,7 @@ enum cpu_type_enum {
 #define MIPS_CPU_GUESTID	MBIT_ULL(51)	/* CPU uses VZ ASE GuestID feature */
 #define MIPS_CPU_DRG		MBIT_ULL(52)	/* CPU has VZ Direct Root to Guest (DRG) */
 #define MIPS_CPU_UFR		MBIT_ULL(53)	/* CPU supports User mode FR switching */
+#define MIPS_CPU_NF		MBIT_ULL(63)	/* CPU supports Nested Fault registers */
 
 
 /*

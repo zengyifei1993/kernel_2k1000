@@ -1693,8 +1693,14 @@ do {									\
 #define read_c0_cause()		__read_32bit_c0_register($13, 0)
 #define write_c0_cause(val)	__write_32bit_c0_register($13, 0, val)
 
+#define read_c0_nestexc()	__read_32bit_c0_register($13, 5)
+#define write_c0_nestexc(val)	__write_32bit_c0_register($13, 5, val)
+
 #define read_c0_epc()		__read_ulong_c0_register($14, 0)
 #define write_c0_epc(val)	__write_ulong_c0_register($14, 0, val)
+
+#define read_c0_nestepc()	__read_ulong_c0_register($14, 2)
+#define write_c0_nestepc(val)	__write_ulong_c0_register($14, 2, val)
 
 #define read_c0_prid()		__read_32bit_c0_register($15, 0)
 
@@ -2194,8 +2200,14 @@ do {									\
 #define read_gc0_cause()		__read_32bit_gc0_register(13, 0)
 #define write_gc0_cause(val)		__write_32bit_gc0_register(13, 0, val)
 
+#define read_gc0_nestexc()		__read_32bit_gc0_register(13, 5)
+#define write_gc0_nestexc(val)		__write_32bit_gc0_register(13, 5, val)
+
 #define read_gc0_epc()			__read_ulong_gc0_register(14, 0)
 #define write_gc0_epc(val)		__write_ulong_gc0_register(14, 0, val)
+
+#define read_gc0_nestepc()		__read_ulong_gc0_register(14, 2)
+#define write_gc0_nestepc(val)		__write_ulong_gc0_register(14, 2, val)
 
 #define read_gc0_prid()			__read_32bit_gc0_register(15, 0)
 

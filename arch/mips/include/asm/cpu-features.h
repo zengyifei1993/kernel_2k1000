@@ -342,6 +342,10 @@
 # define cpu_has_badinstrp      (cpu_data[0].options & MIPS_CPU_BADINSTRP)
 #endif
 
+#ifndef cpu_has_nestfeatures
+#define cpu_has_nestfeatures       (cpu_data[0].options & MIPS_CPU_NF)
+#endif
+
 #if defined(CONFIG_CPU_HAS_MSA) && !defined(cpu_has_msa)
 # define cpu_has_msa		(cpu_data[0].ases & MIPS_ASE_MSA)
 #elif !defined(cpu_has_msa)
@@ -439,6 +443,9 @@
 #endif
 #ifndef cpu_guest_has_userlocal
 #define cpu_guest_has_userlocal (cpu_data[0].guest.options & MIPS_CPU_ULRI)
+#endif
+#ifndef cpu_guest_has_nestfeatures
+#define cpu_guest_has_nestfeatures       (cpu_data[0].guest.options & MIPS_CPU_NF)
 #endif
 /*
  *  * Guest dynamic capabilities
