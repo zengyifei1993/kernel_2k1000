@@ -1714,10 +1714,10 @@ static int kvm_vz_get_one_reg(struct kvm_vcpu *vcpu,
 		*v = (long)read_gc0_badvaddr();
 		break;
 	case KVM_REG_MIPS_CP0_BADINSTR:
-		ret = -EINVAL;
+		ret = 0;
 		break;
 	case KVM_REG_MIPS_CP0_BADINSTRP:
-		ret = -EINVAL;
+		ret = 0;
 		break;
 	case KVM_REG_MIPS_CP0_COUNT:
 		*v = kvm_mips_read_count(vcpu);
@@ -1895,10 +1895,10 @@ static int kvm_vz_set_one_reg(struct kvm_vcpu *vcpu,
 		write_gc0_badvaddr(v);
 		break;
 	case KVM_REG_MIPS_CP0_BADINSTR:
-		ret = -EINVAL;
+		ret = 0;
 		break;
 	case KVM_REG_MIPS_CP0_BADINSTRP:
-		ret = -EINVAL;
+		ret = 0;
 		break;
 	case KVM_REG_MIPS_CP0_COUNT:
 		kvm_mips_write_count(vcpu, v);
