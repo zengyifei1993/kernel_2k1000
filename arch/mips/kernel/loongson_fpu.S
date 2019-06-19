@@ -225,7 +225,7 @@ LEAF(_save_fp)
 	sll	t0, t0, 5
 	bgez	t0, 1f
 	cfc1	t0, fcr31
-#if 	FPU_REG_WIDTH == 64
+#ifndef CONFIG_CPU_HAS_MSA 	
 	gssqc1	$f1, $f0, THREAD_FPR0(a0)
 	gssqc1	$f3, $f2, THREAD_FPR2(a0)
 
@@ -305,7 +305,7 @@ LEAF(_restore_fp)
 	bgez	t0, 1f
 	lw	t0, THREAD_FCR31(a0)
 
-#if 	FPU_REG_WIDTH == 64
+#ifndef CONFIG_CPU_HAS_MSA 	
 	gslqc1	$f1, $f0, THREAD_FPR0(a0)
 	gslqc1	$f3, $f2, THREAD_FPR2(a0)
 
