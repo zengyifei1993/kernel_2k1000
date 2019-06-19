@@ -38,6 +38,7 @@
 #include <linux/vmalloc.h>
 #include <linux/module.h>
 #include <linux/reservation.h>
+#include <asm/cpu-type.h>
 
 void ttm_bo_free_old_node(struct ttm_buffer_object *bo)
 {
@@ -509,8 +510,11 @@ pgprot_t ttm_io_prot(uint32_t caching_flags, pgprot_t tmp)
 	else
 		tmp = pgprot_noncached(tmp);
 #endif
-#if defined(__sparc__) || defined(__mips__)
-	if(cpu_has_vz)
+#if defined(__sparc__) 
+		tmp = pgprot_noncached(tmp);
+#endif
+#if defined(__mips__)
+	if(cpu_has_vz || (current_cpu_type() != CPU_LOONGSON3_COMP))
 		tmp = pgprot_noncached(tmp);
 #endif
 	return tmp;
