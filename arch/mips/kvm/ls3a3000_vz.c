@@ -3095,17 +3095,7 @@ retry:
 	ptep = kvm_mips_pte_for_gpa(kvm, memcache, gpa);
 
 	/* Set up the PTE, all should be CACHED */
-	prot_bits |= _PAGE_PRESENT | __READABLE | _page_cachable_default;
-
-#if 1
-	/*Make CKSEG0/CKSEG3/XKPHYS/XKSEG address is GLOBAL*/
-	if (((vcpu->arch.host_cp0_badvaddr & CKSEG3) == CKSEG0) ||
-		   ((vcpu->arch.host_cp0_badvaddr & CKSEG3) == CKSEG1) ||
-		   ((vcpu->arch.host_cp0_badvaddr & ~TO_PHYS_MASK) == CAC_BASE) ||
-		   ((vcpu->arch.host_cp0_badvaddr & ~TO_PHYS_MASK) == UNCAC_BASE)) {
-		prot_bits |= _PAGE_GLOBAL;
-	}
-#endif
+	prot_bits |= _PAGE_PRESENT | __READABLE | _page_cachable_default | _PAGE_GLOBAL;
 
 	if (writeable) {
 		prot_bits |= _PAGE_WRITE;
@@ -3198,7 +3188,7 @@ int kvm_mips_handle_ls3a3000_vz_root_tlb_fault(unsigned long badvaddr,
 		} else {
 
 			idx = (badvaddr >> PAGE_SHIFT) & 1;
-			ret = kvm_lsvz_map_page(vcpu, gpa, write_fault, 0, &pte_gpa[idx], &pte_gpa[!idx]);
+			ret = kvm_lsvz_map_page(vcpu, gpa, write_fault, _PAGE_GLOBAL, &pte_gpa[idx], &pte_gpa[!idx]);
 			if (ret == RESUME_GUEST) {
 				//pte_gpa[!idx].pte |= _PAGE_GLOBAL;
 				pte_gpa[0].pte |= _PAGE_GLOBAL;
@@ -3283,10 +3273,7 @@ int kvm_ls3a3000_get_inst(u32 *opc, struct kvm_vcpu *vcpu, u32 *out)
 	}
 
 	idx = ((unsigned long)opc >> PAGE_SHIFT) & 1;
-	if(((unsigned long) opc  & CKSEG3) == CKSEG1)
-		err = kvm_lsvz_map_page(vcpu, gpa, false, _PAGE_GLOBAL, &pte_gpa[idx], &pte_gpa[!idx]);
-	else
-		err = kvm_lsvz_map_page(vcpu, gpa, true, _PAGE_GLOBAL, &pte_gpa[idx], &pte_gpa[!idx]);
+	err = kvm_lsvz_map_page(vcpu, gpa, false, _PAGE_GLOBAL, &pte_gpa[idx], NULL);
 	if (err)
 		return err;
 	//2. get the page of the instruction

@@ -477,33 +477,38 @@ static int kvm_mips_hcall_tlb(struct kvm_vcpu *vcpu, unsigned long num,
 
 		pte_val(pte_gpa) = 0;
 		pte_val(pte_gpa1) = 0;
+
+		prot_bits = args[2] & 0xffff;
+		prot_bits = (prot_bits & ~_CACHE_MASK) | _page_cachable_default;
 		if (args[2] & _PAGE_VALID) {
 			write_fault = args[2] & _PAGE_DIRTY;
 			gpa = ((pte_to_entrylo(args[2]) & 0x3ffffffffff) >> 6) << 12;
 			ret = kvm_lsvz_map_page(vcpu, gpa, write_fault, _PAGE_GLOBAL, &pte_gpa, NULL);
 			if (ret == 0) {
-				prot_bits = args[2] & 0xffff;
-				prot_bits = (prot_bits & ~_CACHE_MASK) | _page_cachable_default;
 				pte_val(pte_gpa) = (pte_val(pte_gpa) & _PFN_MASK) | (prot_bits & pte_val(pte_gpa) & ~_PFN_MASK);
 				/* NI/RI attribute does not support now */
 				//pte_val(pte_gpa) = (pte_val(pte_gpa) & _PFN_MASK) | ((_PAGE_NO_EXEC | _PAGE_NO_READ) & prot_bits & ~_PFN_MASK);
 			} else
 				mmio = 1;
 		}
+		if (prot_bits & _PAGE_GLOBAL)
+			pte_val(pte_gpa) |= _PAGE_GLOBAL;
 
+		prot_bits = args[3] & 0xffff; //Get all the sw/hw prot bits of even pte
+		prot_bits = (prot_bits & ~_CACHE_MASK) | _page_cachable_default;
 		if (args[3] & _PAGE_VALID) {
 			write_fault = args[3] & _PAGE_DIRTY;
 			gpa = ((pte_to_entrylo(args[3]) & 0x3ffffffffff) >> 6) << 12;
 			ret = kvm_lsvz_map_page(vcpu, gpa, write_fault, _PAGE_GLOBAL, &pte_gpa1, NULL);
 			if (ret == 0) {
-				prot_bits = args[3] & 0xffff; //Get all the sw/hw prot bits of even pte
-				prot_bits = (prot_bits & ~_CACHE_MASK) | _page_cachable_default;
 				pte_val(pte_gpa1) = (pte_val(pte_gpa1) & _PFN_MASK) | (prot_bits & pte_val(pte_gpa1) & ~_PFN_MASK);
 				/* NI/RI attribute does not support now */
 				//pte_val(pte_gpa1) = (pte_val(pte_gpa1) & _PFN_MASK) | ((_PAGE_NO_EXEC|_PAGE_NO_READ) & prot_bits & ~_PFN_MASK);
 			} else
 				mmio = 1;
 		}
+		if (prot_bits & _PAGE_GLOBAL)
+			pte_val(pte_gpa1) |= _PAGE_GLOBAL;
 
 		/*update software tlb
 		*/
