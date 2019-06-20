@@ -59,9 +59,7 @@
 #include <asm/types.h>
 #include <asm/stacktrace.h>
 #include <asm/uasm.h>
-#if defined(CONFIG_CPU_LOONGSON3)
-#include <loongson.h>
-#endif
+
 extern void check_wait(void);
 extern asmlinkage void rollback_handle_int(void);
 extern asmlinkage void handle_int(void);
@@ -499,11 +497,6 @@ out:
 #define FUNC   0x0000003f
 #define SYNC   0x0000000f
 #define RDHWR  0x0000003b
-#if defined(CONFIG_CPU_LOONGSON3)
-#define RS     0x03e00000
-#define LWC2   0xc8000000
-#define CPUCFG 0x00000018
-#endif
 /*  microMIPS definitions   */
 #define MM_POOL32A_FUNC 0xfc00ffff
 #define MM_RDHWR        0x00006b3c
@@ -696,43 +689,6 @@ static int simulate_sync(struct pt_regs *regs, unsigned int opcode)
 
 	return -1;			/* Must be something else ... */
 }
-
-#if defined(CONFIG_CPU_LOONGSON3)
-struct cpucfg_info cpucfg_regs[NR_CPUS];
-
-static int simulate_cpucfg(struct pt_regs *regs, unsigned int opcode)
-{
-	if ((opcode & OPCODE) == LWC2 && (opcode & FUNC) == CPUCFG) {
-		unsigned int cpu = smp_processor_id();
-		int rd = (opcode & RD) >> 11;
-		int rs = (opcode & RS) >> 21;
-		unsigned long val = regs->regs[rs];
-
-		perf_sw_event(PERF_COUNT_SW_EMULATION_FAULTS,
-				1, regs, 0);
-		switch (val) {
-		case 0x0:
-		case 0x1:
-		case 0x2:
-		case 0x3:
-		case 0x4:
-		case 0x5:
-		case 0x6:
-		case 0x7:
-		case 0x8:
-			regs->regs[rd] = cpucfg_regs[cpu].reg[val];
-			return 0;
-		default:
-			regs->regs[rd] = 0;
-			return 0;
-		}
-		return 0;
-	}
-
-	/* Not ours.  */
-	return -1;
-}
-#endif
 
 asmlinkage void do_ov(struct pt_regs *regs)
 {
@@ -1083,10 +1039,6 @@ asmlinkage void do_ri(struct pt_regs *regs)
 
 		if (status < 0)
 			status = simulate_sync(regs, opcode);
-#if defined(CONFIG_CPU_LOONGSON3)
-		if (status < 0)
-			status = simulate_cpucfg(regs, opcode);
-#endif
 	}
 
 	if (status < 0)

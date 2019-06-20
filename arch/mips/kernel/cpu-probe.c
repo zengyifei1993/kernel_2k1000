@@ -1556,10 +1556,6 @@ const char *__cpu_name[NR_CPUS];
 const char *__cpu_full_name[NR_CPUS];
 const char *__elf_platform;
 
-#if defined(CONFIG_CPU_LOONGSON3) || defined(CONFIG_CPU_LOONGSON2K)
-void encode_cpucfg_info(struct cpuinfo_mips *,int );
-#endif
-
  void cpu_probe(void)
 {
 	struct cpuinfo_mips *c = &current_cpu_data;
@@ -1672,10 +1668,6 @@ void encode_cpucfg_info(struct cpuinfo_mips *,int );
 		__ua_limit = ~((1ull << cpu_vmbits) - 1);
 #endif
 
-#if defined(CONFIG_CPU_LOONGSON3) || defined(CONFIG_CPU_LOONGSON2K)
-	if(!cpu_has_cpucfg)
-		encode_cpucfg_info(c,cpu);
-#endif
 }
 
 #define MAX_NAME_LEN 48
