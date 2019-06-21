@@ -150,9 +150,15 @@ static inline int syscall_get_arch(void)
 			arch |= __AUDIT_ARCH_CONVENTION_MIPS64_N32;
 	}
 #endif
+
+	/* MIPS ABI is same in both big and little endian and
+	 * userspace audit tool treat both big and little endian
+	 * as big endian, so just use big endian here
+	 */
 #ifdef __LITTLE_ENDIAN
 	arch |= __AUDIT_ARCH_LE;
 #endif
+
 	return arch;
 }
 
