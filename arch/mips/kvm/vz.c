@@ -1236,7 +1236,11 @@ static enum emulation_result kvm_vz_gpsi_cop0(union mips_instruction inst,
 				    (sel == 0))) {	/* ErrCtl */
 				val = cop0->reg[rd][sel];
 			} else if (rd == MIPS_CP0_CONFIG && sel == 6) {
-				val = cop0->reg[rd][sel];
+				/* Check host support FLTINT or not */
+				if(read_c0_config6() & (0x1 << 7))
+					val = cop0->reg[rd][sel];
+				else
+					val = cop0->reg[rd][sel] & (~(0x1<<7));
 			} else if (rd == MIPS_CP0_DIAG && sel == 0) {
 				val = cop0->reg[rd][sel];       // Diag
 			} else {
@@ -1967,6 +1971,7 @@ static int kvm_trap_vz_handle_tlb_st_miss(struct kvm_vcpu *vcpu)
 
 static u64 kvm_vz_get_one_regs[] = {
 	KVM_REG_MIPS_CP0_INDEX,
+	KVM_REG_MIPS_CP0_RANDOM,
 	KVM_REG_MIPS_CP0_ENTRYLO0,
 	KVM_REG_MIPS_CP0_ENTRYLO1,
 	KVM_REG_MIPS_CP0_CONTEXT,
