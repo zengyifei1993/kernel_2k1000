@@ -13,16 +13,18 @@
 #include "ls3a3000_ipi.h"
 #include "ls3a3000.h"
 
-void ls3a_ipi_lock(struct loongson_kvm_ls3a_ipi *s)
-	__acquires(&s->lock)
+void ls3a_ipi_lock(struct loongson_kvm_ls3a_ipi *s, unsigned long *flags)
 {
-	spin_lock(&s->lock);
+	unsigned long tmp;
+	spin_lock_irqsave(&s->lock, tmp);
+	*flags = tmp;
 }
 
-void ls3a_ipi_unlock(struct loongson_kvm_ls3a_ipi *s)
-	__releases(&s->lock)
+void ls3a_ipi_unlock(struct loongson_kvm_ls3a_ipi *s, unsigned long *flags)
 {
-	spin_unlock(&s->lock);
+	unsigned long tmp;
+	tmp = *flags;
+	spin_unlock_irqrestore(&s->lock, tmp);
 }
 
 int ls3a_gipi_writel(struct loongson_kvm_ls3a_ipi * ipi, gpa_t addr, int len,const void *val)
@@ -178,9 +180,11 @@ int kvm_get_ls3a_ipi(struct kvm *kvm, struct loongson_gipiState *state)
 {
 	struct loongson_kvm_ls3a_ipi *ipi = ls3a_ipi_irqchip(kvm);
 	gipiState *ipi_state =  &(ipi->ls3a_gipistate);
-	ls3a_ipi_lock(ipi);
+	unsigned long flags;
+
+	ls3a_ipi_lock(ipi, &flags);
 	memcpy(state, ipi_state, sizeof(gipiState));
-	ls3a_ipi_unlock(ipi);
+	ls3a_ipi_unlock(ipi, &flags);
 	return 0;
 }
 
@@ -188,13 +192,14 @@ int kvm_set_ls3a_ipi(struct kvm *kvm, struct loongson_gipiState *state)
 {
  	struct loongson_kvm_ls3a_ipi *ipi = ls3a_ipi_irqchip(kvm);
 	gipiState *ipi_state =  &(ipi->ls3a_gipistate);
+	unsigned long flags;
 
 	if (!ipi)
 		return -EINVAL;
 
-	ls3a_ipi_lock(ipi);
+	ls3a_ipi_lock(ipi, &flags);
 	memcpy(ipi_state, state, sizeof(gipiState));
-	ls3a_ipi_unlock(ipi);
+	ls3a_ipi_unlock(ipi, &flags);
 	return 0;
 }
 

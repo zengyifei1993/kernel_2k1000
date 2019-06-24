@@ -13,62 +13,85 @@
 #include "ls3a3000_ht_irq.h"
 #include "ls3a3000_router_irq.h"
 
-void ls7a_ioapic_lock(struct loongson_kvm_7a_ioapic *s)
-	__acquires(&s->lock)
+void ls7a_ioapic_lock(struct loongson_kvm_7a_ioapic *s, unsigned long *flags)
 {
-	spin_lock(&s->lock);
+	unsigned long tmp;
+	spin_lock_irqsave(&s->lock, tmp);
+	*flags = tmp;
 }
 
-void ls7a_ioapic_unlock(struct loongson_kvm_7a_ioapic *s)
-	__releases(&s->lock)
+void ls7a_ioapic_unlock(struct loongson_kvm_7a_ioapic *s, unsigned long *flags)
 {
-	spin_unlock(&s->lock);
+	unsigned long tmp;
+	tmp = *flags;
+	spin_unlock_irqrestore(&s->lock, tmp);
 }
 
-void kvm_ls7a_ioapic_update(struct kvm *kvm)
+static void kvm_ls7a_ioapic_raise(struct kvm *kvm, unsigned long mask)
 {
-	uint64_t irqnum,i;
+	unsigned long irqnum, val, tmp;
 	struct loongson_kvm_7a_ioapic *s = ls7a_ioapic_irqchip(kvm);
 	struct kvm_ls7a_ioapic_state *state;
 	struct kvm_mips_interrupt irq;
+	int i;
 
 	state = &s->ls7a_ioapic;
 	irq.cpu = -1;
-        if(state->intirr & (~state->int_mask) & (~state->htmsi_en)){
-#if 0
-		irq.irq = 3;
-		kvm_vcpu_ioctl_interrupt(vcpu,&irq);
-#else
-		state->intisr = (state->intirr & (~state->int_mask) &(~state->htmsi_en));
-		route_update_reg(kvm,0,1);
-#endif
-	}else{
-#if 0
-		irq.irq = -3;
-		kvm_vcpu_ioctl_interrupt(vcpu,&irq);
-#else
-		state->intisr &= (~state->htmsi_en);
-		route_update_reg(kvm,0,0);
-#endif
+	val = mask & state->intirr & (~state->int_mask);
+	if (val & (~state->htmsi_en)) {
+		tmp = val & (~state->htmsi_en);
+		if ((state->intisr & tmp) == 0) {
+			state->intisr |= tmp;
+			route_update_reg(kvm,0,1);
+		}
 	}
-       if(state->htmsi_en){
-               for(i = 0;i < 64;i++){
-                       if((((~state->intisr) & state->intirr) & state->htmsi_en)&(1ULL << i)){
-				state->intisr |= 1ULL << i;
+
+	if (val & state->htmsi_en) {
+		val &= state->htmsi_en;
+		for_each_set_bit(i, &val, 64) {
+			if ((state->intisr & (0x1ULL << i)) == 0) {
+				state->intisr |= 0x1ULL << i;
 				irqnum = state->htmsi_vector[i];
-				ht_irq_handler(kvm,irqnum,1);
-                               //qemu_set_irq(s->parent_irq[s->htmsi_vector[i]],1);
-                       }else if(((~(state->intisr |state->intirr))& state->htmsi_en) & (1ULL << i)){
-				irqnum = state->htmsi_vector[i];
-				ht_irq_handler(kvm,irqnum,0);
-                               //qemu_set_irq(s->parent_irq[s->htmsi_vector[i]],0);
-                       }
-               }
-        }
+				ht_irq_handler(kvm, irqnum, 1);
+			}
+		}
+
+	}
 	kvm->stat.lsvz_kvm_ls7a_ioapic_update++;
 }
 
+static void kvm_ls7a_ioapic_lower(struct kvm *kvm, unsigned long mask)
+{
+	unsigned long irqnum, tmp, val;
+	struct loongson_kvm_7a_ioapic *s = ls7a_ioapic_irqchip(kvm);
+	struct kvm_ls7a_ioapic_state *state;
+	struct kvm_mips_interrupt irq;
+	int i;
 
+	state = &s->ls7a_ioapic;
+	irq.cpu = -1;
+	val = mask & state->intisr;
+	if (val & (~state->htmsi_en)) {
+		tmp = val & (~state->htmsi_en);
+		if (state->intisr & tmp) {
+			state->intisr &= ~tmp;
+			route_update_reg(kvm, 0, 0);
+		}
+	}
+
+	if (val & state->htmsi_en) {
+		val &= state->htmsi_en;
+		for_each_set_bit(i, &val, 64) {
+			if (state->intisr & (0x1ULL << i)) {
+				state->intisr &= ~(0x1ULL << i);
+				irqnum = state->htmsi_vector[i];
+				ht_irq_handler(kvm, irqnum, 0);
+			}
+		}
+
+	}
+	kvm->stat.lsvz_kvm_ls7a_ioapic_update++;
+}
 
 int kvm_ls7a_ioapic_set_irq(struct kvm *kvm, int irq, int level)
 {
@@ -80,17 +103,22 @@ int kvm_ls7a_ioapic_set_irq(struct kvm *kvm, int irq, int level)
 	BUG_ON(irq < 0 || irq >= LS7A_IOAPIC_NUM_PINS);
 
 	if (state->intedge & mask) {
-	    /* edge triggered */
-	    /*TODO*/
+		/* edge triggered */
+		/* TODO */
 	} else {
-	    /* level triggered */
-	    if (!!level) {
-	        state->intirr |= mask;
-	    } else {
-	        state->intirr &= ~mask;
-	    }
+		/* level triggered */
+		if (!!level) {
+			if ((state->intirr & mask) == 0) {
+				state->intirr |= mask;
+				kvm_ls7a_ioapic_raise(kvm, mask);
+			}
+		} else {
+			if (state->intirr & mask) {
+				state->intirr &= ~mask;
+				kvm_ls7a_ioapic_lower(kvm, mask);
+			}
+		}
 	}
-	kvm_ls7a_ioapic_update(kvm);
 	kvm->stat.lsvz_kvm_ls7a_ioapic_set_irq++;
 	return 0;
 }
@@ -103,7 +131,7 @@ int ls7a_ioapic_reg_write(struct loongson_kvm_7a_ioapic *s,
 
         int64_t offset_tmp;
         uint64_t offset;
-	uint64_t data;
+	uint64_t data, old;
 
         offset = addr&0xfff;
 	kvm = s->kvm;
@@ -112,8 +140,12 @@ int ls7a_ioapic_reg_write(struct loongson_kvm_7a_ioapic *s,
 		data = *(uint64_t *)val;
                 switch(offset){
                         case LS7A_IOAPIC_INT_MASK_OFFSET:
+				old = state->int_mask;
                                 state->int_mask = data;
-                                kvm_ls7a_ioapic_update(kvm);
+				if (old & ~data)
+					kvm_ls7a_ioapic_raise(kvm, old & ~data);
+				else if (~old & data)
+					kvm_ls7a_ioapic_lower(kvm, ~old & data);
                                 break;
                         case LS7A_IOAPIC_INT_STATUS_OFFSET:
                                 state->intisr = data;
@@ -122,8 +154,8 @@ int ls7a_ioapic_reg_write(struct loongson_kvm_7a_ioapic *s,
                                 state->intedge = data;
                                 break;
                         case LS7A_IOAPIC_INT_CLEAR_OFFSET:
+				kvm_ls7a_ioapic_lower(kvm, data);
 				state->intisr &= (~data);
-				kvm_ls7a_ioapic_update(kvm);
                                 break;
                         case LS7A_IOAPIC_INT_POL_OFFSET:
                                 state->int_polarity = data;
@@ -275,9 +307,11 @@ int kvm_get_ls7a_ioapic(struct kvm *kvm, struct kvm_loongson_ls7a_ioapic_state *
 {
 	struct loongson_kvm_7a_ioapic *ls7a_ioapic = ls7a_ioapic_irqchip(kvm);
 	struct kvm_ls7a_ioapic_state *ioapic_state =  &(ls7a_ioapic->ls7a_ioapic);
-	ls7a_ioapic_lock(ls7a_ioapic);
+	unsigned long flags;
+
+	ls7a_ioapic_lock(ls7a_ioapic, &flags);
 	memcpy(state, ioapic_state, sizeof(struct kvm_ls7a_ioapic_state));
-	ls7a_ioapic_unlock(ls7a_ioapic);
+	ls7a_ioapic_unlock(ls7a_ioapic, &flags);
 	kvm->stat.lsvz_kvm_get_ls7a_ioapic++;
 	return 0;
 }
@@ -286,13 +320,13 @@ int kvm_set_ls7a_ioapic(struct kvm *kvm, struct kvm_loongson_ls7a_ioapic_state *
 {
 	struct loongson_kvm_7a_ioapic *ls7a_ioapic = ls7a_ioapic_irqchip(kvm);
 	struct kvm_ls7a_ioapic_state *ioapic_state =  &(ls7a_ioapic->ls7a_ioapic);
+	unsigned long flags;
 	if (!ls7a_ioapic)
 		return -EINVAL;
 
-	ls7a_ioapic_lock(ls7a_ioapic);
+	ls7a_ioapic_lock(ls7a_ioapic, &flags);
 	memcpy(ioapic_state, state, sizeof(struct kvm_ls7a_ioapic_state));
-	kvm_ls7a_ioapic_update(kvm);
-	ls7a_ioapic_unlock(ls7a_ioapic);
+	ls7a_ioapic_unlock(ls7a_ioapic, &flags);
 	kvm->stat.lsvz_kvm_set_ls7a_ioapic++;
 	return 0;
 }
