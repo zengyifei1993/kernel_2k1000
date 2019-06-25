@@ -181,6 +181,8 @@ static inline void do_perfcnt_IRQ(void)
 #define LOONGSON_NODE_COUNTER_EN        (_ULCAST_(1) <<  1)
 
 #define LOONGSON_CPUCFG_CONFIG_FIELD2    0x2
+#define LOONGSON_CPUCFG_CONFIG_FIELD4    0x4
+#define LOONGSON_CPUCFG_CONFIG_FIELD5    0x5
 
 #define LOONGSON_STABLE_COUNT_EN        (1ULL << 47)
 
@@ -572,4 +574,26 @@ struct cpucfg_info{
 };
 
 void loongson_nodecounter_adjust(void);
+static inline unsigned int calc_const_freq(void)
+{
+	unsigned int res;
+	unsigned int base_freq;
+	unsigned int cfm, cfd;
+
+	res = read_cfg(LOONGSON_CPUCFG_CONFIG_FIELD2);
+	if (!(res & MIPS_LSE_LLFTP))
+		return 0;
+
+	base_freq = read_cfg(LOONGSON_CPUCFG_CONFIG_FIELD4);
+	res = read_cfg(LOONGSON_CPUCFG_CONFIG_FIELD5);
+	cfm = res & 0xffff;
+	cfd = (res >> 16) & 0xffff;
+
+	if (!base_freq || !cfm || !cfd)
+		return 0;
+	else
+		return (base_freq * cfm / cfd);
+
+}
+
 #endif /* __ASM_MACH_LOONGSON_LOONGSON_H */

@@ -39,6 +39,43 @@ static int loongson3_next_event(unsigned long delta,
 	ls64_conf_write64(cnt, (void *)addr);
 	return 0;
 }
+
+static int sbl_cnt_next_event(unsigned long delta,
+                struct clock_event_device *evt)
+{
+	dwrite_csr(OFF_TIMER, delta | (0x1UL << 61));
+	return 0;
+}
+
+static int register_const_freq_timer(struct clock_event_device *cd, u32 freq,
+				unsigned long min_delta, unsigned long max_delta)
+{
+	unsigned int res = current_cpu_type() == CPU_LOONGSON3_COMP;
+	unsigned int const_freq = freq * 2;
+
+	if (res)
+		const_freq = calc_const_freq();
+
+	if (const_freq) {
+		cd->name		= "CONST_TIMER";
+		cd->rating		= res ? 380 : 350;
+		cd->set_next_event	= res ? sbl_cnt_next_event : loongson3_next_event;
+		/* switch intr source */
+		res = read_c0_config6();
+		res &= ~MIPS_CONF6_INNTIMER;
+		res |= MIPS_CONF6_EXTIMER;
+		write_c0_config6(res);
+
+		min_delta = 0x600;
+		max_delta = (1UL << 48) - 1;
+	} else {
+
+		const_freq = freq;
+	}
+
+	clockevents_config_and_register(cd, const_freq, min_delta, max_delta);
+	return 0;
+}
 #endif
 
 /*
@@ -205,7 +242,7 @@ int  r4k_clockevent_init(void)
 {
 	unsigned int cpu = smp_processor_id();
 	struct clock_event_device *cd;
-	unsigned int irq;
+	int irq;
 
 	if (!cpu_has_counter || !mips_hpt_frequency)
 		return -ENXIO;
@@ -234,31 +271,15 @@ int  r4k_clockevent_init(void)
 	cd->set_mode		= mips_set_clock_mode;
 	cd->event_handler	= mips_event_handler;
 
-#if !defined(CONFIG_LOONGSON3_ENHANCEMENT)
 #ifdef CONFIG_CEVT_GIC
 	if (!gic_present)
 #endif
-	clockevents_config_and_register(cd, mips_hpt_frequency, 0x300, 0x7fffffff);
+#if defined(CONFIG_LOONGSON3_ENHANCEMENT) && !defined(CONFIG_KVM_GUEST_LS3A3000)
+	register_const_freq_timer(cd, mips_hpt_frequency, 0x300, 0x7fffffff);
 #else
-#if !defined(CONFIG_KVM_GUEST_LS3A3000)
-
-	cd->name		= "loongson3";
-	cd->features		= CLOCK_EVT_FEAT_ONESHOT;
-
-	cd->rating		= 300;
-	cd->irq			= irq;
-	cd->cpumask		= cpumask_of(cpu);
-	cd->set_next_event	= loongson3_next_event;
-	cd->set_mode		= mips_set_clock_mode;
-	cd->event_handler	= mips_event_handler;
-
-	clockevents_config_and_register(cd, mips_hpt_frequency * 2, 0x600, ((1UL << 48) - 1));
-	irq = read_c0_config6();
-	irq &= ~MIPS_CONF6_INNTIMER;
-	irq |= MIPS_CONF6_EXTIMER;
-	write_c0_config6(irq);
+	clockevents_config_and_register(cd, mips_hpt_frequency, 0x300, 0x7fffffff);
 #endif
-#endif
+
 	if (cp0_timer_irq_installed)
 		return 0;
 
@@ -268,5 +289,4 @@ int  r4k_clockevent_init(void)
 
 	return 0;
 }
-
 #endif /* Not CONFIG_MIPS_MT_SMTC */

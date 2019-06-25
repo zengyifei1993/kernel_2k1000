@@ -222,7 +222,9 @@ static void  loongson3_comp_init_secondary(void)
 
 static void  loongson3_comp_smp_finish(void)
 {
+#ifndef CONFIG_LOONGSON3_ENHANCEMENT
 	write_c0_compare(read_c0_count() + mips_hpt_frequency/HZ);
+#endif
 	local_irq_enable();
 	dwrite_csr(LOONGSON_MAIL_BUF_OFFSET, 0);
 	if (verbose || system_state == SYSTEM_BOOTING)

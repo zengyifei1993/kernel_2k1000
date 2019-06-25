@@ -39,8 +39,6 @@ static struct clocksource clocksource_loongson = {
        .flags          = CLOCK_SOURCE_IS_CONTINUOUS,
 };
 
-
-
 unsigned long long notrace sched_clock(void)
 {
 	/* 64-bit arithmatic can overflow, so use 128-bit.  */
@@ -65,18 +63,24 @@ unsigned long long notrace sched_clock(void)
 	return rv;
 }
 
+
 static void loongson3_init_clock(void)
 {
-	int res = (read_c0_prid() & 0xffff);
-	if (res >=0x6308 && res < 0x630f) {
+	unsigned long freq;
+
+	int res = (read_c0_prid() & 0xffffff);
+	if (res >= 0x146308 && res < 0x14630f) {
 		/* for 3a2000/3a3000 const-freq counter freq equal cpu_clock_freq */
-		clocksource_loongson.rating = cpu_clock_freq/400000000;
-		clocksource_register_hz(&clocksource_loongson, cpu_clock_freq);
-	} else {
+		clocksource_loongson.rating = 320;
+		freq = cpu_clock_freq;
+	} else if (current_cpu_type() == CPU_LOONGSON3_COMP) {
+		clocksource_loongson.rating = 380;
+		freq = calc_const_freq();
+	} else
 		panic("old loongson 3 cpu does not support const-frequence counter!");
-	}
 
-
+	clocksource_register_hz(&clocksource_loongson, freq);
+	pr_info("loongson const clocksource register @%ldMhz!\n", freq/1000000);
 }
 #else
 static void loongson3_init_clock(void) {}
