@@ -6,4 +6,10 @@ cflags-$(CONFIG_MACH_LOONGSON2) += -I$(srctree)/arch/mips/include/asm/mach-loong
 else
 cflags-$(CONFIG_MACH_LOONGSON2) += -I$(srctree)/arch/mips/include/asm/mach-loongson2 -mno-branch-likely -Wa,-mnofix-ls3a-llsc
 endif
+
+cflags-y += -Wa$(comma)--trap
+ifeq ($(call cc-option-yn, -Wa$(comma)-mloongson-ext), y)
+cflags-y += -Wa$(comma)-mloongson-ext
+endif
+
 load-$(CONFIG_MACH_LOONGSON2) += 0xffffffff80200000
