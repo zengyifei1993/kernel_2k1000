@@ -1434,22 +1434,20 @@ static inline void cpu_probe_loongson(struct cpuinfo_mips *c, unsigned int cpu)
 		}
 		break;
 #ifdef CONFIG_CPU_LOONGSON3
+	case PRID_REV_LOONGSON3A_R4_0:
 	default:
 		c->cputype = CPU_LOONGSON3_COMP;
 		__cpu_name[cpu] = "ICT Loongson-3";
 		set_elf_platform(cpu, "loongson3a");
 		set_isa(c, MIPS_CPU_ISA_M64R2);
-		__cpu_full_name[cpu] = "ICT Loongson-3 Compatible Processor";
-
+		__cpu_full_name[cpu] = "ICT Loongson-3A R4 (Loongson-3A4000)";
 		decode_configs(c);
 		c->options |= MIPS_CPU_FTLB | MIPS_CPU_TLBINV | MIPS_CPU_LDPTE;
 		c->lses |= MIPS_LSE_CPUCFG;
 		if (read_cfg(LOONGSON_CPUCFG_CONFIG_FIELD2) & MIPS_LSE_LAMO){
 			c->lses |= MIPS_HAS_LSE_LAMO;
 		}
-
 		decode_cfg(c);
-
 		break;
 #endif
 	}
