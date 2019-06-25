@@ -342,7 +342,7 @@ enum emulation_result {
 #define MIPS3_PG_SHIFT		6
 #define MIPS3_PG_FRAME		0x3fffffc0
 
-#define VPN2_MASK		0xffffe000
+#define VPN2_MASK		0xffffffffe000
 #define KVM_ENTRYHI_ASID	MIPS_ENTRYHI_ASID
 #define TLB_IS_GLOBAL(x)	((x).tlb_lo[0] & (x).tlb_lo[1] & ENTRYLO_G)
 #define TLB_VPN2(x)		((x).tlb_hi & VPN2_MASK)
