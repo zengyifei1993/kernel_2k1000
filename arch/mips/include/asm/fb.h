@@ -4,6 +4,7 @@
 #include <linux/fb.h>
 #include <linux/fs.h>
 #include <asm/page.h>
+#include <asm/cpu-type.h>
 
 static inline void fb_pgprotect(struct file *file, struct vm_area_struct *vma,
 				unsigned long off)
@@ -13,7 +14,8 @@ static inline void fb_pgprotect(struct file *file, struct vm_area_struct *vma,
 
 static inline int fb_is_primary_device(struct fb_info *info)
 {
-	if(!cpu_has_vz)
+	if(!cpu_has_vz && ((current_cpu_type() == CPU_LOONGSON3)||
+			  (current_cpu_type() == CPU_LOONGSON3_COMP)))
 		return 1;
 	else
 		return 0;
