@@ -1615,7 +1615,7 @@ enum emulation_result kvm_mips_emulate_store(union mips_instruction inst,
 	unsigned long curr_pc;
 	unsigned int imme;
 	unsigned long ls7a_ioapic_reg_base;
-	unsigned long ht_control_reg_base;
+	unsigned long ht_control_reg_base, flags;
 
 	/*
 	 * Update PC and hold onto current PC in case there is
@@ -1878,36 +1878,36 @@ enum emulation_result kvm_mips_emulate_store(union mips_instruction inst,
 	if(((run->mmio.phys_addr & (~0xfffUL))== ls7a_ioapic_reg_base) &&
 					ls7a_ioapic_in_kernel(vcpu->kvm)) {
 		vcpu->stat.lsvz_ls7a_pic_write_exits++;
-		ls7a_ioapic_lock(vcpu->kvm->arch.v_ioapic);
+		ls7a_ioapic_lock(vcpu->kvm->arch.v_ioapic, &flags);
 		ls7a_ioapic_reg_write(vcpu->kvm->arch.v_ioapic,run->mmio.phys_addr,run->mmio.len,data);
-		ls7a_ioapic_unlock(vcpu->kvm->arch.v_ioapic);
+		ls7a_ioapic_unlock(vcpu->kvm->arch.v_ioapic, &flags);
 		return EMULATE_DONE;
 	}
 
 	if(((run->mmio.phys_addr & (~0xffUL))== ht_control_reg_base) &&
 					ls3a_htirq_in_kernel(vcpu->kvm)) {
 		vcpu->stat.lsvz_ls3a_ht_write_exits++;
-		ls7a_ioapic_lock(vcpu->kvm->arch.v_ioapic);
+		ls7a_ioapic_lock(vcpu->kvm->arch.v_ioapic, &flags);
 		ls3a_ht_intctl_write(vcpu->kvm,run->mmio.phys_addr,run->mmio.len,data);
-		ls7a_ioapic_unlock(vcpu->kvm->arch.v_ioapic);
+		ls7a_ioapic_unlock(vcpu->kvm->arch.v_ioapic, &flags);
 		return EMULATE_DONE;
 	}
 
 	if(((run->mmio.phys_addr & (~0xffUL))== INT_ROUTER_REGS_BASE) &&
 					ls3a_router_in_kernel(vcpu->kvm)) {
 		vcpu->stat.lsvz_ls3a_router_write_exits++;
-		ls7a_ioapic_lock(vcpu->kvm->arch.v_ioapic);
+		ls7a_ioapic_lock(vcpu->kvm->arch.v_ioapic, &flags);
 		ls3a_router_intctl_write(vcpu->kvm,run->mmio.phys_addr,run->mmio.len,data);
-		ls7a_ioapic_unlock(vcpu->kvm->arch.v_ioapic);
+		ls7a_ioapic_unlock(vcpu->kvm->arch.v_ioapic, &flags);
 		return EMULATE_DONE;
 	}
 
 	if(((run->mmio.phys_addr & (~(0x3ffUL|(0x3UL<< NODE_ADDRSPACE_SHIFT)))) == SMP_MAILBOX) &&
 						ls3a_ipi_in_kernel(vcpu->kvm)) {
 		vcpu->stat.lsvz_ls3a_pip_write_exits++;
-		ls3a_ipi_lock(vcpu->kvm->arch.v_gipi);
+		ls3a_ipi_lock(vcpu->kvm->arch.v_gipi, &flags);
 		ls3a_gipi_writel(vcpu->kvm->arch.v_gipi,run->mmio.phys_addr,run->mmio.len,data);
-		ls3a_ipi_unlock(vcpu->kvm->arch.v_gipi);
+		ls3a_ipi_unlock(vcpu->kvm->arch.v_gipi, &flags);
  		return EMULATE_DONE;
  	}
 
@@ -1968,7 +1968,7 @@ enum emulation_result kvm_mips_emulate_load(union mips_instruction inst,
 	u32 rs;
 	int offset;
 	unsigned int imme;
-	unsigned long ls7a_ioapic_reg_base;
+	unsigned long ls7a_ioapic_reg_base, flags;
 	unsigned long ht_control_reg_base;
 	unsigned long dma_nodeid_offset_base;
 
@@ -2258,9 +2258,9 @@ enum emulation_result kvm_mips_emulate_load(union mips_instruction inst,
 	if(((run->mmio.phys_addr & (~0xfffUL))== ls7a_ioapic_reg_base) &&
 					ls7a_ioapic_in_kernel(vcpu->kvm)){
 		vcpu->stat.lsvz_ls7a_pic_read_exits++;
-		ls7a_ioapic_lock(vcpu->kvm->arch.v_ioapic);
+		ls7a_ioapic_lock(vcpu->kvm->arch.v_ioapic, &flags);
 		ls7a_ioapic_reg_read(vcpu->kvm->arch.v_ioapic,run->mmio.phys_addr,run->mmio.len,&vcpu->arch.gprs[rt]);
-		ls7a_ioapic_unlock(vcpu->kvm->arch.v_ioapic);
+		ls7a_ioapic_unlock(vcpu->kvm->arch.v_ioapic, &flags);
 		vcpu->arch.pc = vcpu->arch.io_pc;
 		vcpu->mmio_needed = 0;
 		return EMULATE_DONE;
@@ -2269,9 +2269,9 @@ enum emulation_result kvm_mips_emulate_load(union mips_instruction inst,
 	if(((run->mmio.phys_addr & (~0xffUL))== ht_control_reg_base) &&
 					ls3a_htirq_in_kernel(vcpu->kvm)){
 		vcpu->stat.lsvz_ls3a_ht_read_exits++;
-		ls7a_ioapic_lock(vcpu->kvm->arch.v_ioapic);
+		ls7a_ioapic_lock(vcpu->kvm->arch.v_ioapic, &flags);
 		ls3a_ht_intctl_read(vcpu->kvm,run->mmio.phys_addr,run->mmio.len,&vcpu->arch.gprs[rt]);
-		ls7a_ioapic_unlock(vcpu->kvm->arch.v_ioapic);
+		ls7a_ioapic_unlock(vcpu->kvm->arch.v_ioapic, &flags);
 		vcpu->arch.pc = vcpu->arch.io_pc;
 		vcpu->mmio_needed = 0;
 		return EMULATE_DONE;
@@ -2280,9 +2280,9 @@ enum emulation_result kvm_mips_emulate_load(union mips_instruction inst,
 	if(((run->mmio.phys_addr & (~0xffUL))== INT_ROUTER_REGS_BASE) &&
 					ls3a_router_in_kernel(vcpu->kvm)){
 		vcpu->stat.lsvz_ls3a_router_read_exits++;
-		ls7a_ioapic_lock(vcpu->kvm->arch.v_ioapic);
+		ls7a_ioapic_lock(vcpu->kvm->arch.v_ioapic, &flags);
 		ls3a_router_intctl_read(vcpu->kvm,run->mmio.phys_addr,run->mmio.len,&vcpu->arch.gprs[rt]);
-		ls7a_ioapic_unlock(vcpu->kvm->arch.v_ioapic);
+		ls7a_ioapic_unlock(vcpu->kvm->arch.v_ioapic, &flags);
 		vcpu->arch.pc = vcpu->arch.io_pc;
 		vcpu->mmio_needed = 0;
 		return EMULATE_DONE;
@@ -2291,9 +2291,9 @@ enum emulation_result kvm_mips_emulate_load(union mips_instruction inst,
 	if(((run->mmio.phys_addr & (~(0x3ffUL|(0x3UL<< NODE_ADDRSPACE_SHIFT)))) == SMP_MAILBOX) &&
 						ls3a_ipi_in_kernel(vcpu->kvm)){
 		vcpu->stat.lsvz_ls3a_pip_read_exits++;
-		ls3a_ipi_lock(vcpu->kvm->arch.v_gipi);
+		ls3a_ipi_lock(vcpu->kvm->arch.v_gipi, &flags);
 		ls3a_gipi_readl(vcpu->kvm->arch.v_gipi,run->mmio.phys_addr,run->mmio.len,&vcpu->arch.gprs[rt]);
-		ls3a_ipi_unlock(vcpu->kvm->arch.v_gipi);
+		ls3a_ipi_unlock(vcpu->kvm->arch.v_gipi, &flags);
 		vcpu->arch.pc = vcpu->arch.io_pc;
 		vcpu->mmio_needed = 0;
  		return EMULATE_DONE;

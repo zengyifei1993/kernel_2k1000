@@ -1006,6 +1006,7 @@ int kvm_vm_ioctl_irq_line(struct kvm *kvm, struct kvm_irq_level *irq_level,
 	unsigned int irq_type, vcpu_idx, irq_num,ret;
 	int nrcpus = atomic_read(&kvm->online_vcpus);
 	bool level = irq_level->level;
+	unsigned long flags;
 
 	irq_type = (irq >> KVM_LOONGSON_IRQ_TYPE_SHIFT) & KVM_LOONGSON_IRQ_TYPE_MASK;
 	vcpu_idx = (irq >> KVM_LOONGSON_IRQ_VCPU_SHIFT) & KVM_LOONGSON_IRQ_VCPU_MASK;
@@ -1019,9 +1020,9 @@ int kvm_vm_ioctl_irq_line(struct kvm *kvm, struct kvm_irq_level *irq_level,
 		if (vcpu_idx >= nrcpus)
 			return -EINVAL;
 
-		ls7a_ioapic_lock(ls7a_ioapic_irqchip(kvm));
+		ls7a_ioapic_lock(ls7a_ioapic_irqchip(kvm), &flags);
 		ret = kvm_ls7a_ioapic_set_irq(kvm,irq_num,level);
-		ls7a_ioapic_unlock(ls7a_ioapic_irqchip(kvm));
+		ls7a_ioapic_unlock(ls7a_ioapic_irqchip(kvm), &flags);
 		return ret;
 	}
 	kvm->stat.lsvz_kvm_vm_ioctl_irq_line++;

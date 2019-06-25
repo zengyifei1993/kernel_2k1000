@@ -38,34 +38,32 @@ HT_IRQ_ENABLE_REG6,
 HT_IRQ_ENABLE_REG7
 };
 
+#define ls3a_ht_irq_lock(s, flags)	spin_lock_irqsave(&s->lock, flags)
+#define ls3a_ht_irq_unlock(s, flags)	spin_unlock_irqrestore(&s->lock, flags)
 
-
-void ls3a_ht_irq_lock(struct loongson_kvm_ls3a_htirq *s)
-	__acquires(&s->lock)
+static inline void ht_raise_irq(struct kvm *kvm,int regnum, unsigned int mask)
 {
-	spin_lock(&s->lock);
+	uint32_t ier;
+	struct loongson_kvm_ls3a_htirq *s = ls3a_ht_irqchip(kvm);
+
+	ier = *(uint32_t *)(s->ht_irq_reg + ht_irq_enable[regnum]);
+	if (mask & ier) {
+		route_update_reg(kvm, regnum+24, 1);
+	}
 }
 
-void ls3a_ht_irq_unlock(struct loongson_kvm_ls3a_htirq *s)
-	__releases(&s->lock)
+static inline void ht_lower_irq(struct kvm *kvm,int regnum, unsigned int mask)
 {
-	spin_unlock(&s->lock);
-}
+	uint32_t isr, ier;
+	struct loongson_kvm_ls3a_htirq *s = ls3a_ht_irqchip(kvm);
 
+	isr = *(uint32_t *)(s->ht_irq_reg + ht_irq_vector[regnum]);
+	ier = *(uint32_t *)(s->ht_irq_reg + ht_irq_enable[regnum]);
 
-void ht_update_irqreg(struct kvm *kvm,int regnum ,int disable)
-{
-    uint32_t isr, ier;
-    struct loongson_kvm_ls3a_htirq *s = ls3a_ht_irqchip(kvm);
+	if (((isr & ier) == 0) && (mask & ier)) {
+		route_update_reg(kvm, regnum + 24, 0);
+	}
 
-    isr = *(uint32_t *)(s->ht_irq_reg + ht_irq_vector[regnum]);
-    ier = *(uint32_t *)(s->ht_irq_reg + ht_irq_enable[regnum]);
-
-        if((isr&ier) && !disable){
-                route_update_reg(kvm,regnum+24,1);
-        }else{
-                route_update_reg(kvm,regnum+24,0);
-        }
 }
 
 void ht_irq_handler(struct kvm *kvm,int irq,int level)
@@ -75,12 +73,13 @@ void ht_irq_handler(struct kvm *kvm,int irq,int level)
 
 	reg_num = irq/32;
 	reg_bit = irq%32;
-	if(level == 1){
+	if (level == 1) {
 		*(uint32_t *)(s->ht_irq_reg + ht_irq_vector[reg_num]) |=  1 << reg_bit;
+		ht_raise_irq(kvm, reg_num, 1 << reg_bit);
 	}else{
 		*(uint32_t *)(s->ht_irq_reg + ht_irq_vector[reg_num]) &= ~(1 << reg_bit);
+		ht_lower_irq(kvm, reg_num, 1 << reg_bit);
 	}
-	ht_update_irqreg(kvm,reg_num,0);
 }
 
 uint64_t ls3a_ht_intctl_read(struct kvm *kvm, gpa_t addr, unsigned size,void* val)
@@ -121,12 +120,18 @@ uint64_t ls3a_ht_intctl_read(struct kvm *kvm, gpa_t addr, unsigned size,void* va
 
 void ls3a_ht_intctl_write(struct kvm *kvm, gpa_t addr,unsigned size, const void *val)
 {
-        uint32_t regnum;
-        uint64_t offset,data,cont=0;
+        uint32_t regnum, old, new, isr;
+        uint64_t offset,data;
 	uint8_t *mem;
 	struct loongson_kvm_ls3a_htirq *s = ls3a_ht_irqchip(kvm);
 
-        offset = addr&0xff;
+	offset = addr & 0xff;
+	if (offset & (size -1 )) {
+		printk("%s(%d):unaligned address access %llx size %d \n",
+			__FUNCTION__, __LINE__, addr, size);
+		return;
+
+	}
 	mem = s->ht_irq_reg;
 
 	data = *(uint64_t *)val;
@@ -141,12 +146,12 @@ void ls3a_ht_intctl_write(struct kvm *kvm, gpa_t addr,unsigned size, const void 
         case HT_IRQ_VECTOR_REG6:
         case HT_IRQ_VECTOR_REG7:
                 while(size >= 4){
-                        regnum = (offset - HT_IRQ_VECTOR_REG0)/4;
-                        *(uint32_t *)(mem + offset) &= ~((uint32_t)(data>>(32*cont)));
-                        ht_update_irqreg(kvm,regnum,0);
+                        regnum = (offset - HT_IRQ_VECTOR_REG0) >> 2;
+                        *(uint32_t *)(mem + offset) &= ~((uint32_t)data);
+			ht_lower_irq(kvm, regnum, (uint32_t)data);
 			offset += 4;
 			size -= 4;
-			cont++;
+			data = data >> 32;
                 }
                 break;
         case HT_IRQ_ENABLE_REG0:
@@ -158,12 +163,22 @@ void ls3a_ht_intctl_write(struct kvm *kvm, gpa_t addr,unsigned size, const void 
         case HT_IRQ_ENABLE_REG6:
         case HT_IRQ_ENABLE_REG7:
                 while(size >= 4){
-                        regnum = (offset - HT_IRQ_ENABLE_REG0)/4;
-                        *(uint32_t *)(mem + offset) = (uint32_t)(data>>(32*cont));
-                        ht_update_irqreg(kvm,regnum,0);
+                        regnum = (offset - HT_IRQ_ENABLE_REG0) >> 2;
+			old = *(uint32_t *)(mem + offset);
+			new = (uint32_t)data;
+                        *(uint32_t *)(mem + offset) = new;
+			isr = *(uint32_t *)(mem + ht_irq_vector[regnum]);
+			if ((new & ~old) & isr) {
+				if ((isr & old) == 0)
+					route_update_reg(kvm, regnum+24, 1);
+			} else if ((old & ~new) & isr) {
+				if ((isr & new) == 0)
+					route_update_reg(kvm, regnum+24, 0);
+			}
+
 			offset += 4;
 			size -= 4;
-			cont++;
+			data = data >> 32;
                 }
                 break;
         default:
@@ -251,9 +266,11 @@ int kvm_get_ls3a_ht_irq(struct kvm *kvm, uint8_t *state)
 {
         struct loongson_kvm_ls3a_htirq *ls3a_ht_irq = ls3a_ht_irqchip(kvm);
         uint8_t *ht_irq_reg =  ls3a_ht_irq->ht_irq_reg;
-        ls3a_ht_irq_lock(ls3a_ht_irq);
+	unsigned long flags;
+
+        ls3a_ht_irq_lock(ls3a_ht_irq, flags);
         memcpy(state, ht_irq_reg, 0x100);
-        ls3a_ht_irq_unlock(ls3a_ht_irq);
+        ls3a_ht_irq_unlock(ls3a_ht_irq, flags);
         kvm->stat.lsvz_kvm_get_ls3a_ht_irq++;
         return 0;
 }
@@ -262,12 +279,13 @@ int kvm_set_ls3a_ht_irq(struct kvm *kvm, uint8_t *state)
 {
         struct loongson_kvm_ls3a_htirq *ls3a_ht_irq = ls3a_ht_irqchip(kvm);
         uint8_t *ht_irq_reg =  ls3a_ht_irq->ht_irq_reg;
+	unsigned long flags;
         if (!ht_irq_reg)
                 return -EINVAL;
 
-        ls3a_ht_irq_lock(ls3a_ht_irq);
+        ls3a_ht_irq_lock(ls3a_ht_irq, flags);
         memcpy(ht_irq_reg, state, 0x100);
-        ls3a_ht_irq_unlock(ls3a_ht_irq);
+        ls3a_ht_irq_unlock(ls3a_ht_irq, flags);
         kvm->stat.lsvz_kvm_set_ls3a_ht_irq++;
         return 0;
 }
