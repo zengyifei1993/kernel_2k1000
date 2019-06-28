@@ -250,6 +250,10 @@ extern struct device_node *of_get_next_available_child(
 extern struct device_node *of_get_child_by_name(const struct device_node *node,
 					const char *name);
 
+/* cache lookup */
+extern struct device_node *of_find_next_cache_node(const struct device_node *);
+extern int of_find_last_cache_level(unsigned int cpu);
+
 extern struct device_node *of_find_node_with_property(
 	struct device_node *from, const char *prop_name);
 
@@ -291,6 +295,8 @@ extern int of_device_is_available(const struct device_node *device);
 extern const void *of_get_property(const struct device_node *node,
 				const char *name,
 				int *lenp);
+extern struct device_node *of_get_cpu_node(int cpu, unsigned int *thread);
+extern int of_cpu_node_to_id(struct device_node *np);
 #define for_each_property_of_node(dn, pp) \
 	for (pp = dn->properties; pp != NULL; pp = pp->next)
 
@@ -523,6 +529,17 @@ static inline const void *of_get_property(const struct device_node *node,
 				int *lenp)
 {
 	return NULL;
+}
+
+static inline struct device_node *of_get_cpu_node(int cpu,
+					unsigned int *thread)
+{
+	return NULL;
+}
+
+static inline int of_cpu_node_to_id(struct device_node *np)
+{
+	return -ENODEV;
 }
 
 static inline int of_property_read_u64(const struct device_node *np,
