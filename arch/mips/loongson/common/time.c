@@ -21,15 +21,15 @@
 #if defined(CONFIG_LOONGSON3_ENHANCEMENT) && !defined(CONFIG_KVM_GUEST_LS3A3000)
 static cycle_t read_const_cntr64(struct clocksource *clk)
 {
-       cycle_t count;
-       __asm__ __volatile__(
-       "       .set push\n"
-       "       .set mips32r2\n"
-       "       rdhwr   %0, $30\n"
-       "       .set pop\n"
-       : "=r" (count));
+	cycle_t count;
+	__asm__ __volatile__(
+		"       .set push\n"
+		"       .set mips32r2\n"
+		"       rdhwr   %0, $30\n"
+		"       .set pop\n"
+		: "=r" (count));
 
-       return count;
+	return count;
 }
 
 static struct clocksource clocksource_loongson = {
