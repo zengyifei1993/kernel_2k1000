@@ -1221,7 +1221,7 @@ static int enable_restore_fp_context(int msa)
 out:
 	preempt_enable();
 
-	return 0;
+	return err;
 }
 
 asmlinkage void do_cpu(struct pt_regs *regs)
