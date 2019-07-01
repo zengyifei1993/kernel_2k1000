@@ -1826,6 +1826,9 @@ static int kvm_trap_vz_handle_cop_unusable(struct kvm_vcpu *vcpu)
 
 		kvm_own_fpu(vcpu);
 		er = EMULATE_DONE;
+	} else if (((cause & CAUSEF_CE) >> CAUSEB_CE) == 2) {
+		set_c0_status(ST0_CU2);
+		er = EMULATE_DONE;
 	}
 	/* other coprocessors not handled */
 
@@ -1835,6 +1838,7 @@ static int kvm_trap_vz_handle_cop_unusable(struct kvm_vcpu *vcpu)
 		break;
 
 	case EMULATE_FAIL:
+		kvm_err("Guest CU%d: unusable\n", (unsigned int)(cause & CAUSEF_CE) >> CAUSEB_CE);
 		run->exit_reason = KVM_EXIT_INTERNAL_ERROR;
 		ret = RESUME_HOST;
 		break;
