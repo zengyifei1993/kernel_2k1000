@@ -835,10 +835,12 @@ static unsigned int azx_max_codecs[AZX_NUM_DRIVERS] = {};
 static int azx_probe_continue(struct azx *chip)
 {
 	struct hda_loongson *hda = container_of(chip, struct hda_loongson, chip);
+	struct hdac_bus *bus = azx_bus(chip);
 	int dev = chip->dev_index;
 	int err;
 	struct device *snddev = chip->card->dev;
 
+	to_hda_bus(bus)->bus_probing = 1;
 	hda->probe_continued = 1;
 	err = azx_first_init(chip);
 	if (err < 0)
@@ -870,9 +872,10 @@ static int azx_probe_continue(struct azx *chip)
 	snd_hda_set_power_save(&chip->bus, power_save * 1000);
 	if (azx_has_pm_runtime(chip))
 		pm_runtime_put_noidle(snddev);
-	
+
 out_free:
 	complete_all(&hda->probe_wait);
+	to_hda_bus(bus)->bus_probing = 0;
 	return err;
 }
 
