@@ -346,10 +346,29 @@ static struct notifier_block hotplug_notifier_block = {
         .notifier_call = hotplug_notifier_call,
 };
 
+struct timer_list hotplug_timer;
+static void hotplug_timer_fn(unsigned long __data)
+{
+	bool ret;
+
+	ret = queue_delayed_work_on(0, system_wq, &event_scan_work, HZ);
+	if (ret == false) {
+		mod_timer_pending(&hotplug_timer, jiffies + 10);
+	}
+}
+
 static int hotplug_notifier_call(struct notifier_block *nb,
                                   unsigned long code, void *_param)
 {
-	queue_delayed_work_on(0, system_wq, &event_scan_work, 0);
+	bool ret;
+
+	ret = queue_delayed_work_on(0, system_wq, &event_scan_work, HZ);
+	if (ret == false) {
+		if (!timer_pending(&hotplug_timer)) {
+			hotplug_timer.expires = jiffies + 10;
+			add_timer_on(&hotplug_timer, 0);
+		}
+	}
 	return NOTIFY_OK;
 }
 
@@ -371,6 +390,7 @@ static int __init rtas_event_scan_init(void)
 	}
 
 	register_mips_hotplug_notifier(&hotplug_notifier_block);
+	setup_timer(&hotplug_timer, hotplug_timer_fn, (unsigned long)&event_scan_work);
 	return 0;
 }
 arch_initcall(rtas_event_scan_init);
