@@ -371,7 +371,11 @@
 		ori	a0, STATMASK
 		xori	a0, STATMASK
 		mtc0	a0, CP0_STATUS
+#ifdef CONFIG_GS464_CU2_ERRATA
+		li	v1, ST0_CU1 | ST0_CU2 | ST0_FR | ST0_IM
+#else
 		li	v1, ST0_CU1 | ST0_FR | ST0_IM
+#endif
 		and	a0, v1
 		LONG_L	v0, PT_STATUS(sp)
 		nor	v1, $0, v1
@@ -485,8 +489,8 @@
 		.macro	CLI
 #if !defined(CONFIG_MIPS_MT_SMTC)
 		mfc0	t0, CP0_STATUS
-#ifdef CONFIG_CPU_LOONGSON3
-		li	t1, ST0_CU0 | ST0_MM | STATMASK
+#ifdef CONFIG_GS464_CU2_ERRATA
+		li	t1, ST0_CU0 | ST0_CU2 | STATMASK
 #else
 		li	t1, ST0_CU0 | STATMASK
 #endif
@@ -524,8 +528,8 @@
 		.macro	STI
 #if !defined(CONFIG_MIPS_MT_SMTC)
 		mfc0	t0, CP0_STATUS
-#ifdef CONFIG_CPU_LOONGSON3
-		li	t1, ST0_CU0 | ST0_MM | STATMASK
+#ifdef CONFIG_GS464_CU2_ERRATA
+		li	t1, ST0_CU0 | ST0_CU2 | STATMASK
 #else
 		li	t1, ST0_CU0 | STATMASK
 #endif
@@ -591,8 +595,8 @@
 		move	ra, t0
 #endif /* CONFIG_MIPS_MT_SMTC */
 		mfc0	t0, CP0_STATUS
-#ifdef CONFIG_CPU_LOONGSON3
-		li	t1, ST0_CU0 | ST0_MM | (STATMASK & ~1)
+#ifdef CONFIG_GS464_CU2_ERRATA
+		li	t1, ST0_CU0 | ST0_CU2 | (STATMASK & ~1)
 #else
 		li	t1, ST0_CU0 | (STATMASK & ~1)
 #endif

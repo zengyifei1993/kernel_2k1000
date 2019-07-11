@@ -115,7 +115,12 @@ int copy_thread(unsigned long clone_flags, unsigned long usp,
 	childregs = (struct pt_regs *) childksp - 1;
 	/*  Put the stack after the struct pt_regs.  */
 	childksp = (unsigned long) childregs;
-	p->thread.cp0_status = read_c0_status() & ~(ST0_CU2|ST0_CU1);
+	p->thread.cp0_status = read_c0_status() &
+#ifdef	CONFIG_GS464_CU2_ERRATA
+		~ST0_CU1;		/* keep CU2, since 3A1000 need it in kernel */
+#else
+		~(ST0_CU2|ST0_CU1);
+#endif
 	if (unlikely(p->flags & PF_KTHREAD)) {
 		unsigned long status = p->thread.cp0_status;
 		memset(childregs, 0, sizeof(struct pt_regs));

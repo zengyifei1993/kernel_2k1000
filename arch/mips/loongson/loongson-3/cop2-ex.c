@@ -22,10 +22,41 @@
 #include <asm/uaccess.h>
 #include <asm/mipsregs.h>
 
+#ifdef CONFIG_GS464_CU2_ERRATA
+
+#define is_gs464() ((read_c0_prid() & 0xffff) == 0x6305)
+
+static void wr_gs464_cu2(void)
+{
+        unsigned int fpu_owned;
+
+        if (!is_gs464())
+                return;
+
+        preempt_disable();
+        fpu_owned = __is_fpu_owner();
+        set_c0_status(ST0_CU1 | ST0_CU2);
+        enable_fpu_hazard();
+        /* we do not need to change KSTK_STATUS(current) */
+        KSTK_STATUS(current) |= (ST0_CU1 | ST0_CU2);
+        /* If FPU is owned, we needn't init or restore fp */
+        if(!fpu_owned) {
+                set_thread_flag(TIF_USEDFPU);
+                if (!used_math()) {
+                        _init_fpu(current->thread.fpu.fcr31);
+                        set_used_math();
+                } else
+                        _restore_fp(current);
+        }
+        preempt_enable();
+}
+#else
+static void wr_gs464_cu2(void) {}
+#endif
 static int loongson_cu2_call(struct notifier_block *nfb, unsigned long action,
 	void *data)
 {
-	unsigned int res, fpu_owned, i;
+	unsigned int res, i;
 	unsigned long ra, value, value_next;
 	union mips_instruction insn;
 	struct pt_regs *regs = (struct pt_regs *)data;
@@ -37,22 +68,7 @@ static int loongson_cu2_call(struct notifier_block *nfb, unsigned long action,
 
 	switch (action) {
 	case CU2_EXCEPTION:
-		preempt_disable();
-		fpu_owned = __is_fpu_owner();
-		set_c0_status(ST0_CU1 | ST0_CU2);
-		enable_fpu_hazard();
-		KSTK_STATUS(current) |= (ST0_CU1 | ST0_CU2);
-		/* If FPU is owned, we needn't init or restore fp */
-		if(!fpu_owned) {
-			set_thread_flag(TIF_USEDFPU);
-			if (!used_math()) {
-				_init_fpu(current->thread.fpu.fcr31);
-				set_used_math();
-			} else
-				_restore_fp(current);
-		}
-		preempt_enable();
-
+                wr_gs464_cu2();
 		return NOTIFY_STOP;	/* Don't call default notifier */
 
 	case CU2_LWC2_OP:

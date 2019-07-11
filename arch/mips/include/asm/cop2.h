@@ -17,15 +17,7 @@ extern void octeon_cop2_save(struct octeon_cop2_state *);
 extern void octeon_cop2_restore(struct octeon_cop2_state *);
 
 #define cop2_save(r)		octeon_cop2_save(&(r)->thread.cp2)
-#define cop2_restore(r)		octeon_cop2_restore(&(r)->thread.cp2))
-
-#define cop2_present		1
-#define cop2_lazy_restore	1
-
-#elif defined(CONFIG_CPU_LOONGSON3)
-
-#define cop2_save(r)		do { (void)(r); } while (0)
-#define cop2_restore(r)		do { (void)(r); } while (0)
+#define cop2_restore(r)		octeon_cop2_restore(&(r)->thread.cp2)
 
 #define cop2_present		1
 #define cop2_lazy_restore	1
