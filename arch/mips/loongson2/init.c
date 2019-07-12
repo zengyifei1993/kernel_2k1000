@@ -23,6 +23,7 @@
 #include <linux/of_fdt.h>
 #include <asm/bootinfo.h>
 #include <asm/prom.h>
+#include <linux/dmi.h>
 
 #ifdef CONFIG_SMP
 #include <asm/smp.h>
@@ -72,6 +73,11 @@ void __init prom_init(void)
 
 	pr_info("FDT point@%p\n", fdtp);
 	__dt_setup_arch(fdtp);
+
+	printk("loongson2k dmi_scan_machine \n");
+	dmi_scan_machine();
+	dmi_memdev_walk();
+	dmi_set_dump_stack_arch_desc();
 
 #if defined(CONFIG_SMP)
 	register_smp_ops(&loongson_smp_ops);
