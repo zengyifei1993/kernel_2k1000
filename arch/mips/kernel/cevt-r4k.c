@@ -17,6 +17,9 @@
 #include <asm/cevt-r4k.h>
 #include <asm/gic.h>
 
+#define GSCFG_FLT_EN                (_ULCAST_(1) << 7)
+#define GSCFG_VLT_EN                (_ULCAST_(1) << 6)
+
 #if defined(CONFIG_LOONGSON3_ENHANCEMENT) && !defined(CONFIG_KVM_GUEST_LS3A3000)
 
 #include <loongson.h>
@@ -237,9 +240,27 @@ int c0_compare_int_usable(void)
 	return 1;
 }
 
+int r4k_event_enable(void)
+{
+	unsigned long long GSconfigFlag;
+
+	GSconfigFlag = read_c0_config6();
+	GSconfigFlag &= ~GSCFG_FLT_EN;
+	GSconfigFlag |= GSCFG_VLT_EN;
+	write_c0_config6(GSconfigFlag);
+
+	if (!(read_c0_config6() & GSconfigFlag)) {
+		printk(KERN_INFO "MIPS GSCFG_FLT and GSCFG_VLT incorrect\n");
+		return -EPERM;
+	}
+
+	return 0;
+}
+
 #ifndef CONFIG_MIPS_MT_SMTC
 int  r4k_clockevent_init(void)
 {
+	struct cpuinfo_mips *c = &current_cpu_data;
 	unsigned int cpu = smp_processor_id();
 	struct clock_event_device *cd;
 	int irq;
@@ -250,6 +271,17 @@ int  r4k_clockevent_init(void)
 	if (!c0_compare_int_usable())
 		return -ENXIO;
 
+	switch (c->cputype) {
+	case CPU_LOONGSON3:
+		break;
+	case CPU_LOONGSON3_COMP:
+		if (r4k_event_enable() == 0)
+			break;
+		else
+			return -ENXIO;
+	default:
+		break;
+	}
 	/*
 	 * With vectored interrupts things are getting platform specific.
 	 * get_c0_compare_int is a hook to allow a platform to return the

@@ -9,21 +9,22 @@
 #define STABLE_TIMER_PERIODIC_EN    (_ULCAST_(1) << 62)
 #define STABLE_TIMER_EN             (_ULCAST_(1) << 61)
 #define GSCFG_FLT_EN                (_ULCAST_(1) << 7)
+#define GSCFG_VLT_EN                (_ULCAST_(1) << 6)
 #define STABLE_TIMER_CFG            0x1060
-#define STABLE_PERIODIC_INIT        0x100000
 
 #define stabel_irq    7
 
 int stable_timer_irq_installed;
+static unsigned long long GSconfigFlag;
 
 static DEFINE_SPINLOCK(stable_lock);
 DEFINE_PER_CPU(struct clock_event_device, stable_clockevent_device);
 
 irqreturn_t stable_irq_handler(int irq, void *data)
 {
-    const int r2 = cpu_has_mips_r2;
-    struct clock_event_device *cd;
-    int cpu = smp_processor_id();
+	const int r2 = cpu_has_mips_r2;
+	struct clock_event_device *cd;
+	int cpu = smp_processor_id();
 
 	/*
 	 * Suckage alert:
@@ -39,21 +40,21 @@ irqreturn_t stable_irq_handler(int irq, void *data)
 	 * above we now know that the reason we got here must be a timer
 	 * interrupt.  Being the paranoiacs we are we check anyway.
 	 */
-    if (!r2 || (read_c0_cause() & (1 << 30))) {
-        /* Clear Count/Compare Interrupt */
-        write_c0_compare(read_c0_compare());
-        cd = &per_cpu(stable_clockevent_device, cpu);
-        cd->event_handler(cd);
-    }
+	if (!r2 || (read_c0_cause() & (1 << 30))) {
+		/* Clear Count/Compare Interrupt */
+		write_c0_compare(read_c0_compare());
+		cd = &per_cpu(stable_clockevent_device, cpu);
+		cd->event_handler(cd);
+	}
 
 out:
-    return IRQ_HANDLED;
+	return IRQ_HANDLED;
 }
 
 static struct irqaction stable_irq_irqaction = {
-    .handler = stable_irq_handler,
-    .flags = IRQF_PERCPU | IRQF_SHARED | IRQF_TIMER,
-    .name = "stable timer",
+	.handler = stable_irq_handler,
+	.flags = IRQF_PERCPU | IRQF_SHARED | IRQF_TIMER,
+	.name = "stable timer",
 };
 
 void stable_event_handler(struct clock_event_device *dev)
@@ -61,45 +62,59 @@ void stable_event_handler(struct clock_event_device *dev)
 }
 
 static void stable_set_mode(enum clock_event_mode mode,
-                struct clock_event_device *evt)
+		struct clock_event_device *evt)
 {
-    unsigned long  cfg;
+	unsigned long  cfg;
+	unsigned int period_init;
 
-    spin_lock(&stable_lock);
+	spin_lock(&stable_lock);
 
-    switch (mode) {
-        case CLOCK_EVT_MODE_PERIODIC:
-            printk(KERN_INFO "set stable clock event to periodic mode!\n");
-            cfg = dread_csr(STABLE_TIMER_CFG);
-            cfg |= (STABLE_TIMER_PERIODIC_EN | STABLE_TIMER_EN);
-            dwrite_csr(STABLE_TIMER_CFG, cfg | STABLE_PERIODIC_INIT);
-            break;
-        case CLOCK_EVT_MODE_ONESHOT:
-            printk(KERN_INFO "set stable clock event to oneshot mode!\n");
-            cfg = dread_csr(STABLE_TIMER_CFG);
-            /* set timer0 type
-             * 1 : periodic interrupt
-             * 0 : non-periodic(oneshot) interrupt
-             */
-            cfg &= ~STABLE_TIMER_PERIODIC_EN;
-            cfg |= STABLE_TIMER_EN;
-            dwrite_csr(STABLE_TIMER_CFG, cfg);
-            break;
-        case CLOCK_EVT_MODE_SHUTDOWN:
-        case CLOCK_EVT_MODE_UNUSED:
-        case CLOCK_EVT_MODE_RESUME:
-            break;
-    }
-    spin_unlock(&stable_lock);
+	switch (mode) {
+	case CLOCK_EVT_MODE_PERIODIC:
+		printk(KERN_INFO "set stable clock event to periodic mode!\n");
+		cfg = dread_csr(STABLE_TIMER_CFG);
+		cfg |= (STABLE_TIMER_PERIODIC_EN | STABLE_TIMER_EN);
+		period_init = calc_const_freq();
+		period_init = (period_init * 1000) / HZ;
+		dwrite_csr(STABLE_TIMER_CFG, cfg | period_init);
+		break;
+	case CLOCK_EVT_MODE_ONESHOT:
+		printk(KERN_INFO "set stable clock event to oneshot mode!\n");
+		cfg = dread_csr(STABLE_TIMER_CFG);
+		/* set timer0 type
+		 * 1 : periodic interrupt
+		 * 0 : non-periodic(oneshot) interrupt
+		 */
+		cfg &= ~STABLE_TIMER_PERIODIC_EN;
+		cfg |= STABLE_TIMER_EN;
+		dwrite_csr(STABLE_TIMER_CFG, cfg);
+		break;
+	case CLOCK_EVT_MODE_SHUTDOWN:
+	case CLOCK_EVT_MODE_UNUSED:
+	case CLOCK_EVT_MODE_RESUME:
+		break;
+	}
+	spin_unlock(&stable_lock);
 }
 
 static int stable_next_event(unsigned long delta,
-                struct clock_event_device *evt)
+		struct clock_event_device *evt)
 {
-    dread_csr(STABLE_TIMER_CFG);
-    dwrite_csr(STABLE_TIMER_CFG, delta | STABLE_TIMER_EN);
+	unsigned long cfg = 0;
 
-    return 0;
+	cfg &= ~STABLE_TIMER_PERIODIC_EN;
+	cfg |= STABLE_TIMER_EN;
+	dwrite_csr(STABLE_TIMER_CFG, delta | cfg);
+
+	return 0;
+}
+
+static void stable_event_enable(void)
+{
+	GSconfigFlag = read_c0_config6();
+	GSconfigFlag |= GSCFG_FLT_EN;
+	GSconfigFlag &= ~GSCFG_VLT_EN;
+	write_c0_config6(GSconfigFlag);
 }
 
 int stable_clockevent_init(void)
@@ -107,32 +122,34 @@ int stable_clockevent_init(void)
 	struct cpuinfo_mips *c = &current_cpu_data;
 	unsigned int cpu = smp_processor_id();
 	struct clock_event_device *cd;
-    unsigned int irq;
+	unsigned int irq;
 
-    if (!ls_stable_freq)
-        return -ENXIO;
+	if (!ls_stable_freq)
+		return -ENXIO;
 
 	switch (c->cputype) {
 	case CPU_LOONGSON3:
 		/* Loongson3A2000 and Loongson3A3000 has no stable timer */
-        return -ENXIO;
+		return -ENXIO;
 	case CPU_LOONGSON3_COMP:
 		break;
 	default:
-        return -ENXIO;
+		return -ENXIO;
 	}
 
-    if (!(read_cfg(LOONGSON_CPUCFG_CONFIG_FIELD2) & MIPS_LSE_LLFTP)) {
-        printk(KERN_INFO "Don't support STABLE timer\n");
-        return -EPERM;
-    }
+	if (!(read_cfg(LOONGSON_CPUCFG_CONFIG_FIELD2) & MIPS_LSE_LLFTP)) {
+		printk(KERN_INFO "Don't support Stable timer\n");
+		return -EPERM;
+	}
 
-    if (!(read_c0_config6() & GSCFG_FLT_EN)) {
-        printk(KERN_INFO "GSCFG_FLTInt not set\n");
-        return -EPERM;
-    }
+	stable_event_enable();
 
-    irq = MIPS_CPU_IRQ_BASE + stabel_irq;
+	if (!(read_c0_config6() & GSconfigFlag)) {
+		printk(KERN_INFO "Stable timer GSCFG_FLT and GSCFG_VLT incorrect\n");
+		return -EPERM;
+	}
+
+	irq = MIPS_CPU_IRQ_BASE + stabel_irq;
 
 	cd = &per_cpu(stable_clockevent_device, cpu);
 
@@ -140,23 +157,23 @@ int stable_clockevent_init(void)
 	cd->features = CLOCK_EVT_FEAT_PERIODIC | CLOCK_EVT_FEAT_ONESHOT;
 
 	cd->rating = 320;
-    cd->irq = irq;
-    cd->cpumask = cpumask_of(cpu);
+	cd->irq = irq;
+	cd->cpumask = cpumask_of(cpu);
 	cd->set_mode = stable_set_mode;
 	cd->set_next_event = stable_next_event;
-    cd->event_handler   = stable_event_handler;
+	cd->event_handler   = stable_event_handler;
 
-    clockevents_config_and_register(cd, ls_stable_freq, 0x300, ((1UL << 48) - 1));
+	clockevents_config_and_register(cd, ls_stable_freq, 0x300, ((1UL << 48) - 1));
 
 	if (stable_timer_irq_installed)
 		return 0;
 
 	stable_timer_irq_installed = 1;
-    setup_irq(irq, &stable_irq_irqaction);
+	setup_irq(irq, &stable_irq_irqaction);
 
-    printk(KERN_INFO "stable clock event device register\n");
+	printk(KERN_INFO "stable clock event device register\n");
 
-    return 0;
+	return 0;
 }
 
 static void stable_counter_suspend(struct clocksource *cs)
@@ -188,19 +205,19 @@ static struct clocksource csrc_stable_counter = {
 
 static int stable_enable(void)
 {
-    /*check stable clock feature*/
-    if (!(read_cfg(LOONGSON_CPUCFG_CONFIG_FIELD2) & MIPS_LSE_LLFTP)) {
-        printk(KERN_INFO "Don't support STABLE counter\n");
-        return -ENXIO;
-    }
+	/*check stable clock feature*/
+	if (!(read_cfg(LOONGSON_CPUCFG_CONFIG_FIELD2) & MIPS_LSE_LLFTP)) {
+		printk(KERN_INFO "Don't support STABLE counter\n");
+		return -ENXIO;
+	}
 
-    /*check stable clock enable*/
-    if (!(dread_csr(LOONGSON_OTHER_FUNC_OFFSET) & LOONGSON_STABLE_COUNT_EN)) {
-        printk(KERN_INFO "stable counter not enable \n");
-        return -EBUSY;
-    }
+	/*check stable clock enable*/
+	if (!(dread_csr(LOONGSON_OTHER_FUNC_OFFSET) & LOONGSON_STABLE_COUNT_EN)) {
+		printk(KERN_INFO "stable counter not enable\n");
+		return -EBUSY;
+	}
 
-    return 0;
+	return 0;
 }
 
 int __init init_stable_clocksource(void)
@@ -209,28 +226,28 @@ int __init init_stable_clocksource(void)
 	int res;
 
 	if (!ls_stable_freq)
-        return -ENXIO;
+		return -ENXIO;
 
 	switch (c->cputype) {
 	case CPU_LOONGSON3:
 		/* Loongson3A2000 and Loongson3A3000 has no stable counter */
-        return -ENXIO;
+		return -ENXIO;
 	case CPU_LOONGSON3_COMP:
-        if (stable_enable() == 0) {
-            csrc_stable_counter.read = stable_counter_csr_read;
-            break;
-        } else
-            return -ENXIO;
-    default:
-        return -ENXIO;
+		if (stable_enable() == 0) {
+			csrc_stable_counter.read = stable_counter_csr_read;
+			break;
+		} else
+			return -ENXIO;
+	default:
+		return -ENXIO;
 	}
 
 	csrc_stable_counter.mult =
-        clocksource_hz2mult(ls_stable_freq, csrc_stable_counter.shift);
+		clocksource_hz2mult(ls_stable_freq, csrc_stable_counter.shift);
 	res = clocksource_register_hz(&csrc_stable_counter, ls_stable_freq);
 
 	printk(KERN_INFO "stable counter clock source device register\n");
 
-    return res;
+	return res;
 }
 arch_initcall(init_stable_clocksource);
