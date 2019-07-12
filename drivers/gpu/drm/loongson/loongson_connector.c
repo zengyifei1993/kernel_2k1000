@@ -104,8 +104,10 @@ static bool loongson_do_probe_ddc_edid(struct i2c_adapter *adapter, unsigned int
  */
 static bool loongson_i2c_connector(unsigned int id, unsigned char *buf)
 {
-
-	return loongson_do_probe_ddc_edid(eeprom_info[id].adapter, id, buf);
+	if (eeprom_info[id].adapter)
+		return loongson_do_probe_ddc_edid(eeprom_info[id].adapter, id, buf);
+	else
+		return false;
 }
 
 
