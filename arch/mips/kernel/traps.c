@@ -1126,6 +1126,7 @@ static int enable_restore_fp_context(int msa)
 		err = init_fpu();
 		if (msa && !err) {
 			enable_msa();
+			write_msa_csr(current->thread.fpu.msacsr);
 			_init_msa_upper();
 			set_thread_flag(TIF_USEDMSA);
 			set_thread_flag(TIF_MSA_CTX_LIVE);

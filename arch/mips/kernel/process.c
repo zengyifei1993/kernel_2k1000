@@ -64,6 +64,7 @@ void start_thread(struct pt_regs * regs, unsigned long pc, unsigned long sp)
 	status |= KU_USER;
 	regs->cp0_status = status;
 	lose_fpu(0);
+	current->thread.fpu.msacsr = 0;
 	clear_used_math();
 	clear_thread_flag(TIF_MSA_CTX_LIVE);
 	init_dsp();
