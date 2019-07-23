@@ -296,7 +296,7 @@ static int gpr32_get(struct task_struct *target,
 
 	mips_dump_regs32(uregs, regs);
 	return user_regset_copyout(&pos, &count, &kbuf, &ubuf,
-				   regs, 0, sizeof(*regs));
+				   uregs, 0, sizeof(uregs));
 }
 
 static int gpr32_set(struct task_struct *target,
