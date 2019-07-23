@@ -820,6 +820,7 @@ void __init setup_arch(char **cmdline_p)
 
 unsigned long kernelsp[NR_CPUS];
 unsigned long fw_arg0, fw_arg1, fw_arg2, fw_arg3;
+EXPORT_SYMBOL_GPL(fw_arg2);
 
 #ifdef CONFIG_DEBUG_FS
 struct dentry *mips_debugfs_dir;
