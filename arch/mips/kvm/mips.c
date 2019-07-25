@@ -101,6 +101,7 @@ struct kvm_stats_debugfs_item debugfs_entries[] = {
 	{ "lsvz_rdcsr",  VCPU_STAT(lsvz_rdcsr_exits),  KVM_STAT_VCPU },
 	{ "lsvz_rdcsr_cpu_feature",  VCPU_STAT(lsvz_rdcsr_cpu_feature_exits),  KVM_STAT_VCPU },
 	{ "lsvz_rdcsr_cpu_temp",  VCPU_STAT(lsvz_rdcsr_cpu_temperature_exits),  KVM_STAT_VCPU },
+	{ "lsvz_rdcsr_node_counter",  VCPU_STAT(lsvz_rdcsr_node_counter_exits),  KVM_STAT_VCPU },
 	{ "lsvz_rdcsr_other_func",  VCPU_STAT(lsvz_rdcsr_other_func_exits),  KVM_STAT_VCPU },
 	{ "lsvz_rdcsr_ipi_access",  VCPU_STAT(lsvz_rdcsr_ipi_access_exits),  KVM_STAT_VCPU },
 	{ "lsvz_wrcsr",  VCPU_STAT(lsvz_wrcsr_exits),  KVM_STAT_VCPU },

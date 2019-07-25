@@ -218,6 +218,7 @@ struct kvm_vcpu_stat {
 	u64 lsvz_rdcsr_exits;
 	u64 lsvz_rdcsr_cpu_feature_exits;
 	u64 lsvz_rdcsr_cpu_temperature_exits;
+	u64 lsvz_rdcsr_node_counter_exits;
 	u64 lsvz_rdcsr_other_func_exits;
 	u64 lsvz_rdcsr_ipi_access_exits;
 	u64 lsvz_wrcsr_exits;
