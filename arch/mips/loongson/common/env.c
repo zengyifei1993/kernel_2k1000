@@ -268,6 +268,7 @@ void __init prom_init_env(void)
 		loongson_pch = &ls2h_pch;
 		loongson_ec_sci_irq = 0x80;
 		loongson_max_dma32_pfn = 0x180000000ULL>> PAGE_SHIFT;
+		loongson_workarounds |= WORKAROUND_PCIE_DMA;
 	}
 	else if (strstr(eboard->name,"7A")) {
 		loongson_pch = &ls7a_pch;
