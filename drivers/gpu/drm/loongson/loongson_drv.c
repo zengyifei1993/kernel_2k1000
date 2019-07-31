@@ -616,6 +616,10 @@ int loongson_dumb_create(struct drm_file *file,
 
 	args->handle = handle;
 
+	/* Cursor buffer size is 32×32 which should be in system memory */
+	if (args->width == 32 && args->height == 32)
+		return 0;
+
 	bo = gem_to_loongson_bo(gobj);
 	ret = loongson_bo_reserve(bo, false);
 	if (ret)
@@ -718,11 +722,13 @@ int loongson_dumb_destroy(struct drm_file *file,
 
 	bo = gem_to_loongson_bo(obj);
 
-	ret = loongson_bo_reserve(bo, false);
-        if (ret)
-                return ret;
-	ret = loongson_bo_unpin(bo);
-	loongson_bo_unreserve(bo);
+	if (bo->pin_count) {
+		ret = loongson_bo_reserve(bo, false);
+        	if (ret)
+                	return ret;
+		ret = loongson_bo_unpin(bo);
+		loongson_bo_unreserve(bo);
+	}
 	return drm_gem_dumb_destroy(file, dev, handle);
 }
 
