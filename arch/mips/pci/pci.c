@@ -150,7 +150,7 @@ void pci_load_of_ranges(struct pci_controller *hose, struct device_node *node)
 				range.cpu_addr,
 				range.cpu_addr + range.size - 1);
 			hose->io_map_base =
-				(unsigned long)ioremap(range.cpu_addr,
+				(unsigned long)ioremap(range.cpu_addr - pci_address_to_pio(range.cpu_addr),
 						       range.size);
 			res = hose->io_resource;
 			break;
