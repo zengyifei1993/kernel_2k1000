@@ -100,10 +100,17 @@ setup_port(struct serial_private *priv, struct uart_8250_port *port,
 		port->port.membase = priv->remapped_bar[bar] + offset;
 		port->port.regshift = regshift;
 	} else {
+#ifdef CONFIG_MIPS
+		port->port.iotype = UPIO_MEM;
+		port->port.iobase = 0;
+		port->port.mapbase = base + offset;
+		port->port.membase = pci_iomap(dev, bar, 0x100000) + offset;
+#else
 		port->port.iotype = UPIO_PORT;
 		port->port.iobase = base + offset;
 		port->port.mapbase = 0;
 		port->port.membase = NULL;
+#endif
 		port->port.regshift = 0;
 	}
 	return 0;
