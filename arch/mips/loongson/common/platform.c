@@ -88,7 +88,7 @@ arch_initcall(loongson_cpufreq_init);
 
 static int __init loongson3_platform_init(void)
 {
-	if(!cpu_has_vz)
+	if(cpu_guestmode)
 		return 0;
 
 	platform_device_register(&loongson_sci_event_device);

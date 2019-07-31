@@ -32,6 +32,8 @@
 #include <boot_param.h>
 #include <workarounds.h>
 #include <loongson-pch.h>
+#include <loongson.h>
+
 int plat_device_is_ls3a_pci(const struct device *dev);
 int ls3a_pci_map_irq(const struct pci_dev *dev, u8 slot, u8 pin);
 int ls3a_pcibios_dev_init(struct pci_dev *pdev);
@@ -184,10 +186,9 @@ int __init ls7a_pcibios_map_irq(const struct pci_dev *dev, u8 slot, u8 pin)
 int __init rs780_pcibios_map_irq(const struct pci_dev *dev, u8 slot, u8 pin)
 {
 	int irq = 0;
-	if(cpu_has_vz) {
-		print_fixup_info(dev);
-		return dev->irq;
-	} else {
+
+	/* Only 3A3000 and successor guest with fixed irq */
+	if(cpu_guestmode) {
 		switch (dev->vendor) {
 	        case 0x1af4:
 	            if (dev->device == 0x1000)
@@ -211,6 +212,9 @@ int __init rs780_pcibios_map_irq(const struct pci_dev *dev, u8 slot, u8 pin)
 			irq = VIRTDEV_IRQ_DEFAULT;
 	        break;
 	    }
+	} else {
+		print_fixup_info(dev);
+		return dev->irq;
 	}
 	return irq;
 }

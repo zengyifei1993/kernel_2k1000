@@ -8,6 +8,7 @@
 #include <asm/hpet.h>
 #include <asm/time.h>
 #include <loongson-pch.h>
+#include <loongson.h>
 
 #define SMBUS_CFG_BASE		(ht_control_base + 0x0300a000)
 #define SMBUS_PCI_REGB4		0xb4
@@ -320,7 +321,7 @@ static struct clocksource csrc_hpet = {
 
 int __init init_hpet_clocksource(void)
 {
-	if(!cpu_has_vz)
+	if(cpu_guestmode)
 		return 0;
 
 	if (!hpet_enabled)
