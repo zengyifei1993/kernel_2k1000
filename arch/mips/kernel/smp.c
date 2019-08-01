@@ -184,15 +184,31 @@ static void stop_this_cpu(void *dummy)
 	 * Remove this CPU:
 	 */
 	set_cpu_online(smp_processor_id(), false);
-	for (;;) {
-		if (cpu_wait)
-			(*cpu_wait)();		/* Wait if available. */
-	}
+	local_irq_disable();
+	while (1);
 }
 
 void smp_send_stop(void)
 {
-	smp_call_function(stop_this_cpu, NULL, 0);
+	unsigned long timeout;
+
+	if (num_online_cpus() > 1) {
+		cpumask_t mask;
+
+		cpumask_copy(&mask, cpu_online_mask);
+		cpu_clear(smp_processor_id(), mask);
+
+		smp_call_function_many(&mask, stop_this_cpu, NULL, 0);
+	}
+
+	/* Wait up to one second for other CPUs to stop */
+	timeout = USEC_PER_SEC;
+	while (num_online_cpus() > 1 && timeout--)
+		udelay(1);
+
+	if (num_online_cpus() > 1)
+		pr_warning("SMP: failed to stop secondary CPUs\n");
+
 }
 
 void __init smp_cpus_done(unsigned int max_cpus)
