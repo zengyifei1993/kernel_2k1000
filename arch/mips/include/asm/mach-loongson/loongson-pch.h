@@ -434,8 +434,9 @@ enum {
 #define ls7a_readq(addr)			  (*(volatile unsigned long  *)TO_UNCAC(addr))
 #define ls7a_writeb(val, addr)		*(volatile unsigned char  *)TO_UNCAC(addr) = (val)
 #define ls7a_writew(val, addr)		*(volatile unsigned short *)TO_UNCAC(addr) = (val)
-#define ls7a_writel(val, addr)		ls7a_write(val, addr)
-#define ls7a_writeq(val, addr)		ls7a_write(val, addr)
+#define ls7a_writel(val, addr)		ls7a_write_type(val, addr, uint32_t)
+#define ls7a_writeq(val, addr)		ls7a_write_type(val, addr, uint64_t)
+#define ls7a_write(val, addr)		ls7a_write_type(val, addr, uint64_t)
 
 extern unsigned long ls7a_dc_writeflags;
 extern spinlock_t ls7a_dc_writelock;
@@ -456,10 +457,10 @@ extern rwlock_t ls7a_rwlock;
         read_unlock_irqrestore(&ls7a_rwlock,flags); 		          \
     }while(0)
 
-#define ls7a_write(val, addr)          					  \
+#define ls7a_write_type(val, addr, type)          					  \
     do {                                				  \
         write_lock_irqsave(&ls7a_rwlock,ls7a_rwflags);          	  \
-        *(volatile unsigned long __force *)TO_UNCAC(addr) = (val);        \
+        *(volatile type __force *)TO_UNCAC(addr) = (val);        \
         write_unlock_irqrestore(&ls7a_rwlock,ls7a_rwflags);               \
     }while(0)
 
