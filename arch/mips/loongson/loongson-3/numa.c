@@ -153,7 +153,7 @@ static void __init szmem(unsigned int node)
 			case SYSTEM_RAM_LOW:
 				if (node_id == 0)
 					low_physmem_start = emap->map[i].mem_start;
-				start_pfn = ((node_id << 44) + emap->map[i].mem_start) >> PAGE_SHIFT;
+				start_pfn = (nid_to_addroffset(node_id) + emap->map[i].mem_start) >> PAGE_SHIFT;
 				node_psize = (mem_size << 20) >> PAGE_SHIFT;
 				end_pfn  = start_pfn + node_psize;
 				num_physpages += node_psize;
@@ -161,16 +161,16 @@ static void __init szmem(unsigned int node)
 					(u32)node_id, mem_type, emap->map[i].mem_start, mem_size);
 				printk("       start_pfn:0x%llx, end_pfn:0x%llx, num_physpages:0x%lx\n",
 					start_pfn, end_pfn, num_physpages);
-				add_memory_region((node_id << 44) + emap->map[i].mem_start,
+				add_memory_region(nid_to_addroffset(node_id) + emap->map[i].mem_start,
 					(u64)emap->map[i].mem_size << 20, BOOT_MEM_RAM);
-				add_memory_region_dma(ls_phy_map, (node_id << 44) + emap->map[i].mem_start,
+				add_memory_region_dma(ls_phy_map, nid_to_addroffset(node_id) + emap->map[i].mem_start,
 					(u64)emap->map[i].mem_size << 20, SYSTEM_RAM_LOW, &phy_index);
 				memblock_add_node(PFN_PHYS(start_pfn), PFN_PHYS(end_pfn - start_pfn), node);
 				break;
 			case SYSTEM_RAM_HIGH:
 				if (node_id == 0)
 					high_physmem_start = emap->map[i].mem_start;
-				start_pfn = ((node_id << 44) + emap->map[i].mem_start) >> PAGE_SHIFT;
+				start_pfn = (nid_to_addroffset(node_id) + emap->map[i].mem_start) >> PAGE_SHIFT;
 				node_psize = (mem_size << 20) >> PAGE_SHIFT;
 				end_pfn  = start_pfn + node_psize;
 				num_physpages += node_psize;
@@ -178,25 +178,25 @@ static void __init szmem(unsigned int node)
 					(u32)node_id, mem_type, emap->map[i].mem_start, mem_size);
 				printk("       start_pfn:0x%llx, end_pfn:0x%llx, num_physpages:0x%lx\n",
 					start_pfn, end_pfn, num_physpages);
-				add_memory_region((node_id << 44) + emap->map[i].mem_start,
+				add_memory_region(nid_to_addroffset(node_id) + emap->map[i].mem_start,
 					(u64)emap->map[i].mem_size << 20, BOOT_MEM_RAM);
-				add_memory_region_dma(ls_phy_map, (node_id << 44) + emap->map[i].mem_start,
+				add_memory_region_dma(ls_phy_map, nid_to_addroffset(node_id) + emap->map[i].mem_start,
 					(u64)emap->map[i].mem_size << 20, SYSTEM_RAM_HIGH, &phy_index);
 				memblock_add_node(PFN_PHYS(start_pfn), PFN_PHYS(end_pfn - start_pfn), node);
 				break;
 			case MEM_RESERVED:
 				printk("Debug: node_id:%d, mem_type:%d, mem_start:0x%llx, mem_size:0x%llx MB\n",
 					(u32)node_id, mem_type, emap->map[i].mem_start, mem_size);
-				add_memory_region((node_id << 44) + emap->map[i].mem_start,
+				add_memory_region(nid_to_addroffset(node_id) + emap->map[i].mem_start,
 					(u64)emap->map[i].mem_size << 20, BOOT_MEM_RESERVED);
-				memblock_reserve(((node_id << 44) | emap->map[i].mem_start), mem_size << 20);
+				memblock_reserve((nid_to_addroffset(node_id) | emap->map[i].mem_start), mem_size << 20);
 				break;
 			case SMBIOS_TABLE:
 				has_systab = 1;
 				systab_addr = emap->map[i].mem_start;
-				add_memory_region((node_id << 44) + emap->map[i].mem_start,
+				add_memory_region(nid_to_addroffset(node_id) + emap->map[i].mem_start,
 					0x2000, BOOT_MEM_RESERVED);
-				memblock_reserve(((node_id << 44) | emap->map[i].mem_start), 0x2000);
+				memblock_reserve((nid_to_addroffset(node_id) | emap->map[i].mem_start), 0x2000);
 				break;
 			case UMA_VIDEO_RAM:
 				{
@@ -220,9 +220,9 @@ static void __init szmem(unsigned int node)
  					* */
 					if ((te >= start_pfn) && (ts < end_pfn)) {
 						vram_type = VRAM_TYPE_UMA;
-						add_memory_region((node_id << 44) + emap->map[i].mem_start,
+						add_memory_region(nid_to_addroffset(node_id) + emap->map[i].mem_start,
 						(u64)emap->map[i].mem_size << 20, BOOT_MEM_RESERVED);
-						memblock_reserve(((node_id << 44) | emap->map[i].mem_start), mem_size << 20);	
+						memblock_reserve((nid_to_addroffset(node_id) | emap->map[i].mem_start), mem_size << 20);
 					}
 				}
 				uma_vram_addr = emap->map[i].mem_start;

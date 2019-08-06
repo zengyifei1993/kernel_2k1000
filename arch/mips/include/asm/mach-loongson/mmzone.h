@@ -12,7 +12,11 @@
 #define _ASM_MACH_MMZONE_H
 
 #include <boot_param.h>
+#ifdef CONFIG_KVM_GUEST_LS3A3000
+#define NODE_ADDRSPACE_SHIFT 36
+#else
 #define NODE_ADDRSPACE_SHIFT 44
+#endif
 
 #define pa_to_nid(addr)	  ((addr >> NODE_ADDRSPACE_SHIFT) & 0xf)
 #define nid_to_addroffset(node)	((unsigned long)node << NODE_ADDRSPACE_SHIFT)

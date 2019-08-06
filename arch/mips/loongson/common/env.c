@@ -153,15 +153,22 @@ void __init prom_init_env(void)
 	case Loongson_3A:
 		cores_per_node = 4;
 		cores_per_package = 4;
+#ifdef CONFIG_KVM_GUEST_LS3A3000
+		for(i = 0; i < 4; i++) {
+			smp_group[i] = 0x900000003ff01000 | nid_to_addroffset(i);
+			loongson_chipcfg[i] = 0x900000001fe00180 | nid_to_addroffset(i);
+			loongson_chiptemp[i] = 0x900000001fe0019c | nid_to_addroffset(i);
+			loongson_freqctrl[i] = 0x900000001fe001d0 | nid_to_addroffset(i);
+		}
+		ht_control_base = 0x900000EFFB000000;
+#else
+
 		smp_group[0] = 0x900000003ff01000;
 		smp_group[1] = 0x900010003ff01000;
 		smp_group[2] = 0x900020003ff01000;
 		smp_group[3] = 0x900030003ff01000;
-#ifdef CONFIG_KVM_GUEST_LS3A3000
-		ht_control_base = 0x900000EFFB000000;
-#else
+		
 		ht_control_base = 0x90000EFDFB000000;
-#endif
 		loongson_chipcfg[0] = 0x900000001fe00180;
 		loongson_chipcfg[1] = 0x900010001fe00180;
 		loongson_chipcfg[2] = 0x900020001fe00180;
@@ -174,6 +181,7 @@ void __init prom_init_env(void)
 		loongson_freqctrl[1] = 0x900010001fe001d0;
 		loongson_freqctrl[2] = 0x900020001fe001d0;
 		loongson_freqctrl[3] = 0x900030001fe001d0;
+#endif
 		loongson_workarounds = WORKAROUND_CPUFREQ;
 		break;
 	case Legacy_3B:

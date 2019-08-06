@@ -206,6 +206,10 @@ int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)
 		kvm_info("cksseg_map @ %p\n",kvm->arch.cksseg_map);
 		if (!kvm->arch.cksseg_map)
 			return -ENOMEM;
+                kvm->arch.node_shift = 36;
+        } else {
+                kvm->arch.node_shift = 44;
+
 	}
 	return 0;
 }

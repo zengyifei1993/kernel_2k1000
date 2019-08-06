@@ -32,12 +32,13 @@ int ls3a_gipi_writel(struct loongson_kvm_ls3a_ipi * ipi, gpa_t addr, int len,con
     uint64_t data,offset;
     struct kvm_mips_interrupt irq;
     gipiState * s = &(ipi->ls3a_gipistate);
-    uint32_t node = (addr >> 44) & 3;
     uint32_t coreno = (addr >> 8) & 3;
-    uint32_t no = coreno + node * 4;
+    uint32_t node, no;
     struct kvm * kvm;
 
     kvm = ipi->kvm;
+    node = ( addr >> kvm->arch.node_shift) & 3;
+    no = coreno + node * 4;
 
     data = *(uint64_t *)val;
     offset = addr&0xFF;
@@ -67,7 +68,7 @@ int ls3a_gipi_writel(struct loongson_kvm_ls3a_ipi * ipi, gpa_t addr, int len,con
         break;
 
     case 0x20 ... 0x3c:
-        s->core[no].buf[(offset - 0x20) / 4] = data;
+        s->core[no].buf[(offset - 0x20) / 8] = data;
         break;
 
     default:
@@ -82,9 +83,12 @@ uint64_t ls3a_gipi_readl(struct loongson_kvm_ls3a_ipi * ipi, gpa_t addr, int len
     uint64_t ret = 0;
 
     gipiState * s = &(ipi->ls3a_gipistate);
-    int node = (addr >> 44) & 3;
-    int coreno = (addr >> 8) & 3;
-    int no = coreno + node * 4;
+    uint32_t node, no;
+    uint32_t coreno;
+
+    coreno = (addr >> 8 ) & 3;
+    node = (addr >> ipi->kvm->arch.node_shift) & 3;
+    no = coreno + node *4;
 
     offset = addr&0xFF;
 
@@ -106,7 +110,7 @@ uint64_t ls3a_gipi_readl(struct loongson_kvm_ls3a_ipi * ipi, gpa_t addr, int len
         break;
 
     case 0x20 ... 0x3c:
-        ret = s->core[no].buf[(offset - 0x20) / 4];
+        ret = s->core[no].buf[(offset - 0x20) / 8];
         break;
 
     default:

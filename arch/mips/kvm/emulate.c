@@ -1902,7 +1902,7 @@ enum emulation_result kvm_mips_emulate_store(union mips_instruction inst,
 		return EMULATE_DONE;
 	}
 
-	if(((run->mmio.phys_addr & (~(0x3ffUL|(0x3UL<< NODE_ADDRSPACE_SHIFT)))) == SMP_MAILBOX) &&
+	if(((run->mmio.phys_addr & (~(0x3ffUL|(0x3UL<< vcpu->kvm->arch.node_shift)))) == SMP_MAILBOX) &&
 						ls3a_ipi_in_kernel(vcpu->kvm)) {
 		vcpu->stat.lsvz_ls3a_pip_write_exits++;
 		ls3a_ipi_lock(vcpu->kvm->arch.v_gipi, &flags);
@@ -2020,6 +2020,7 @@ enum emulation_result kvm_mips_emulate_load(union mips_instruction inst,
 
 	/* For 7A DMA NODE ID READ */
 	if((vcpu->arch.gprs[rs] + offset) == dma_nodeid_offset_base) {
+		/* Make 3000 guest node id start from bit 36 */
 		if(dma_nodeid_offset_base == NODE_ID_OFFSET_ADDR)
 			vcpu->arch.gprs[rt] = 0x200;
 		else
@@ -2288,8 +2289,9 @@ enum emulation_result kvm_mips_emulate_load(union mips_instruction inst,
 		return EMULATE_DONE;
 	}
 
-	if(((run->mmio.phys_addr & (~(0x3ffUL|(0x3UL<< NODE_ADDRSPACE_SHIFT)))) == SMP_MAILBOX) &&
-						ls3a_ipi_in_kernel(vcpu->kvm)){
+	if(((run->mmio.phys_addr & (~(0x3ffUL|(0x3UL<< vcpu->kvm->arch.node_shift)))) == SMP_MAILBOX) &&
+	
+					ls3a_ipi_in_kernel(vcpu->kvm)){
 		vcpu->stat.lsvz_ls3a_pip_read_exits++;
 		ls3a_ipi_lock(vcpu->kvm->arch.v_gipi, &flags);
 		ls3a_gipi_readl(vcpu->kvm->arch.v_gipi,run->mmio.phys_addr,run->mmio.len,&vcpu->arch.gprs[rt]);

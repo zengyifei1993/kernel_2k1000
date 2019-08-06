@@ -248,6 +248,7 @@ struct kvm_arch {
 	u64 nodecounter_value;
 	s64 stablecounter_offset;
 	u64 stablecounter_value;
+	u32 node_shift;
 	struct loongson_kvm_7a_ioapic *v_ioapic;
 	struct loongson_kvm_ls3a_ipi *v_gipi;
 	struct loongson_kvm_ls3a_htirq *v_htirq;
