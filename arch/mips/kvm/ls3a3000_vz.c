@@ -2753,6 +2753,7 @@ int handle_ignore_tlb_general_exception(struct kvm_run *run, struct kvm_vcpu *vc
 	int guest_exc = 0;
 	u32 start_count, end_count,compare;
 	u32 gsexccode = (vcpu->arch.host_cp0_gscause >> CAUSEB_EXCCODE) & 0x1f;
+	u32 cause = vcpu->arch.host_cp0_cause;
 	int ret = RESUME_GUEST;
 
 	++vcpu->stat.lsvz_ignore_exits;
@@ -2782,6 +2783,13 @@ int handle_ignore_tlb_general_exception(struct kvm_run *run, struct kvm_vcpu *vc
 	start_count = read_gc0_count();
 	kvm_change_c0_guest_cause(cop0, (0xff),
 				  (guest_exc << CAUSEB_EXCCODE));
+
+	if ((kvm_read_c0_guest_status(cop0) & ST0_EXL) == 0) {
+		if (cause & CAUSEF_BD)
+			kvm_set_c0_guest_cause(cop0, CAUSEF_BD);
+		else
+			kvm_clear_c0_guest_cause(cop0, CAUSEF_BD);
+	}
 
 	end_count = read_gc0_count();
 	compare = read_gc0_compare();
