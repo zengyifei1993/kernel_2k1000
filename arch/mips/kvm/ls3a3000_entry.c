@@ -1013,6 +1013,9 @@ void *kvm_mips_ls3a3000_build_tlb_refill_target(void *addr, void *handler)
 	uasm_i_mfgc0(&p, A2, C0_COUNT);
 	uasm_i_mfgc0(&p, A0, C0_CAUSE);
 	uasm_i_ins(&p, A0, A1, 2, 5);
+	uasm_i_mfc0(&p, A1, C0_CAUSE);
+	uasm_i_ext(&p, A3, A1, 31, 1);
+	uasm_i_ins(&p, A0, A3, 31, 1);
 	uasm_i_mtgc0(&p, A0, C0_CAUSE);
 	uasm_i_mfgc0(&p, A3, C0_COUNT);
 	uasm_i_mfgc0(&p, K0, C0_COMPARE);
