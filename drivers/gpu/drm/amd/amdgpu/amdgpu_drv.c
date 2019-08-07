@@ -90,6 +90,7 @@ int amdgpu_vram_page_split = 1024;
 int amdgpu_exp_hw_support = 0;
 int amdgpu_sched_jobs = 32;
 int amdgpu_sched_hw_submission = 2;
+unsigned amdgpu_sched_async = 0;
 int amdgpu_powerplay = -1;
 int amdgpu_no_evict = 0;
 int amdgpu_direct_gma_size = 0;
@@ -209,6 +210,9 @@ module_param_named(disable_cu, amdgpu_disable_cu, charp, 0444);
 MODULE_PARM_DESC(virtual_display,
 		 "Enable virtual display feature (the virtual_display will be set like xxxx:xx:xx.x,x;xxxx:xx:xx.x,x)");
 module_param_named(virtual_display, amdgpu_virtual_display, charp, 0444);
+
+MODULE_PARM_DESC(sched_async, "Jobs on same scheduler is scheduled after pre job finished or scheduled(0: finished)");
+module_param_named(sched_async, amdgpu_sched_async, uint, 0444);
 
 static const struct pci_device_id pciidlist[] = {
 #ifdef  CONFIG_DRM_AMDGPU_SI

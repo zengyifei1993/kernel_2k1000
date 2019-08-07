@@ -26,6 +26,7 @@
 #include <linux/sched.h>
 #include <drm/drmP.h>
 #include "gpu_scheduler.h"
+#include "amdgpu.h"
 
 #define CREATE_TRACE_POINTS
 #include "gpu_sched_trace.h"
@@ -247,9 +248,19 @@ static bool amd_sched_entity_add_dependency_cb(struct amd_sched_entity *entity)
 		return false;
 	}
 
+	/*
+	 *  AMDGPU libdrm unit test "Sync dependency" will be failed,
+	 *  if jobs is scheduled after dependency scheduled,
+	 *  instead of dependency finished.
+	 *
+	 *
+	 *  double PACKET_SWTICH_BUFFER in amdgpu_vm_flush
+	 *  also fix this problem,update will be done
+	 *  in the future.
+	 */
 	s_fence = to_amd_sched_fence(fence);
-	if (s_fence && s_fence->sched == sched) {
 
+	if (s_fence && s_fence->sched == sched && amdgpu_sched_async) {
 		/*
 		 * Fence is from the same scheduler, only need to wait for
 		 * it to be scheduled
