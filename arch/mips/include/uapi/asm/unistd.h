@@ -385,7 +385,7 @@
 #endif /* Want O32 || _MIPS_SIM == _MIPS_SIM_ABI32  */
 
 #define __NR_O32_Linux			4000
-#define __NR_O32_Linux_syscalls		354
+#define __NR_O32_Linux_syscalls		360
 
 #if (defined(__WANT_SYSCALL_NUMBERS) &&					\
 	(__WANT_SYSCALL_NUMBERS == _MIPS_SIM_ABI64)) ||			\
@@ -721,7 +721,7 @@
 #endif /* Want N64 || _MIPS_SIM == _MIPS_SIM_ABI64  */
 
 #define __NR_64_Linux			5000
-#define __NR_64_Linux_syscalls		314
+#define __NR_64_Linux_syscalls		320
 
 #if (defined(__WANT_SYSCALL_NUMBERS) &&					\
 	(__WANT_SYSCALL_NUMBERS == _MIPS_SIM_NABI32)) ||		\
@@ -1061,6 +1061,6 @@
 #endif /* Want N32 || _MIPS_SIM == _MIPS_SIM_NABI32  */
 
 #define __NR_N32_Linux			6000
-#define __NR_N32_Linux_syscalls		318
+#define __NR_N32_Linux_syscalls		324
 
 #endif /* _UAPI_ASM_UNISTD_H */
