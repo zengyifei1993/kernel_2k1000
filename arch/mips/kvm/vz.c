@@ -1040,7 +1040,9 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 			if(vcpu->arch.gprs[rs] == 0x420) {
 				vcpu->arch.gprs[rd] = dread_csr(LOONGSON_OTHER_FUNC_OFFSET);
 			} else if(vcpu->arch.gprs[rs] == 0x408) {
-				/* dread node counterv */
+				/* dread node counter */
+				++vcpu->stat.lsvz_rdcsr_node_counter_exits;
+				vcpu->arch.gprs[rd] = dread_csr(LOONGSON_CSR_NODE_CONTER);
 			} else if((vcpu->arch.gprs[rs] & 0x1f00) == 0x1800) {
 				/*ext ioi mode for 7A */
 				vcpu->arch.gprs[rd] = dread_csr(LOONGSON_CPU_TEMPERATURE_OFFSET);
