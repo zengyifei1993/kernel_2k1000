@@ -27,18 +27,37 @@ EXPORT_SYMBOL(pm_power_off);
 
 void machine_restart(char *command)
 {
+#ifdef CONFIG_SMP
+	preempt_disable();
+	smp_send_stop();
+#endif
+	set_cpu_online(smp_processor_id(), false);
+	local_irq_disable();
+
 	if (_machine_restart)
 		_machine_restart(command);
 }
 
 void machine_halt(void)
 {
+#ifdef CONFIG_SMP
+	preempt_disable();
+	smp_send_stop();
+#endif
+	set_cpu_online(smp_processor_id(), false);
+	local_irq_disable();
 	if (_machine_halt)
 		_machine_halt();
 }
 
 void machine_power_off(void)
 {
+#ifdef CONFIG_SMP
+	preempt_disable();
+	smp_send_stop();
+#endif
+	set_cpu_online(smp_processor_id(), false);
+	local_irq_disable();
 	if (pm_power_off)
 		pm_power_off();
 }
