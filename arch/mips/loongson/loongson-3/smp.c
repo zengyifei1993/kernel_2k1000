@@ -53,7 +53,7 @@ extern int autoplug_verbose;
 
 void	(*loongson3_ipi)(struct pt_regs *regs);
 
-extern unsigned char ls7a_ipi_pos2irq[];
+extern unsigned short ls3a_ipi_pos2irq[];
 extern unsigned int ls2h_pos2irq[];
 extern unsigned int rs780e_pos2irq[];
 
@@ -144,8 +144,8 @@ static void handle_io_ipi(unsigned int irqs)
 	break;
 	case LS7A:
 		while ((irq = ffs(irqs))) {
-			irq1 = ls7a_ipi_pos2irq[irq-1];
-			if (likely(irq1 != 255)) do_IRQ(irq1);
+			irq1 = ls3a_ipi_pos2irq[irq-1];
+			if (likely(irq1 != (unsigned short)-1)) do_IRQ(irq1);
 			irqs &= ~(1<<(irq-1));
 		}
 		break;

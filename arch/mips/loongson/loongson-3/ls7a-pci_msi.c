@@ -7,21 +7,8 @@
 #include <linux/pci.h>
 #include <loongson.h>
 
-#define IRQ_LS7A_MSI_0 0
-#define LS7A_NUM_MSI_IRQS 64
 
-/*msi use irq, other device not used*/
-static DECLARE_BITMAP(msi_irq_in_use, LS7A_NUM_MSI_IRQS)={0xff0000000000ffffULL};
-
-static DEFINE_SPINLOCK(lock);
 extern int ls3a_msi_enabled;
-extern int ext_set_irq_affinity(struct irq_data *d, const struct cpumask *affinity, bool force);
-
-int pch_create_dirq(unsigned int irq);
-void pch_destroy_dirq(unsigned int irq);
-
-#define irq2bit(irq) (irq - IRQ_LS7A_MSI_0)
-#define bit2irq(bit) (IRQ_LS7A_MSI_0 + bit)
 
 /* LS7A MSI target address only for devices with 64bit MSI */
 #define LS7A_MSI_TARGET_ADDRESS_64_HI		0xFD
@@ -31,48 +18,13 @@ void pch_destroy_dirq(unsigned int irq);
 #define LS7A_MSI_TARGET_ADDRESS_64_32_HI	0x0
 #define LS7A_MSI_TARGET_ADDRESS_64_32_LO	0x2FF00000
 
-
-/*
- * Dynamic irq allocate and deallocation
- */
-static int ls7a_create_msi_irq(void)
-{
-	int irq, pos;
-	unsigned long flags;
-
-	spin_lock_irqsave(&lock, flags);
-again:
-	pos = find_first_zero_bit(msi_irq_in_use, LS7A_NUM_MSI_IRQS);
-	if(pos==LS7A_NUM_MSI_IRQS) {
-		spin_unlock_irqrestore(&lock, flags);
-		return -ENOSPC;
-	}
-
-	irq = pos + IRQ_LS7A_MSI_0;
-	pch_create_dirq(irq);
-	/* test_and_set_bit operates on 32-bits at a time */
-	if (test_and_set_bit(pos, msi_irq_in_use))
-		goto again;
-	spin_unlock_irqrestore(&lock, flags);
-
-	dynamic_irq_init(irq);
-
-	return irq;
-}
-
-static void ls7a_destroy_irq(unsigned int irq)
-{
-	int pos = irq2bit(irq);
-
-	pch_destroy_dirq(irq);
-	dynamic_irq_cleanup(irq);
-
-	clear_bit(pos, msi_irq_in_use);
-}
+extern enum irq_chip_model msi_chip_model;
+extern int ls3a_create_msi_irq(unsigned char need_ipi);
+extern void ls3a_destroy_msi_irq(unsigned int irq, unsigned char need_ipi);
 
 void ls7a_teardown_msi_irq(unsigned int irq)
 {
-	ls7a_destroy_irq(irq);
+	ls3a_destroy_msi_irq(irq, msi_chip_model == ICM_PCI_MSI ? 1 : 0);
 }
 
 
@@ -82,7 +34,7 @@ static void ls3a_msi_nop(struct irq_data *data)
 }
 
 
-static struct irq_chip ls7a_msi_chip = {
+struct irq_chip ls7a_msi_chip = {
 	.name = "PCI-MSI",
 	.irq_ack = ls3a_msi_nop,
 	.irq_enable = unmask_msi_irq,
@@ -94,7 +46,7 @@ static struct irq_chip ls7a_msi_chip = {
 
 int ls7a_setup_msi_irq(struct pci_dev *pdev, struct msi_desc *desc)
 {
-	int irq = ls7a_create_msi_irq();
+	int irq = ls3a_create_msi_irq(msi_chip_model == ICM_PCI_MSI ? 1 : 0);
 	struct msi_msg msg;
 
 	if(!ls3a_msi_enabled)
@@ -108,15 +60,9 @@ int ls7a_setup_msi_irq(struct pci_dev *pdev, struct msi_desc *desc)
 	msg.address_hi = LS7A_MSI_TARGET_ADDRESS_64_32_HI;
 	msg.address_lo = LS7A_MSI_TARGET_ADDRESS_64_32_LO;
 
-	msg.data = irq;
+	msg.data = LS3A_IOIRQ2VECTOR(irq);
 
 	write_msi_msg(irq, &msg);
-
-	if ((current_cpu_type() == CPU_LOONGSON3_COMP) &&
-		(read_csr(LOONGSON_CPU_FEATURE_OFFSET) & LOONGSON_CPU_FEATURE_EXT_IOI)) {
-		ls7a_msi_chip.name = "PCI-MSI-EXT";
-		ls7a_msi_chip.irq_set_affinity = ext_set_irq_affinity;
-	}
 
 	irq_set_chip_and_handler(irq, &ls7a_msi_chip, handle_edge_irq);
 
