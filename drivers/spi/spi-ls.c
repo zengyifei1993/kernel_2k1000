@@ -308,7 +308,7 @@ static int ls_spi_probe(struct platform_device *pdev)
 	}
 
 	ls_spi_write_reg(spi, SPCR, 0x51);
-	ls_spi_write_reg(spi, SPER, 0x04);
+	ls_spi_write_reg(spi, SPER, 0x00);
 	ls_spi_write_reg(spi, TIMI, 0x01);
 	ls_spi_write_reg(spi, PARA, 0x40);
 	INIT_WORK(&spi->work, ls_spi_work);
