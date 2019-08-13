@@ -42,6 +42,7 @@ struct ls_spi {
 	unsigned int hz;
 	unsigned char spcr, sper;
 	struct workqueue_struct	*wq;
+	unsigned int mode;
 };
 
 static inline int set_cs(struct ls_spi *ls_spi, struct spi_device  *spi, int val);
@@ -73,7 +74,7 @@ static int ls_spi_update_state(struct ls_spi *ls_spi,struct spi_device *spi,
 	if (!hz)
 		hz = spi->max_speed_hz;
 
-	if (hz && ls_spi->hz != hz) {
+	if ((hz && ls_spi->hz != hz) || ((spi->mode ^ ls_spi->mode) & (SPI_CPOL | SPI_CPHA))) {
 		clk = 100000000;
 		div = DIV_ROUND_UP(clk, hz);
 
@@ -96,9 +97,15 @@ static int ls_spi_update_state(struct ls_spi *ls_spi,struct spi_device *spi,
 		ls_spi->sper = (div_tmp >> 2) & 3;
 
 		val = ls_spi_read_reg(ls_spi, SPCR);
+		val &= ~0xc;
+		if (spi->mode & SPI_CPOL)
+		   val |= 8;
+		if (spi->mode & SPI_CPHA)
+		   val |= 4;
 		ls_spi_write_reg(ls_spi, SPCR, (val & ~3) | ls_spi->spcr);
 		val = ls_spi_read_reg(ls_spi, SPER);
 		ls_spi_write_reg(ls_spi, SPER, (val & ~3) | ls_spi->sper);
+		ls_spi->mode = spi->mode;
 	}
 
 	return 0;
@@ -172,6 +179,8 @@ out:
 static inline int set_cs(struct ls_spi *ls_spi, struct spi_device  *spi, int val)
 {
 	int cs = ls_spi_read_reg(ls_spi, SFCS) & ~(0x11 << spi->chip_select);
+	if (spi->mode  & SPI_CS_HIGH)
+		val = !val;
 	ls_spi_write_reg(ls_spi, SFCS, ( val ? (0x11 << spi->chip_select):(0x1 << spi->chip_select)) | cs);
 	return 0;
 }
@@ -278,6 +287,7 @@ static int ls_spi_probe(struct platform_device *pdev)
 	if (pdev->id != -1)
 		master->bus_num	= pdev->id;
 
+	master->mode_bits = SPI_CPOL | SPI_CPHA | SPI_CS_HIGH ;
 	master->setup = ls_spi_setup;
 	master->transfer = ls_spi_transfer;
 	master->num_chipselect = 4;
@@ -311,6 +321,7 @@ static int ls_spi_probe(struct platform_device *pdev)
 	ls_spi_write_reg(spi, SPER, 0x00);
 	ls_spi_write_reg(spi, TIMI, 0x01);
 	ls_spi_write_reg(spi, PARA, 0x40);
+	spi->mode = 0;
 	INIT_WORK(&spi->work, ls_spi_work);
 
 	spin_lock_init(&spi->lock);
