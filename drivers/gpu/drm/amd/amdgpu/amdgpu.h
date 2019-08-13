@@ -91,6 +91,7 @@ extern int amdgpu_vm_fault_stop;
 extern int amdgpu_vm_debug;
 extern int amdgpu_sched_jobs;
 extern int amdgpu_sched_hw_submission;
+extern unsigned amdgpu_sched_async;
 extern int amdgpu_powerplay;
 extern int amdgpu_no_evict;
 extern int amdgpu_direct_gma_size;
