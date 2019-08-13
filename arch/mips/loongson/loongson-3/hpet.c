@@ -305,7 +305,7 @@ static void hpet_resume(struct clocksource *cs)
 	hpet_restart_counter();
 }
 
-static struct clocksource csrc_hpet = {
+struct clocksource csrc_hpet = {
 	.name = "hpet",
 	/* mips clocksource rating is less than 300, so hpet is batter. */
 	.rating = 300,

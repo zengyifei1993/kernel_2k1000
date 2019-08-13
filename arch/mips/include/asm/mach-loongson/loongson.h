@@ -180,6 +180,8 @@ static inline void do_perfcnt_IRQ(void)
 #define LOONGSON_OTHER_FUNC_EXT_IOI		(1ULL << 48)
 
 #define LOONGSON_NODE_COUNTER_EN        (_ULCAST_(1) <<  1)
+#define LOONGSON_CPU_FREQ_SCALE         (_ULCAST_(1) <<  6)
+#define LOONGSON_CPU_DVFS_V1            (_ULCAST_(1) <<  7)
 
 #define LOONGSON_CPUCFG_CONFIG_FIELD2    0x2
 #define LOONGSON_CPUCFG_CONFIG_FIELD4    0x4
@@ -310,6 +312,41 @@ extern u64 loongson_freqctrl[MAX_PACKAGES];
 #include <linux/cpufreq.h>
 extern struct cpufreq_frequency_table loongson2_clockmod_table[];
 extern struct cpufreq_frequency_table loongson3_clockmod_table[];
+extern struct cpufreq_frequency_table *loongson3a4000_clockmod_table;
+extern struct cpufreq_frequency_table ls3a4000_normal_table[];
+extern struct cpufreq_frequency_table ls3a4000_boost_table[];
+extern void ls3a4000_freq_table_switch(struct cpufreq_frequency_table *table);
+extern int ls3a4000_set_boost(int mode, struct cpufreq_policy *policy, int index);
+extern int ls3a4000_freq_scale(struct cpufreq_policy* policy, unsigned long rate);
+
+#ifdef CONFIG_GS464V_STABLE_COUNTER
+extern int stable_timer_enabled;
+#endif
+
+#define BOOST_FREQ_MAX 2000000000
+
+#define CPU_ID_FIELD    0xf
+#define NODE_FIELD      0xf0
+#define FREQ_FIELD      0xf00
+#define VOLTAGE_FIELD   0xf000
+#define VOLTAGE_CHANGE_FIELD    0xc0000
+
+#define BOOST_NORMAL_FIELD  0xc0000
+
+#define COMMAND_FIELD   0x7f000000
+#define COMPLETE_STATUS 0x80000000
+#define VOLTAGE_COMMAND 0x21
+
+#define DVFS_INFO	0x22
+#define DVFS_INFO_MIN_FREQ	0xf
+#define DVFS_INFO_MAX_FREQ	0xf0
+#define DVFS_INFO_BOOST_CORE_FREQ	0xff00
+#define DVFS_INFO_NORMAL_CORE_UPPER_LIMIT	0xf0000
+#define DVFS_INFO_BOOST_CORES	0xf00000
+
+#define BOOST_MODE	0x80000
+#define NORMAL_MODE	0x40000
+
 #endif
 
 /*
