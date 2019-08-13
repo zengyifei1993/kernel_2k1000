@@ -640,6 +640,11 @@ static void r4k_flush_icache_range(unsigned long start, unsigned long end)
 	instruction_hazard();
 }
 
+static void local_loongson3_flush_icache_range(unsigned long start, unsigned long end)
+{
+	asm volatile ("\tsynci 0($0)\n"::);
+
+}
 #ifdef CONFIG_DMA_NONCOHERENT
 
 static void r4k_dma_cache_wback_inv(unsigned long addr, unsigned long size)
@@ -1664,5 +1669,13 @@ void  r4k_cache_init(void)
 		flush_icache_range	= (void *)cache_noop;
 		local_flush_data_cache_page	= (void *)cache_noop;
 		local_flush_icache_range	= (void *)cache_noop;
+	}
+	if (boot_cpu_type() == CPU_LOONGSON2K ||
+		boot_cpu_type() == CPU_LOONGSON3_COMP ||
+		(boot_cpu_type() == CPU_LOONGSON3 &&
+		((read_c0_prid() & 0xffff) >= 0x6308))) {
+
+		flush_icache_range	= local_loongson3_flush_icache_range;
+		local_flush_icache_range = local_loongson3_flush_icache_range;
 	}
 }
