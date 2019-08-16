@@ -107,12 +107,6 @@ static inline int __own_fpu(void)
 	if (ret)
 		return ret;
 
-	KSTK_STATUS(current) |= ST0_CU1;
-	if (mode == FPU_64BIT)
-		KSTK_STATUS(current) |= ST0_FR;
-	else /* mode == FPU_32BIT */
-		KSTK_STATUS(current) &= ~ST0_FR;
-
 	set_thread_flag(TIF_USEDFPU);
 	return 0;
 }
@@ -160,7 +154,6 @@ static inline void lose_fpu_inatomic(int save, struct task_struct *tsk)
 			_save_fp(tsk);
 		__disable_fpu();
 	}
-	KSTK_STATUS(tsk) &= ~ST0_CU1;
 	clear_tsk_thread_flag(tsk, TIF_USEDFPU);
 }
 
