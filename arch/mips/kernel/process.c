@@ -162,7 +162,6 @@ int copy_thread(unsigned long clone_flags, unsigned long usp,
 	childregs->cp0_tcstatus &= ~(ST0_CU2|ST0_CU1);
 #endif
 	clear_tsk_thread_flag(p, TIF_USEDFPU);
-	clear_tsk_thread_flag(p, TIF_USEDMSA);
 	clear_tsk_thread_flag(p, TIF_MSA_CTX_LIVE);
 	clear_tsk_thread_flag(p, TIF_MSA_XCTX_LIVE);
 
