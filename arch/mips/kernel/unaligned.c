@@ -936,7 +936,7 @@ static void emulate_load_store_insn(struct pt_regs *regs,
 			 * task in this quantum, in order to avoid having to
 			 * save & restore the whole vector context.
 			 */
-			if (test_thread_flag(TIF_USEDMSA))
+			if (test_thread_flag(TIF_USEDFPU))
 				write_msa_wr(wd, fpr, df);
 
 			preempt_enable();
@@ -952,7 +952,7 @@ static void emulate_load_store_insn(struct pt_regs *regs,
 			 * save & restore the whole vector context.
 			 */
 			preempt_disable();
-			if (test_thread_flag(TIF_USEDMSA))
+			if (test_thread_flag(TIF_USEDFPU))
 				read_msa_wr(wd, fpr, df);
 			preempt_enable();
 

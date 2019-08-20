@@ -1132,7 +1132,6 @@ static int enable_restore_fp_context(int msa)
 			enable_msa();
 			write_msa_csr(current->thread.fpu.msacsr);
 			_init_msa_upper();
-			set_thread_flag(TIF_USEDMSA);
 			set_thread_flag(TIF_MSA_CTX_LIVE);
 		}
 		preempt_enable();
@@ -1182,7 +1181,6 @@ static int enable_restore_fp_context(int msa)
 		goto out;
 
 	enable_msa();
-	set_thread_flag(TIF_USEDMSA);
 
 	/*
 	 * If this is the first time that the task is using MSA and it has
@@ -1693,7 +1691,6 @@ asmlinkage void do_lx(struct pt_regs *regs, unsigned int gscause)
 					current->thread.fpu.fcr31);
 			enable_msa();
 			restore_msa(current);
-			set_thread_flag(TIF_USEDMSA);
 
 		}
 
