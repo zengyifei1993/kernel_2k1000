@@ -407,6 +407,21 @@ static enum emulation_result kvm_vz_gpsi_cop0(union mips_instruction inst,
 			    sel == 1) {			/* PageGrain */
 				val = cop0->reg[rd][sel];
 			} else if ((rd == MIPS_CP0_CONFIG) &&
+			    (sel == 0)) {               /* Config0 */
+				val = read_c0_config();
+			} else if ((rd == MIPS_CP0_CONFIG) &&
+			    (sel == 1)) {               /* Config1 */
+				val = read_c0_config1() & (~ MIPS_CONF1_PC);
+			} else if ((rd == MIPS_CP0_CONFIG) &&
+			    (sel == 2)) {               /* Config2 */
+				val = read_c0_config2();
+			} else if ((rd == MIPS_CP0_CONFIG) &&
+			    (sel == 3)) {               /* Config3 */
+				val = read_c0_config3() & (~MIPS_CONF3_VZ);
+			} else if ((rd == MIPS_CP0_CONFIG) &&
+			    (sel == 4)) {               /* Config4 */
+				val = read_c0_config4();
+			} else if ((rd == MIPS_CP0_CONFIG) &&
 			    (sel == 6)) {               /* GSConfig*/
 				val = cop0->reg[rd][sel];
 			} else if ((rd == MIPS_CP0_TLB_CONTEXT) &&
@@ -506,6 +521,24 @@ static enum emulation_result kvm_vz_gpsi_cop0(union mips_instruction inst,
 				      KVM_TRACE_COP0(rd, sel), val);
 			if (rd == MIPS_CP0_TLB_PGGRAIN &&
 			    sel == 1) {			/* PageGrain */
+				/* Sign extend */
+				if (inst.c0r_format.rs == mtc_op)
+					val = (int)val;
+				cop0->reg[rd][sel] = val;
+			} else if ((rd == MIPS_CP0_CONFIG) &&
+			    (sel == 0)) {               /* Config0 */
+				/* Sign extend */
+				if (inst.c0r_format.rs == mtc_op)
+					val = (int)val;
+				cop0->reg[rd][sel] = val;
+			} else if ((rd == MIPS_CP0_CONFIG) &&
+			    (sel == 3)) {               /* Config3 */
+				/* Sign extend */
+				if (inst.c0r_format.rs == mtc_op)
+					val = (int)val;
+				cop0->reg[rd][sel] = val;
+			} else if ((rd == MIPS_CP0_CONFIG) &&
+			    (sel == 4)) {               /* Config4 */
 				/* Sign extend */
 				if (inst.c0r_format.rs == mtc_op)
 					val = (int)val;
@@ -1041,7 +1074,8 @@ static int kvm_vz_hardware_enable(void)
 	 * CG=1:	Hit (virtual address) CACHE operations (optional).
 	 * CF=1:	Guest Config registers.
 	 */
-	write_c0_guestctl0(MIPS_GCTL0_CP0 | MIPS_GCTL0_CF);
+
+	write_c0_guestctl0(MIPS_GCTL0_CP0);
 
 	/* clear any pending injected virtual guest interrupts */
 	if (cpu_has_guestctl2)
