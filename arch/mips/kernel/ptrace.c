@@ -659,13 +659,11 @@ static int msa_get(struct task_struct *target,
 		/* Copy scalar FP context, fill the rest with 0xff */
 		err = copy_pad_fprs(target, regset, &pos, &count,
 				    &kbuf, &ubuf, 8);
-#if 0
 #ifdef CONFIG_CPU_HAS_LASX
 	} else if (!test_tsk_thread_flag(target, TIF_MSA_XCTX_LIVE)) {
 		/* Copy MSA 128 Bit context, fill the rest with 0xff */
 		err = copy_pad_fprs(target, regset, &pos, &count,
 				    &kbuf, &ubuf, 16);
-#endif
 #endif
 	} else if (sizeof(target->thread.fpu.fpr[0]) == regset->size) {
 		/* Trivially copy the vector registers */

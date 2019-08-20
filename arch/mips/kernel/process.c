@@ -67,6 +67,7 @@ void start_thread(struct pt_regs * regs, unsigned long pc, unsigned long sp)
 	current->thread.fpu.msacsr = 0;
 	clear_used_math();
 	clear_thread_flag(TIF_MSA_CTX_LIVE);
+	clear_thread_flag(TIF_MSA_XCTX_LIVE);
 	init_dsp();
 	regs->cp0_epc = pc;
 	regs->regs[29] = sp;
@@ -91,11 +92,7 @@ int arch_dup_task_struct(struct task_struct *dst, struct task_struct *src)
 	 */
 	preempt_disable();
 
-	if (is_msa_enabled())
-		save_msa(current);
-	else if (is_fpu_owner())
-		_save_fp(current);
-
+	lose_fpu_inatomic(1, current);
 	save_dsp(current);
 
 	preempt_enable();
@@ -162,6 +159,7 @@ int copy_thread(unsigned long clone_flags, unsigned long usp,
 	clear_tsk_thread_flag(p, TIF_USEDFPU);
 	clear_tsk_thread_flag(p, TIF_USEDMSA);
 	clear_tsk_thread_flag(p, TIF_MSA_CTX_LIVE);
+	clear_tsk_thread_flag(p, TIF_MSA_XCTX_LIVE);
 
 #ifdef CONFIG_MIPS_MT_FPAFF
 	clear_tsk_thread_flag(p, TIF_FPUBOUND);
