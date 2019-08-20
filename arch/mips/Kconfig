@@ -1602,6 +1602,9 @@ config CPU_LOONGSON3
 		The Loongson 3 processor implements the MIPS III instruction set
 		with many extensions.
 
+config GS464_CU2_ERRATA
+        bool "work around CU2 misuse for GS464 core used in 3A1000 "
+
 config LOONGSON3_CPUAUTOPLUG
 	tristate "Loongson 3 CPUAutoplug Driver"
 	depends on CPU_LOONGSON3 && HOTPLUG_CPU

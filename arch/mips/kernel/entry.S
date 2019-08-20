@@ -52,7 +52,8 @@ resume_userspace:
 	LONG_L	a2, TI_FLAGS($28)	# current->work
 	andi	t0, a2, _TIF_WORK_MASK	# (ignoring syscall_trace)
 	bnez	t0, work_pending
-	j	restore_all
+
+	j	restore_all_user
 
 #ifdef CONFIG_PREEMPT
 resume_kernel:
@@ -88,6 +89,16 @@ FEXPORT(syscall_exit)
 	and	t0, a2, t0
 	bnez	t0, syscall_exit_work
 
+restore_all_user:
+#ifdef CONFIG_GS464_CU2_ERRATA
+	# special handling 3A1000 CU2
+	mfc0	t0, CP0_STATUS  # if return to user mode with CU1 set, CU2 is already set by kernel
+	ext 	t1, t0, 29, 1     # if return to user mode without CU1 set, then we should clear CU2
+	bnez	t1, 1f
+	ins 	t0, zero, 30, 1
+	mtc0	t0, CP0_STATUS
+1:
+#endif
 restore_all:				# restore full frame
 #ifdef CONFIG_MIPS_MT_SMTC
 #ifdef CONFIG_MIPS_MT_SMTC_IM_BACKSTOP
@@ -164,7 +175,7 @@ work_resched:
 	LONG_L	a2, TI_FLAGS($28)
 	andi	t0, a2, _TIF_WORK_MASK	# is there any work to be done
 					# other than syscall tracing?
-	beqz	t0, restore_all
+	beqz	t0, restore_all_user
 	andi	t0, a2, _TIF_NEED_RESCHED
 	bnez	t0, work_resched
 
@@ -181,7 +192,22 @@ FEXPORT(syscall_exit_partial)
 	LONG_L	a2, TI_FLAGS($28)	# current->work
 	li	t0, _TIF_ALLWORK_MASK
 	and	t0, a2
+#ifdef CONFIG_GS464_CU2_ERRATA
+
+	bnez 	t0, 1f
+	# special handling 3A1000 CU2
+	mfc0	t0, CP0_STATUS  # if return to user mode with CU1 set, CU2 is already set by kernel
+	ext	t1, t0, 29, 1     # if return to user mode without CU1 set, then we should clear CU2
+	bnez	t1, 2f
+	ins	t0, zero, 30, 1
+	mtc0	t0, CP0_STATUS
+2:
+	j	restore_partial
+1:
+#else
 	beqz	t0, restore_partial
+
+#endif
 	SAVE_STATIC
 syscall_exit_work:
 	LONG_L	t0, PT_STATUS(sp)		# returning to kernel mode?
