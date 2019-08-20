@@ -1683,19 +1683,9 @@ asmlinkage void do_lx(struct pt_regs *regs, unsigned int gscause)
 
 		preempt_disable();
 
-		set_thread_flag(TIF_MSA_XCTX_LIVE);
-
-		if(!is_fpu_owner()) {
-			own_fpu_inatomic(0);
-			write_32bit_cp1_register(CP1_STATUS,
-					current->thread.fpu.fcr31);
-			enable_msa();
-			restore_msa(current);
-
-		}
-
 		enable_lasx();
 		_init_lasx_upper();
+		set_thread_flag(TIF_MSA_XCTX_LIVE);
 
 		preempt_enable();
 
