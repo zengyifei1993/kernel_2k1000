@@ -37,8 +37,6 @@ static void wr_gs464_cu2(void)
         fpu_owned = __is_fpu_owner();
         set_c0_status(ST0_CU1 | ST0_CU2);
         enable_fpu_hazard();
-        /* we do not need to change KSTK_STATUS(current) */
-        KSTK_STATUS(current) |= (ST0_CU1 | ST0_CU2);
         /* If FPU is owned, we needn't init or restore fp */
         if(!fpu_owned) {
                 set_thread_flag(TIF_USEDFPU);
