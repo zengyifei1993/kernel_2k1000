@@ -48,8 +48,8 @@
 #define LOONGSON_EXT_IOI_MAP_OFFSET		0x000014C0
 #define LOONGSON_EXT_IOI_ROUTE_OFFSET		0x00001C00
 
-#define MAX_EXT_IOI_VECOTRS	256
-#define MAX_32ARRAY_SIZE	(MAX_EXT_IOI_VECOTRS >> 5)
+#define LS_IOI_IRQ_VECTORS	256
+#define MAX_32ARRAY_SIZE	(LS_IOI_IRQ_VECTORS  >> 5)
 #define LS_IOI_INV_CPU_ID_32	0xFFFFFFFF
 #define LS_IOI_INV_CPU_ID	0xFF
 #define LS_ANYSEND_OTHER_FUNC_OFFSET	(LOONGSON_OTHER_FUNC_OFFSET + 4)
@@ -58,12 +58,11 @@
 #define LS_ANYSEND_CPU_SHIFT	16
 #define LS_ANYSEND_CPU_MASK	0x3FF
 #define LS_ANYSEND_DATA_SHIFT	32
-#define LS_IOI_IRQ_VECTORS	128
 #define LS_ANYSEND_IOI_NODEMAP_ITEMS	8
-#define LS_ANYSEND_IOI_EN_ITEMS	4
-#define LS_ANYSEND_IOI_IPMAP_ITEMS	1
-#define LS_ANYSEND_IOI_ROUTE_ITEMS	32
-#define LS_ANYSEND_IOI_BOUNCE_ITEMS	4
+#define LS_ANYSEND_IOI_EN_ITEMS	8
+#define LS_ANYSEND_IOI_IPMAP_ITEMS	2
+#define LS_ANYSEND_IOI_ROUTE_ITEMS	64
+#define LS_ANYSEND_IOI_BOUNCE_ITEMS	8
 #define LS_IOI_NODEMAP_BITS_PER_ENTRY	16
 #define LS_ANYSEND_IOI_EN32_DATA	0xFFFFFFFF
 #define LS_ANYSEND_IOI_IPMAP_DATA	0x02020202 /* route to IP3 */
@@ -330,10 +329,46 @@ struct ls2h_intctl_regs {
 #define LS7A_IOAPIC_GPIO_2_IRQ              (LS7A_IOAPIC_IRQ_BASE + LS7A_IOAPIC_GPIO_2_OFFSET       )
 #define LS7A_IOAPIC_GPIO_3_IRQ              (LS7A_IOAPIC_IRQ_BASE + LS7A_IOAPIC_GPIO_3_OFFSET       )
 #endif
-
+extern unsigned int ls3a_num_msi_irqs;
 #define IPI_IRQ_OFFSET 6
 #define IRQ_LS3A_MSI_0 0
-#define LS3A_NUM_MSI_IRQS 64
+#define LS3A_NUM_MSI_IRQS	64
+#define LS3A_NUM_MSI_IRQ ls3a_num_msi_irqs
+#define LS3A_MAX_IO_IRQ		256
+#define LS3A_MAX_MSI_IRQ	192
+#define LS3A_IOIRQ_SUB_VECTOR	64
+#define LS3A_MSI_SUB_VECTOR 128
+
+/* convert between io irq and HT or EXT vector 
+ *
+ * irq - vector = LS3A_IOIRQ_SUB_VECTOR
+ *
+ * vector	-------------------------
+ * 		|000-063|064-127|128-255|
+ * 		-------------------------
+ * irq		|064-127|128-191|192-319|
+ * 		-------------------------
+ * 		|IOPIC	|MSI		|
+ * 		-------------------------		
+ * */
+#define LS3A_IOIRQ2VECTOR(irq)	(irq - LS3A_IOIRQ_SUB_VECTOR)
+#define LS3A_VECTOR2IOIRQ(vector)  (vector + LS3A_IOIRQ_SUB_VECTOR) 
+
+/*
+ * Define irq_chip model
+ * 
+ * */
+enum irq_chip_model {
+	ICM_CORE = 0, 	/* for single core, such as MIPS */
+	ICM_CPU,	/* for cpu cores shared, such as Loongson */
+	ICM_PCI_MSI,	/* for pci msi managed through cpu HT vector */
+	ICM_PCI_MSI_EXT,	/* for pci msi managed through cpu EXT vector */
+	ICM_IOPIC_LINE,		/* for iopic managed through iopic interrupt related registers */
+	ICM_IOPIC_HT,		/* for iopic managed through cpu HT vector */
+	ICM_IOPIC_HT_EXT,	/* for iopic managed through cpu EXT vector */
+	ICM_END
+};
+
 #define RS780_PCH_ACPI_IRQ  7
 #include_next <irq.h>
 #endif /* __ASM_MACH_LOONGSON_IRQ_H_ */
