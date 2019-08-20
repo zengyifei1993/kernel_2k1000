@@ -29,6 +29,7 @@
 #include <asm/io.h>
 #include <asm/kvm_para.h>
 #include "rtasd.h"
+#include <loongson.h>
 
 static void rtas_event_scan(struct work_struct *w);
 DECLARE_DELAYED_WORK(event_scan_work, rtas_event_scan);
@@ -334,7 +335,7 @@ static void rtas_event_scan(struct work_struct *w)
 /* Cancel the rtas event scan work */
 void rtas_cancel_event_scan(void)
 {
-	if(!cpu_has_vz)
+	if(cpu_guestmode)
 		cancel_delayed_work_sync(&event_scan_work);
 }
 EXPORT_SYMBOL_GPL(rtas_cancel_event_scan);
@@ -374,7 +375,7 @@ static int hotplug_notifier_call(struct notifier_block *nb,
 
 static int __init rtas_event_scan_init(void)
 {
-	if(cpu_has_vz)
+	if(!cpu_guestmode)
 		return 0;
 
 	/* Make room for the sequence number */

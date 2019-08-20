@@ -25,6 +25,7 @@ extern void mach_prepare_reboot(void);
 extern void mach_prepare_shutdown(void);
 extern void lsvirt_button_poweroff(void);
 
+extern u32 cpu_guestmode;
 /* environment arguments from bootloader */
 extern u32 cpu_clock_freq;
 extern u32 memsize, highmemsize;
@@ -596,5 +597,4 @@ static inline unsigned int calc_const_freq(void)
 		return (base_freq * cfm / cfd);
 
 }
-
 #endif /* __ASM_MACH_LOONGSON_LOONGSON_H */

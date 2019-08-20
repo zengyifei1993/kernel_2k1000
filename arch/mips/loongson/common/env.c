@@ -35,6 +35,7 @@ struct system_loongson *esys;
 struct board_devices *eboard;
 struct irq_source_routing_table *eirq_source;
 
+u32 cpu_guestmode;
 u64 ht_control_base;
 u64 pci_mem_start_addr, pci_mem_end_addr;
 u64 loongson_pciio_base;
@@ -377,6 +378,10 @@ void __init prom_init_env(void)
 		}
 	}
 	pr_info("CpuClock = %u\n", cpu_clock_freq);
+
+	cpu_guestmode = (!cpu_has_vz && (((read_c0_prid() & 0xffff) >=
+		(PRID_IMP_LOONGSON2 | PRID_REV_LOONGSON3A_R2_0)) ||
+		((read_c0_prid() & 0xffff) == 0)));
 }
 
 static int __init init_cpu_fullname(void)
