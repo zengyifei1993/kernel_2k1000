@@ -636,7 +636,7 @@ void kvm_mips_init_count(struct kvm_vcpu *vcpu, unsigned long count_hz)
 	vcpu->arch.count_dyn_bias = 0;
 
 	/* Starting at 0 */
-	kvm_mips_write_count(vcpu, 0);
+	kvm_timer_callbacks->write_count(vcpu, 0);
 }
 
 /**
@@ -842,7 +842,7 @@ void kvm_mips_count_enable_cause(struct kvm_vcpu *vcpu)
 	 * Otherwise it conveniently updates the biases.
 	 */
 	count = kvm_read_c0_guest_count(cop0);
-	kvm_mips_write_count(vcpu, count);
+	kvm_timer_callbacks->write_count(vcpu, count);
 }
 
 /**
@@ -978,7 +978,7 @@ enum emulation_result kvm_mips_emul_wait(struct kvm_vcpu *vcpu)
 	++vcpu->stat.wait_exits;
 	trace_kvm_exit(vcpu, KVM_TRACE_EXIT_WAIT);
 	if (!vcpu->arch.pending_exceptions) {
-		kvm_vz_lose_htimer(vcpu);
+		kvm_timer_callbacks->lose_htimer(vcpu);
 		vcpu->arch.wait = 1;
 		kvm_vcpu_block(vcpu);
 

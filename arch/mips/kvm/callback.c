@@ -19,6 +19,8 @@
 
 struct kvm_mips_callbacks *kvm_mips_callbacks;
 EXPORT_SYMBOL_GPL(kvm_mips_callbacks);
+struct kvm_timer_callbacks *kvm_timer_callbacks;
+EXPORT_SYMBOL_GPL(kvm_timer_callbacks);
 EXPORT_SYMBOL(_save_fp);
 extern void flush_tlb_all(void);
 EXPORT_SYMBOL(flush_tlb_all);

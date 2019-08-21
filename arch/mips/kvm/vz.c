@@ -617,6 +617,222 @@ void kvm_vz_lose_htimer(struct kvm_vcpu *vcpu)
 }
 
 /**
+ * kvm_loongson_should_use_htimer() - Find whether to use the VZ hard guest timer.
+ * @vcpu:	Virtual CPU.
+ *
+ * Returns:	true if the VZ GTOffset & real guest CP0_Count should be used
+ *		instead of software emulation of guest timer.
+ *		false otherwise.
+ */
+static bool kvm_loongson_should_use_htimer(struct kvm_vcpu *vcpu)
+{
+	if (kvm_mips_count_disabled(vcpu))
+		return false;
+
+	return true;
+}
+
+/**
+ * _kvm_vz_restore_stable_stimer() - Restore soft timer state.
+ * @vcpu:	Virtual CPU.
+ * @cause:	CP0_Cause register to restore.
+ *
+ * Restore VZ state relating to the soft timer. The hard timer can be enabled
+ * later.
+ */
+static void _kvm_vz_restore_stable_stimer(struct kvm_vcpu *vcpu, u32 cause)
+{
+	/*
+	 * Set guest stable timer cfg csr
+	 */
+	back_to_back_c0_hazard();
+	write_gc0_cause(cause);
+}
+
+/**
+ * kvm_loongson_restore_timer() - Restore timer state.
+ * @vcpu:	Virtual CPU.
+ *
+ * Restore soft timer state from saved context.
+ */
+static void kvm_loongson_restore_timer(struct kvm_vcpu *vcpu)
+{
+	struct mips_coproc *cop0 = vcpu->arch.cop0;
+	u32 cause;
+
+	cause = kvm_read_sw_gc0_cause(cop0);
+	_kvm_vz_restore_stable_stimer(vcpu, cause);
+}
+
+/**
+ * _kvm_vz_restore_stable_htimer() - Restore hard timer state.
+ * @vcpu:	Virtual CPU.
+ * @cause:	CP0_Cause register to restore.
+ *
+ * Restore hard timer Guest.Count & Guest.Cause taking care to preserve the
+ * value of Guest.CP0_Cause.TI while restoring Guest.CP0_Cause.
+ */
+static void _kvm_vz_restore_stable_htimer(struct kvm_vcpu *vcpu,
+					  u32 cause)
+{
+	u64 start_stable_timer, after_stable_timer;
+	ktime_t freeze_time;
+	unsigned long flags;
+
+	/*
+	 * Freeze the soft-timer and sync the guest stable timer with it. We do
+	 * this with interrupts disabled to avoid latency.
+	 */
+	local_irq_save(flags);
+	freeze_time = kvm_loongson_freeze_hrtimer(vcpu, &start_stable_timer);
+	local_irq_restore(flags);
+
+	/* restore guest CP0_Cause, as TI may already be set */
+	back_to_back_c0_hazard();
+	write_gc0_cause(cause);
+
+	/*
+	 * The above sequence isn't atomic and would result in lost timer
+	 * interrupts if we're not careful. Detect if a timer interrupt is due
+	 * and assert it.
+	 */
+	back_to_back_c0_hazard();
+	after_stable_timer = dread_guest_csr(STABLE_TIMER_TICK);
+	/* Stable timer count down to 48bits -1 */
+	if (after_stable_timer == ((u64)(1ULL << 48) - 1))
+		kvm_vz_queue_irq(vcpu, MIPS_EXC_INT_TIMER);
+}
+
+/**
+ * kvm_loongson_acquire_htimer() - Switch to hard timer state.
+ * @vcpu:	Virtual CPU.
+ *
+ * Restore hard timer state on top of existing soft timer state if possible.
+ *
+ * Since hard timer won't remain active over preemption, preemption should be
+ * disabled by the caller.
+ */
+void kvm_loongson_acquire_htimer(struct kvm_vcpu *vcpu)
+{
+	u32 gctl0;
+
+	gctl0 = read_c0_guestctl0();
+	if (!(gctl0 & MIPS_GCTL0_GT) && kvm_loongson_should_use_htimer(vcpu)) {
+		/* enable guest access to hard timer */
+		write_c0_guestctl0(gctl0 | MIPS_GCTL0_GT);
+
+		_kvm_vz_restore_stable_htimer(vcpu, read_gc0_cause());
+	}
+}
+
+/**
+ * _kvm_vz_save_stable_htimer() - Switch to software emulation of guest timer.
+ * @vcpu:	Virtual CPU.
+ * @cause:	Pointer to write cause value to.
+ *
+ * Save VZ guest timer state and switch to software emulation of guest CP0
+ * timer. The hard timer must already be in use, so preemption should be
+ * disabled.
+ */
+static void _kvm_vz_save_stable_htimer(struct kvm_vcpu *vcpu,
+				u64 *stable_timer, u32 *out_cause)
+{
+	u64 before_stable_timer, end_stable_timer;
+	u32 cause;
+	ktime_t before_time;
+
+	before_time = ktime_get();
+
+	/*
+	 * Record the stable timer *prior* to saving CP0_Cause, so we have a time
+	 * at which no pending timer interrupt is missing.
+	 */
+	before_stable_timer = dread_guest_csr(STABLE_TIMER_TICK);
+	back_to_back_c0_hazard();
+	cause = read_gc0_cause();
+	*out_cause = cause;
+
+	/*
+	 * Record a final stable timer which we will transfer to the soft-timer.
+	 * This is recorded *after* saving CP0_Cause, so we don't get any timer
+	 * interrupts from just after the final stable timer point.
+	 */
+	back_to_back_c0_hazard();
+	end_stable_timer = dread_guest_csr(STABLE_TIMER_TICK);
+	*stable_timer = end_stable_timer;
+
+	/*
+	 * The above sequence isn't atomic, so we could miss a timer interrupt
+	 * between reading CP0_Cause and end_stable_timer. Detect and record any timer
+	 * interrupt due between before_stable_timer and end_stable_timer.
+	 */
+	if (end_stable_timer == ((u64)(1ULL << 48) - 1))
+		kvm_vz_queue_irq(vcpu, MIPS_EXC_INT_TIMER);
+
+	/*
+	 * Restore soft-timer, ignoring a small amount of negative drift due to
+	 * delay between freeze_hrtimer and setting CP0_GTOffset.
+	 */
+	kvm_loongson_restore_hrtimer(vcpu, before_time, end_stable_timer, 0x10000);
+}
+
+/**
+ * kvm_loongson_save_timer() - Save guest timer state.
+ * @vcpu:	Virtual CPU.
+ *
+ * Save VZ guest timer state and switch to soft guest timer if hard timer was in
+ * use.
+ */
+static void kvm_loongson_save_timer(struct kvm_vcpu *vcpu)
+{
+	struct mips_coproc *cop0 = vcpu->arch.cop0;
+	u32 gctl0, cause;
+
+	u64 stable_timer = 0;
+
+	gctl0 = read_c0_guestctl0();
+	if (gctl0 & MIPS_GCTL0_GT) {
+		/* disable guest use of hard timer */
+		write_c0_guestctl0(gctl0 & ~MIPS_GCTL0_GT);
+
+		/* save hard timer state */
+		_kvm_vz_save_stable_htimer(vcpu, &stable_timer, &cause);
+	} else {
+		stable_timer = dread_guest_csr(STABLE_TIMER_TICK);
+		cause = read_gc0_cause();
+	}
+
+	/* save timer-related state to VCPU context */
+	kvm_write_sw_gc0_cause(cop0, cause);
+	vcpu->arch.stable_timer_tick = stable_timer;
+}
+
+/**
+ * kvm_loongson_lose_htimer() - Ensure hard guest timer is not in use.
+ * @vcpu:	Virtual CPU.
+ *
+ * Transfers the state of the hard guest timer to the soft guest timer, leaving
+ * guest state intact so it can continue to be used with the soft timer.
+ */
+void kvm_loongson_lose_htimer(struct kvm_vcpu *vcpu)
+{
+	u32 gctl0, cause;
+	u64 stable_timer = 0;
+
+	preempt_disable();
+	gctl0 = read_c0_guestctl0();
+	if (gctl0 & MIPS_GCTL0_GT) {
+		/* disable guest use of timer */
+		write_c0_guestctl0(gctl0 & ~MIPS_GCTL0_GT);
+
+		_kvm_vz_save_stable_htimer(vcpu, &stable_timer, &cause);
+		vcpu->arch.stable_timer_tick = stable_timer;
+		_kvm_vz_restore_stable_stimer(vcpu, cause);
+	}
+	preempt_enable();
+}
+
+/**
  * is_eva_access() - Find whether an instruction is an EVA memory accessor.
  * @inst:	32-bit instruction encoding.
  *
@@ -1129,7 +1345,8 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 					}
 				}
 			} else {
-				kvm_err("Should depend on the condition for dwrcsr %lx",vcpu->arch.gprs[rs]);
+				kvm_err("Should depend on the condition for dwrcsr %lx @ %lx",
+									vcpu->arch.gprs[rs], curr_pc);
 			}
 
 			break;
@@ -1239,10 +1456,10 @@ static enum emulation_result kvm_vz_gpsi_cop0(union mips_instruction inst,
 				val = cop0->reg[rd][sel];
 			} else if (rd == MIPS_CP0_CONFIG && sel == 6) {
 				/* Check host support FLTINT or not */
-				if(read_c0_config6() & (0x1 << 7))
-					val = cop0->reg[rd][sel];
+				if(read_c0_config6() & GSCFG_FLTINT)
+					val = cop0->reg[rd][sel] | GSCFG_FLTINT;
 				else
-					val = cop0->reg[rd][sel] & (~(0x1<<7));
+					val = cop0->reg[rd][sel] & (~GSCFG_FLTINT);
 			} else if (rd == MIPS_CP0_DIAG && sel == 0) {
 				val = cop0->reg[rd][sel];       // Diag
 			} else {
@@ -1274,8 +1491,9 @@ static enum emulation_result kvm_vz_gpsi_cop0(union mips_instruction inst,
 
 			if (rd == MIPS_CP0_COUNT &&
 			    sel == 0) {			/* Count */
-				kvm_vz_lose_htimer(vcpu);
-				kvm_mips_write_count(vcpu, vcpu->arch.gprs[rt]);
+				kvm_timer_callbacks->lose_htimer(vcpu);
+				if(!vcpu->kvm->arch.use_stable_timer)
+					kvm_timer_callbacks->write_count(vcpu, vcpu->arch.gprs[rt]);
 			} else if (rd == MIPS_CP0_COMPARE &&
 				   sel == 0) {		/* Compare */
 				kvm_mips_write_compare(vcpu,
@@ -1618,7 +1836,7 @@ static enum emulation_result kvm_trap_vz_handle_gsfc(u32 cause, u32 *opc,
 			/* DC bit enabling/disabling timer? */
 			if (change & CAUSEF_DC) {
 				if (val & CAUSEF_DC) {
-					kvm_vz_lose_htimer(vcpu);
+					kvm_timer_callbacks->lose_htimer(vcpu);
 					kvm_mips_count_disable_cause(vcpu);
 				} else {
 					kvm_mips_count_enable_cause(vcpu);
@@ -1742,7 +1960,7 @@ static int kvm_trap_vz_handle_guest_exit(struct kvm_vcpu *vcpu)
 			MIPS_GCTL0_GEXC) >> MIPS_GCTL0_GEXC_SHIFT;
 	int ret = RESUME_GUEST;
 
-   	vcpu->arch.is_hypcall = 0;
+	vcpu->arch.is_hypcall = 0;
 
 	trace_kvm_exit(vcpu, KVM_TRACE_EXIT_GEXCCODE_BASE + gexccode);
 	switch (gexccode) {
@@ -2382,13 +2600,22 @@ static int kvm_vz_get_one_reg(struct kvm_vcpu *vcpu,
 		}
 		break;
 	case KVM_REG_MIPS_COUNT_CTL:
-		*v = vcpu->arch.count_ctl;
+		if(vcpu->kvm->arch.use_stable_timer)
+			*v = vcpu->arch.stable_timer_ctl;
+		else
+			*v = vcpu->arch.count_ctl;
 		break;
 	case KVM_REG_MIPS_COUNT_RESUME:
-		*v = ktime_to_ns(vcpu->arch.count_resume);
+		if(vcpu->kvm->arch.use_stable_timer)
+			*v = ktime_to_ns(vcpu->arch.stable_timer_resume);
+		else
+			*v = ktime_to_ns(vcpu->arch.count_resume);
 		break;
 	case KVM_REG_MIPS_COUNT_HZ:
-		*v = vcpu->arch.count_hz;
+		if(vcpu->kvm->arch.use_stable_timer)
+			*v = vcpu->arch.stable_timer_hz;
+		else
+			*v = vcpu->arch.count_hz;
 		break;
 	default:
 		return -EINVAL;
@@ -2499,7 +2726,8 @@ static int kvm_vz_set_one_reg(struct kvm_vcpu *vcpu,
 		write_gc0_badinstrp(v);
 		break;
 	case KVM_REG_MIPS_CP0_COUNT:
-		kvm_mips_write_count(vcpu, v);
+		if(!vcpu->kvm->arch.use_stable_timer)
+			kvm_timer_callbacks->write_count(vcpu, v);
 		break;
 	case KVM_REG_MIPS_CP0_ENTRYHI:
 		write_gc0_entryhi(v);
@@ -2657,13 +2885,22 @@ static int kvm_vz_set_one_reg(struct kvm_vcpu *vcpu,
 		}
 		break;
 	case KVM_REG_MIPS_COUNT_CTL:
-		ret = kvm_mips_set_count_ctl(vcpu, v);
+		if(vcpu->kvm->arch.use_stable_timer)
+			ret = kvm_loongson_set_stable_timer_ctl(vcpu, v);
+		else
+			ret = kvm_mips_set_count_ctl(vcpu, v);
 		break;
 	case KVM_REG_MIPS_COUNT_RESUME:
-		ret = kvm_mips_set_count_resume(vcpu, v);
+		if(vcpu->kvm->arch.use_stable_timer)
+			ret = kvm_loongson_set_stable_timer_resume(vcpu, v);
+		else
+			ret = kvm_mips_set_count_resume(vcpu, v);
 		break;
 	case KVM_REG_MIPS_COUNT_HZ:
-		ret = kvm_mips_set_count_hz(vcpu, v);
+		if(vcpu->kvm->arch.use_stable_timer)
+			ret = kvm_loongson_set_stable_timer_hz(vcpu, v);
+		else
+			ret = kvm_mips_set_count_hz(vcpu, v);
 		break;
 	default:
 		return -EINVAL;
@@ -2856,7 +3093,7 @@ static int kvm_vz_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 	 * Restore timer state regardless, as e.g. Cause.TI can change over time
 	 * if left unmaintained.
 	 */
-	kvm_vz_restore_timer(vcpu);
+	kvm_timer_callbacks->restore_timer(vcpu);
 
 	/* Set MC bit if we want to trace guest mode changes */
 	if (kvm_trace_guest_mode_change)
@@ -3070,7 +3307,7 @@ static int kvm_vz_vcpu_put(struct kvm_vcpu *vcpu, int cpu)
 		kvm_save_gc0_pwctl(cop0);
 	}
 
-	kvm_vz_save_timer(vcpu);
+	kvm_timer_callbacks->save_timer(vcpu);
 
 	/* save Root.GuestCtl2 in unused Guest guestctl2 register */
 	if (cpu_has_guestctl2)
@@ -3374,6 +3611,7 @@ static int kvm_vz_vcpu_setup(struct kvm_vcpu *vcpu)
 {
 	struct mips_coproc *cop0 = vcpu->arch.cop0;
 	unsigned long count_hz = 100*1000*1000; /* default to 100 MHz */
+	unsigned long stable_timer_hz = 100*1000*1000; /* default to 100 MHz */
 
 	/*
 	 * Start off the timer at the same frequency as the host timer, but the
@@ -3381,7 +3619,13 @@ static int kvm_vz_vcpu_setup(struct kvm_vcpu *vcpu)
 	 */
 	if (mips_hpt_frequency && mips_hpt_frequency <= NSEC_PER_SEC)
 		count_hz = mips_hpt_frequency;
-	kvm_mips_init_count(vcpu, count_hz);
+
+	if(read_c0_config6() & GSCFG_FLTINT) {
+		stable_timer_hz = ((ulong)read_cfg(0x4) * (ulong)(read_cfg(0x5)& 0xffff))/
+					((read_cfg(0x5) >> 16) & 0xffff);
+		kvm_loongson_init_stable_timer(vcpu, stable_timer_hz);
+	} else
+		kvm_mips_init_count(vcpu, count_hz);
 
 	/*
 	 * Initialize guest register state to valid architectural reset state.
@@ -3558,7 +3802,7 @@ static int kvm_vz_vcpu_run(struct kvm_run *run, struct kvm_vcpu *vcpu)
 	int cpu = smp_processor_id();
 	int r;
 
-	kvm_vz_acquire_htimer(vcpu);
+	kvm_timer_callbacks->acquire_htimer(vcpu);
 	/* Check if we have any exceptions/interrupts pending */
 	kvm_mips_deliver_interrupts(vcpu, read_gc0_cause());
 
@@ -3629,5 +3873,45 @@ int kvm_mips_emulation_init(struct kvm_mips_callbacks **install_callbacks)
 	pr_info("Starting KVM with MIPS VZ extensions\n");
 
 	*install_callbacks = &kvm_vz_callbacks;
+	return 0;
+}
+
+static struct kvm_timer_callbacks kvm_vz_timer_callbacks = {
+	.restore_timer = kvm_vz_restore_timer,
+	.acquire_htimer = kvm_vz_acquire_htimer,
+	.save_timer = kvm_vz_save_timer,
+	.lose_htimer = kvm_vz_lose_htimer,
+	.count_timeout = kvm_mips_count_timeout,
+	.write_count = kvm_mips_write_count,
+};
+
+int kvm_mips_timer_init(struct kvm_timer_callbacks **install_callbacks)
+{
+	if (!cpu_has_vz)
+		return -ENODEV;
+
+	pr_info("Init KVM Timer with MIPS\n");
+
+	*install_callbacks = &kvm_vz_timer_callbacks;
+	return 0;
+}
+
+static struct kvm_timer_callbacks kvm_loongson_timer_callbacks = {
+	.restore_timer = kvm_loongson_restore_timer,
+	.acquire_htimer = kvm_loongson_acquire_htimer,
+	.save_timer = kvm_loongson_save_timer,
+	.lose_htimer = kvm_loongson_lose_htimer,
+	.count_timeout = kvm_loongson_count_timeout,
+	.write_stable_timer = kvm_loongson_write_stable_timer,
+};
+
+int kvm_loongson_timer_init(struct kvm_timer_callbacks **install_callbacks)
+{
+	if (!cpu_has_vz)
+		return -ENODEV;
+
+	pr_info("Init KVM Timer with stable timer\n");
+
+	*install_callbacks = &kvm_loongson_timer_callbacks;
 	return 0;
 }

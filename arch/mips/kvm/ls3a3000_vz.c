@@ -612,8 +612,8 @@ static enum emulation_result kvm_vz_gpsi_cop0(union mips_instruction inst,
 
 			} else if ((rd == MIPS_CP0_COUNT) &&
 			    (sel == 0)) {               /* Count */
-				kvm_ls3a3000_vz_lose_htimer(vcpu);
-				kvm_mips_write_count(vcpu, vcpu->arch.gprs[rt]);
+				kvm_timer_callbacks->lose_htimer(vcpu);
+				kvm_timer_callbacks->write_count(vcpu, vcpu->arch.gprs[rt]);
 			} else if (rd == MIPS_CP0_COMPARE &&
 				   sel == 0) {		/* Compare */
 				kvm_mips_write_compare(vcpu,
@@ -894,7 +894,7 @@ static enum emulation_result kvm_trap_vz_handle_gsfc(u32 cause, u32 *opc,
 			/* DC bit enabling/disabling timer? */
 			if (change & CAUSEF_DC) {
 				if (val & CAUSEF_DC) {
-					kvm_ls3a3000_vz_lose_htimer(vcpu);
+					kvm_timer_callbacks->lose_htimer(vcpu);
 					kvm_mips_count_disable_cause(vcpu);
 				} else {
 					kvm_mips_count_enable_cause(vcpu);
@@ -1934,7 +1934,7 @@ static int kvm_vz_set_one_reg(struct kvm_vcpu *vcpu,
 		ret = 0;
 		break;
 	case KVM_REG_MIPS_CP0_COUNT:
-		kvm_mips_write_count(vcpu, v);
+		kvm_timer_callbacks->write_count(vcpu, v);
 		break;
 	case KVM_REG_MIPS_CP0_ENTRYHI:
 		write_gc0_entryhi(v);
@@ -2190,7 +2190,7 @@ static int kvm_vz_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 	 * Restore timer state regardless, as e.g. Cause.TI can change over time
 	 * if left unmaintained.
 	 */
-	kvm_vz_restore_timer(vcpu);
+	kvm_timer_callbacks->restore_timer(vcpu);
 
 	if (current->flags & PF_VCPU) {
 		kvm_vz_vcpu_change_vpid(vcpu, cpu);
@@ -2259,7 +2259,7 @@ static int kvm_vz_vcpu_put(struct kvm_vcpu *vcpu, int cpu)
 
 	kvm_save_gc0_errorepc(cop0);
 
-	kvm_vz_save_timer(vcpu);
+	kvm_timer_callbacks->save_timer(vcpu);
 
 	/* save Root.GuestCtl2 in unused Guest guestctl2 register */
 	if (cpu_has_guestctl2)
@@ -2282,7 +2282,7 @@ static int kvm_vz_vcpu_run(struct kvm_run *run, struct kvm_vcpu *vcpu)
 	int cpu = smp_processor_id();
 	int r;
 
-	kvm_ls3a3000_vz_acquire_htimer(vcpu);
+	kvm_timer_callbacks->acquire_htimer(vcpu);
 	/* Check if we have any exceptions/interrupts pending */
 	kvm_mips_deliver_interrupts(vcpu, read_gc0_cause());
 
@@ -2353,6 +2353,26 @@ int kvm_mips_ls3a3000_init(struct kvm_mips_callbacks **install_callbacks)
 	pr_info("Starting KVM with LOONGSON30000 VZ extensions\n");
 
 	*install_callbacks = &kvm_ls3a3000_vz_callbacks;
+	return 0;
+}
+
+static struct kvm_timer_callbacks kvm_ls3a3000_vz_timer_callbacks = {
+	.restore_timer = kvm_vz_restore_timer,
+	.acquire_htimer = kvm_ls3a3000_vz_acquire_htimer,
+	.save_timer = kvm_vz_save_timer,
+	.lose_htimer = kvm_ls3a3000_vz_lose_htimer,
+	.count_timeout = kvm_mips_count_timeout,
+	.write_count = kvm_mips_write_count,
+};
+
+int kvm_ls3a3000_timer_init(struct kvm_timer_callbacks **install_callbacks)
+{
+	if (!cpu_has_vz)
+		return -ENODEV;
+
+	pr_info("Init Loongson 3A/B3000 KVM Timer with MIPS\n");
+
+	*install_callbacks = &kvm_ls3a3000_vz_timer_callbacks;
 	return 0;
 }
 
@@ -2699,7 +2719,7 @@ int handle_tlb_general_exception(struct kvm_run *run, struct kvm_vcpu *vcpu)
 	local_irq_disable();
 
 	if (ret == RESUME_GUEST)
-		kvm_ls3a3000_vz_acquire_htimer(vcpu);
+		kvm_timer_callbacks->acquire_htimer(vcpu);
 
 	if (er == EMULATE_DONE && !(ret & RESUME_HOST))
 		kvm_mips_deliver_interrupts(vcpu, cause);
@@ -2963,7 +2983,7 @@ skip_emul:
 	local_irq_disable();
 
 	if (ret == RESUME_GUEST)
-		kvm_ls3a3000_vz_acquire_htimer(vcpu);
+		kvm_timer_callbacks->acquire_htimer(vcpu);
 
 	if (er == EMULATE_DONE && !(ret & RESUME_HOST))
 		kvm_mips_deliver_interrupts(vcpu, cause);

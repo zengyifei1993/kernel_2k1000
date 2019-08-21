@@ -154,7 +154,10 @@ int stable_clockevent_init(void)
 	cd = &per_cpu(stable_clockevent_device, cpu);
 
 	cd->name = "stable timer";
-	cd->features = CLOCK_EVT_FEAT_PERIODIC | CLOCK_EVT_FEAT_ONESHOT;
+	if(cpu_guestmode)
+		cd->features = CLOCK_EVT_FEAT_ONESHOT;
+	else
+		cd->features = CLOCK_EVT_FEAT_PERIODIC | CLOCK_EVT_FEAT_ONESHOT;
 
 	cd->rating = 320;
 	cd->irq = irq;
