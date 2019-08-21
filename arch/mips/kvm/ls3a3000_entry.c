@@ -836,22 +836,14 @@ void *kvm_mips_ls3a3000_build_tlb_refill_target(void *addr, void *handler)
 		uasm_i_nop(&p);
 
 		/* use soft TLB */
-		UASM_i_LW(&p, A0, offsetof(struct kvm_vcpu, arch.asid_we), K1);
-		//++weight
-		UASM_i_MFGC0(&p, A1, C0_ENTRYHI);
-		uasm_i_dsll(&p, A1, A1, 3);	// A1 = offset
-		UASM_i_ADDU(&p, A0, A0, A1);	// A0 = &asid_we[asid]
-		UASM_i_LW(&p, A1, 0, A0);
-		uasm_i_daddiu(&p, A1, A1, 1);
-		UASM_i_SW(&p, A1, 0, A0);
 		uasm_i_move(&p, A4, ZERO);
 		//find index
-		
+
 		uasm_i_dsrl(&p, A1, K0, STLB_ENTRYHI_SHIFT);	//A1 = badv >> 15
 		uasm_i_andi(&p, A1, A1, STLB_WAY_MASK);//A1 = index
 		uasm_i_dsll(&p, A1, A1, (STLB_SET_SHIFT + 3));
 		uasm_i_dsll(&p, A2, A1, 1);
-		UASM_i_ADDU(&p, A1, A1, A2);	
+		UASM_i_ADDU(&p, A1, A1, A2);
 
 		//UASM_i_ADDIU(&p, A2, ZERO, sizeof(soft_tlb) * STLB_SET);
 		//uasm_i_mul(&p, A1, A1, A2); //A1 = offset 
@@ -894,6 +886,16 @@ void *kvm_mips_ls3a3000_build_tlb_refill_target(void *addr, void *handler)
 		uasm_i_tlbwr(&p);
 		uasm_i_nop(&p);
 		uasm_i_nop(&p);
+
+		UASM_i_LW(&p, A2, offsetof(soft_tlb, vatag), A1);
+		uasm_i_dsrl32(&p, A3, A2, 16);   //A3 = weight
+		uasm_i_daddiu(&p, A3, A3, 1);
+		uasm_i_dsll32(&p, A3, A3, 16);
+
+		uasm_i_dsll(&p, A2, A2, 16);
+		uasm_i_dsrl(&p, A2, A2, 16);
+		UASM_i_ADDU(&p, A2, A2, A3);
+		UASM_i_SW(&p, A2, offsetof(soft_tlb, vatag), A1);
 
 		uasm_il_b(&p, &r, label_refill_exit);
 		uasm_i_nop(&p);

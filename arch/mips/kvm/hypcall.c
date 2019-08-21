@@ -180,7 +180,6 @@ static void kvm_flush_stlb_range(struct kvm_vcpu *vcpu, unsigned long gva_start,
 	if (i > 1024) {
 		/* flush all stlb items */
 		memset(vcpu->arch.stlb, 0, STLB_BUF_SIZE * sizeof(soft_tlb));
-		memset(vcpu->arch.asid_we, 0, STLB_ASID_SIZE * sizeof(unsigned long));
 		return;
 	}
 
@@ -252,13 +251,16 @@ static void kvm_add_stlb(struct kvm_vcpu *vcpu, unsigned long gva, struct kvm_mi
 	for (i=0; i<STLB_SET; i++) {
 		if ((ptlb->asid == s_asid) && (ptlb->vatag == vatag)) {
 			min_set = i;
-			priority = 2;
+			priority = 3;
 			break;
-		} else if ((ptlb->flag & STLB_FLAG_VALID) == 0) {
+		} else if (((ptlb->flag & STLB_FLAG_VALID) == 0) && (priority < 2)){
+			min_set = i;
+			priority = 2;
+		} else if ((ptlb->asid != s_asid) && (priority < 1)) {
 			min_set = i;
 			priority = 1;
-		} else if ((min_weight < vcpu->arch.asid_we[ptlb->asid]) && (priority == 0)) {
-			min_weight = vcpu->arch.asid_we[ptlb->asid];
+		} else if ((min_weight < ptlb->weight) && (priority == 0)) {
+			min_weight = ptlb->weight;
 			min_set = i;
 		}
 		ptlb++;
@@ -270,6 +272,11 @@ static void kvm_add_stlb(struct kvm_vcpu *vcpu, unsigned long gva, struct kvm_mi
 	ptlb->lo1 = hosttlb->tlb_lo[1];
 	ptlb->asid = s_asid;
 	ptlb->flag = ptlb->flag | STLB_FLAG_VALID;
+
+	if (priority >= 2)
+		++vcpu->stat.lsvz_tlb_add_refresh;
+	else
+		++vcpu->stat.lsvz_tlb_add_replace;
 
 	return;
 }
@@ -455,7 +462,6 @@ static int kvm_mips_hcall_tlb(struct kvm_vcpu *vcpu, unsigned long num,
 		/*flush tlb all */
 		local_flush_tlb_all();
 		memset(vcpu->arch.stlb, 0, STLB_BUF_SIZE * sizeof(soft_tlb));
-		memset(vcpu->arch.asid_we, 0, STLB_ASID_SIZE * sizeof(unsigned long));
 
 		memset(vcpu->arch.guest_tlb, 0, sizeof(struct kvm_mips_tlb) * KVM_MIPS_GUEST_TLB_SIZE);
 		memset(vcpu->arch.tlbmap, 0, KVM_MIPS_GUEST_TLB_SIZE/sizeof(unsigned char));

@@ -206,6 +206,8 @@ struct kvm_vcpu_stat {
 	u64 lsvz_gpsi_spec3_exits;
 	u64 lsvz_tlb_refill_exits;
 	u64 lsvz_tlb_refill_fail;
+	u64 lsvz_tlb_add_replace;
+	u64 lsvz_tlb_add_refresh;
 	u64 lsvz_ls7a_pic_read_exits;
 	u64 lsvz_ls7a_pic_write_exits;
 	u64 lsvz_ls3a_pip_read_exits;
@@ -393,7 +395,7 @@ typedef struct {
 	u32 vatag;
 	unsigned char asid;
 	unsigned char flag;
-	unsigned char reserved[2];
+	unsigned short weight;
 	u64 lo0;
 	u64 lo1;
 } soft_tlb;
@@ -513,7 +515,6 @@ struct kvm_vcpu_arch {
 	u8 msa_enabled;
 
 	soft_tlb *stlb;
-	unsigned long *asid_we;
 };
 
 static inline void _kvm_atomic_set_c0_guest_reg(unsigned long *reg,

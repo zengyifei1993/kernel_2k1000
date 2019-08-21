@@ -1137,11 +1137,6 @@ static void kvm_vz_vcpu_uninit(struct kvm_vcpu *vcpu)
 			last_exec_vcpu[cpu] = NULL;
 	}
 
-	if (vcpu->arch.asid_we) {
-		kfree(vcpu->arch.asid_we);
-		vcpu->arch.asid_we = NULL;
-	}
-
 	if (vcpu->arch.stlb) {
 		kfree(vcpu->arch.stlb);
 		vcpu->arch.stlb = NULL;
@@ -2117,7 +2112,6 @@ static int kvm_vz_check_requests(struct kvm_vcpu *vcpu, int cpu)
 
 		local_flush_tlb_all();
                 memset(vcpu->arch.stlb, 0, STLB_BUF_SIZE * sizeof(soft_tlb));
-                memset(vcpu->arch.asid_we, 0, STLB_ASID_SIZE * sizeof(unsigned long));
 	}
 
 	return ret;
@@ -2404,16 +2398,7 @@ struct kvm_vcpu *kvm_arch_ls3a3000_vcpu_create(struct kvm *kvm, unsigned int id)
 		goto out_free_cpu;
 	}
 
-	vcpu->arch.asid_we = kzalloc(STLB_ASID_SIZE * sizeof(unsigned long), GFP_KERNEL);
-	if (!vcpu->arch.asid_we) {
-		kvm_info("Soft TLB asid_weight init Failed\n");
-		err = -ENOMEM;
-		kfree(vcpu->arch.stlb);
-		vcpu->arch.stlb = NULL;
-		goto out_free_cpu;
-	}
-
-	kvm_info("Soft TLB in %p, asid weight in %p\n",(void *)vcpu->arch.stlb, (void *)vcpu->arch.asid_we);
+	kvm_info("Soft TLB in %p \n",(void *)vcpu->arch.stlb);
 	err = kvm_vcpu_init(vcpu, kvm, id);
 
 	if (err)
