@@ -17,40 +17,6 @@
 	.set	noat
 
 LEAF(__kvm_save_msa)
-#ifdef CONFIG_CPU_LOONGSON3
-	xvst_b	0,  VCPU_FPR0,  a0
-	xvst_b	1,  VCPU_FPR1,  a0
-	xvst_b	2,  VCPU_FPR2,  a0
-	xvst_b	3,  VCPU_FPR3,  a0
-	xvst_b	4,  VCPU_FPR4,  a0
-	xvst_b	5,  VCPU_FPR5,  a0
-	xvst_b	6,  VCPU_FPR6,  a0
-	xvst_b	7,  VCPU_FPR7,  a0
-	xvst_b	8,  VCPU_FPR8,  a0
-	xvst_b	9,  VCPU_FPR9,  a0
-	xvst_b	10, VCPU_FPR10, a0
-	xvst_b	11, VCPU_FPR11, a0
-	xvst_b	12, VCPU_FPR12, a0
-	xvst_b	13, VCPU_FPR13, a0
-	xvst_b	14, VCPU_FPR14, a0
-	xvst_b	15, VCPU_FPR15, a0
-	xvst_b	16, VCPU_FPR16, a0
-	xvst_b	17, VCPU_FPR17, a0
-	xvst_b	18, VCPU_FPR18, a0
-	xvst_b	19, VCPU_FPR19, a0
-	xvst_b	20, VCPU_FPR20, a0
-	xvst_b	21, VCPU_FPR21, a0
-	xvst_b	22, VCPU_FPR22, a0
-	xvst_b	23, VCPU_FPR23, a0
-	xvst_b	24, VCPU_FPR24, a0
-	xvst_b	25, VCPU_FPR25, a0
-	xvst_b	26, VCPU_FPR26, a0
-	xvst_b	27, VCPU_FPR27, a0
-	xvst_b	28, VCPU_FPR28, a0
-	xvst_b	29, VCPU_FPR29, a0
-	xvst_b	30, VCPU_FPR30, a0
-	xvst_b	31, VCPU_FPR31, a0
-#else
 	st_d	0,  VCPU_FPR0,  a0
 	st_d	1,  VCPU_FPR1,  a0
 	st_d	2,  VCPU_FPR2,  a0
@@ -83,46 +49,11 @@ LEAF(__kvm_save_msa)
 	st_d	29, VCPU_FPR29, a0
 	st_d	30, VCPU_FPR30, a0
 	st_d	31, VCPU_FPR31, a0
-#endif
 	jr	ra
 	 nop
 	END(__kvm_save_msa)
 
 LEAF(__kvm_restore_msa)
-#ifdef CONFIG_CPU_LOONGSON3
-	xvld_b	0,  VCPU_FPR0,  a0
-	xvld_b	1,  VCPU_FPR1,  a0
-	xvld_b	2,  VCPU_FPR2,  a0
-	xvld_b	3,  VCPU_FPR3,  a0
-	xvld_b	4,  VCPU_FPR4,  a0
-	xvld_b	5,  VCPU_FPR5,  a0
-	xvld_b	6,  VCPU_FPR6,  a0
-	xvld_b	7,  VCPU_FPR7,  a0
-	xvld_b	8,  VCPU_FPR8,  a0
-	xvld_b	9,  VCPU_FPR9,  a0
-	xvld_b	10, VCPU_FPR10, a0
-	xvld_b	11, VCPU_FPR11, a0
-	xvld_b	12, VCPU_FPR12, a0
-	xvld_b	13, VCPU_FPR13, a0
-	xvld_b	14, VCPU_FPR14, a0
-	xvld_b	15, VCPU_FPR15, a0
-	xvld_b	16, VCPU_FPR16, a0
-	xvld_b	17, VCPU_FPR17, a0
-	xvld_b	18, VCPU_FPR18, a0
-	xvld_b	19, VCPU_FPR19, a0
-	xvld_b	20, VCPU_FPR20, a0
-	xvld_b	21, VCPU_FPR21, a0
-	xvld_b	22, VCPU_FPR22, a0
-	xvld_b	23, VCPU_FPR23, a0
-	xvld_b	24, VCPU_FPR24, a0
-	xvld_b	25, VCPU_FPR25, a0
-	xvld_b	26, VCPU_FPR26, a0
-	xvld_b	27, VCPU_FPR27, a0
-	xvld_b	28, VCPU_FPR28, a0
-	xvld_b	29, VCPU_FPR29, a0
-	xvld_b	30, VCPU_FPR30, a0
-	xvld_b	31, VCPU_FPR31, a0
-#else
 	ld_d	0,  VCPU_FPR0,  a0
 	ld_d	1,  VCPU_FPR1,  a0
 	ld_d	2,  VCPU_FPR2,  a0
@@ -155,7 +86,6 @@ LEAF(__kvm_restore_msa)
 	ld_d	29, VCPU_FPR29, a0
 	ld_d	30, VCPU_FPR30, a0
 	ld_d	31, VCPU_FPR31, a0
-#endif
 	jr	ra
 	 nop
 	END(__kvm_restore_msa)
@@ -163,14 +93,6 @@ LEAF(__kvm_restore_msa)
 	.macro	kvm_restore_msa_upper	wr, off, base
 	.set	push
 	.set	noat
-#ifdef CONFIG_CPU_LOONGSON3
-    ld $1, \off(\base)
-    xinsert_d \wr, 1
-    ld $1, (\off+8)(\base)
-    xinsert_d \wr, 2
-    ld $1, (\off+16)(\base)
-    xinsert_d \wr, 3
-#else
 #ifdef CONFIG_64BIT
 	ld	$1, \off(\base)
 	insert_d \wr, 1
@@ -184,7 +106,6 @@ LEAF(__kvm_restore_msa)
 	insert_w \wr, 2
 	lw	$1, \off(\base)
 	insert_w \wr, 3
-#endif
 #endif
 	.set	pop
 	.endm
