@@ -89,22 +89,24 @@ static inline void flush_micro_tlb_vm(struct vm_area_struct *vma)
 		flush_micro_tlb();
 }
 
+static inline void local_flush_tlb_all_fast(void)
+{
+	change_c0_diag(0x300c, 0x300c);
+}
+
+
 void local_flush_tlb_all(void)
 {
 	unsigned long flags;
 	unsigned long old_ctx;
-#ifndef CONFIG_KVM_GUEST_LS3A3000
-	int entry, ftlbhighset;
-#else
 	int entry;
+#ifndef CONFIG_KVM_GUEST_LS3A3000
+	int ftlbhighset;
 #endif
 
 	ENTER_CRITICAL(flags);
 	/* Save old context and create impossible VPN2 value */
-	old_ctx = read_c0_entryhi();
 	htw_stop();
-	write_c0_entrylo0(0);
-	write_c0_entrylo1(0);
 
 	entry = read_c0_wired();
 
@@ -113,24 +115,49 @@ void local_flush_tlb_all(void)
 	if (cpu_has_tlbinv) {
 		emulate_tlb_ops(0, 1088, 0, 0, 0x5002, 2);
 #else
-	if (cpu_has_tlbinv && !entry) {
-		if (current_cpu_data.tlbsizevtlb) {
-			write_c0_index(0);
-			mtc0_tlbw_hazard();
-			tlbinvf();  /* invalidate VTLB */
-		}
-		ftlbhighset = current_cpu_data.tlbsizevtlb +
-			current_cpu_data.tlbsizeftlbsets;
-		for (entry = current_cpu_data.tlbsizevtlb;
-		     entry < ftlbhighset;
-		     entry++) {
-			write_c0_index(entry);
-			mtc0_tlbw_hazard();
-			tlbinvf();  /* invalidate one FTLB set */
-		}
+	if (!entry) {
+		if (cpu_has_tlbinv)  {
+#ifndef CONFIG_CPU_LOONGSON3
+			if (current_cpu_data.tlbsizevtlb) {
+				write_c0_index(0);
+				mtc0_tlbw_hazard();
+				tlbinvf();  /* invalidate VTLB */
+			}
+			ftlbhighset = current_cpu_data.tlbsizevtlb +
+				current_cpu_data.tlbsizeftlbsets;
+			for (entry = current_cpu_data.tlbsizevtlb;
+				entry < ftlbhighset; entry++) {
+				write_c0_index(entry);
+				mtc0_tlbw_hazard();
+				tlbinvf();  /* invalidate one FTLB set */
+			}
+
+#else			 /* here is optimization for 3A2000+ */ 
+
+			local_flush_tlb_all_fast();
+			EXIT_CRITICAL(flags);
+			return;
 #endif
+		} else { 
+			old_ctx = read_c0_entryhi();
+			write_c0_entrylo0(0);
+			write_c0_entrylo1(0);
+			while (entry < current_cpu_data.tlbsize) {
+				/* Make sure all entries differ. */
+				write_c0_entryhi(UNIQUE_ENTRYHI(entry));
+				write_c0_index(entry);
+				mtc0_tlbw_hazard();
+				tlb_write_indexed();
+				entry++;
+			}
+			tlbw_use_hazard();
+			write_c0_entryhi(old_ctx);
+		}
 	} else {
-		while (entry < current_cpu_data.tlbsize) {
+		old_ctx = read_c0_entryhi();
+		write_c0_entrylo0(0);
+		write_c0_entrylo1(0);
+		while (entry < current_cpu_data.tlbsizevtlb) {
 			/* Make sure all entries differ. */
 			write_c0_entryhi(UNIQUE_ENTRYHI(entry));
 			write_c0_index(entry);
@@ -138,27 +165,100 @@ void local_flush_tlb_all(void)
 			tlb_write_indexed();
 			entry++;
 		}
+
+		if (cpu_has_tlbinv) {
+			ftlbhighset = current_cpu_data.tlbsizevtlb +
+				current_cpu_data.tlbsizeftlbsets;
+			for (entry = current_cpu_data.tlbsizevtlb;
+				entry < ftlbhighset; entry++) {
+				write_c0_index(entry);
+				mtc0_tlbw_hazard();
+				tlbinvf();  /* invalidate one FTLB set */
+			}
+
+		} else {
+
+			while (entry < current_cpu_data.tlbsize) {
+				/* Make sure all entries differ. */
+				write_c0_entryhi(UNIQUE_ENTRYHI(entry));
+				write_c0_index(entry);
+				mtc0_tlbw_hazard();
+				tlb_write_indexed();
+				entry++;
+			}
+
+		}
+		tlbw_use_hazard();
+		write_c0_entryhi(old_ctx);
+
 	}
-	tlbw_use_hazard();
-	write_c0_entryhi(old_ctx);
-	htw_start();
+#endif
 	flush_micro_tlb();
+	htw_start();
 	EXIT_CRITICAL(flags);
 }
 EXPORT_SYMBOL(local_flush_tlb_all);
 
+static void local_flush_tlb_mm_slow(unsigned long asid)
+{
+	unsigned long flags;
+	int ftlbhighset;
+	int entry;
+	int old_ehi;
+
+	ENTER_CRITICAL(flags);
+
+	entry = read_c0_wired();
+	old_ehi = read_c0_entryhi();
+
+
+	if (!entry) {
+		write_c0_entryhi(asid);
+		write_c0_index(0);
+		tlbinv();
+	} else {
+		write_c0_entrylo0(0);
+		write_c0_entrylo1(0);
+		while (entry < boot_cpu_data.tlbsizevtlb) {
+			/* invalidate unwired VTLB */
+			write_c0_index(entry);
+			write_c0_entryhi(UNIQUE_ENTRYHI_ASID(entry, asid));
+			tlb_write_indexed();
+			entry++;
+		}
+
+	}
+
+	ftlbhighset = boot_cpu_data.tlbsizevtlb +
+		boot_cpu_data.tlbsizeftlbsets;
+	entry = boot_cpu_data.tlbsizevtlb;
+
+	while (entry < ftlbhighset) {
+		write_c0_index(entry);
+		tlbinv();  /* invalidate one FTLB set */
+		entry++;
+	}
+
+	write_c0_entryhi(old_ehi);
+	EXIT_CRITICAL(flags);
+}
 /* All entries common to a mm share an asid.  To effectively flush
    these entries, we just bump the asid. */
 void local_flush_tlb_mm(struct mm_struct *mm)
 {
 	int cpu;
+	unsigned long asid;
 
 	preempt_disable();
 
 	cpu = smp_processor_id();
 
-	if (cpu_context(cpu, mm) != 0) {
-		drop_mmu_context(mm, cpu);
+	if ((asid = cpu_context(cpu, mm)) != 0) {
+		if (cpu_data[cpu].cputype == CPU_LOONGSON3_COMP)
+			local_flush_tlb_mm_slow(asid & cpu_asid_mask(&cpu_data[cpu]));
+		else
+			drop_mmu_context(mm, cpu);
+
 	}
 
 	preempt_enable();
