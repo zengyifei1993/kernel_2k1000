@@ -65,35 +65,31 @@ extern unsigned long pgd_current[];
 	back_to_back_c0_hazard();					\
 	TLBMISS_HANDLER_SETUP_PGD(swapper_pg_dir)
 #endif /* CONFIG_MIPS_PGD_C0_CONTEXT*/
-#if defined(CONFIG_CPU_R3000) || defined(CONFIG_CPU_TX39XX)
 
-#define ASID_INC	0x40
-#define ASID_MASK	0xfc0
-
-#elif defined(CONFIG_CPU_R8000)
-
-#define ASID_INC	0x10
-#define ASID_MASK	0xff0
-
-#elif defined(CONFIG_MIPS_MT_SMTC)
-
-#define ASID_INC	0x1
-extern unsigned long smtc_asid_mask;
-#define ASID_MASK	(smtc_asid_mask)
-#define HW_ASID_MASK	0xff
-/* End SMTC/34K debug hack */
-#else /* FIXME: not correct for R6000 */
-
-#define ASID_INC	0x1
-#define ASID_MASK	0xff
 #define VPID_MASK	0xff
 
-#endif
+
+/*
+ *  All unused by hardware upper bits will be considered
+ *  as a software asid extension.
+ */
+static unsigned long asid_version_mask(unsigned int cpu)
+{
+	unsigned long asid_mask = cpu_asid_mask(&cpu_data[cpu]);
+
+	return ~(asid_mask | (asid_mask - 1));
+}
+
+static unsigned long asid_first_version(unsigned int cpu)
+{
+	return ~asid_version_mask(cpu) + 1;
+}
 
 #define cpu_context(cpu, mm)	((mm)->context.asid[cpu])
-#define cpu_asid(cpu, mm)	(cpu_context((cpu), (mm)) & ASID_MASK)
 #define asid_cache(cpu)		(cpu_data[cpu].asid_cache)
 #define vpid_cache(cpu)		(cpu_data[cpu].vpid_cache)
+#define cpu_asid(cpu, mm) \
+	(cpu_context((cpu), (mm)) & cpu_asid_mask(&cpu_data[cpu]))
 
 static inline void enter_lazy_tlb(struct mm_struct *mm, struct task_struct *tsk)
 {
@@ -116,12 +112,12 @@ get_new_mmu_context(struct mm_struct *mm, unsigned long cpu)
 {
 	unsigned long asid = asid_cache(cpu);
 
-	if (! ((asid += ASID_INC) & ASID_MASK) ) {
+	if (!((asid += cpu_asid_inc()) & cpu_asid_mask(&cpu_data[cpu]))) {
 		if (cpu_has_vtag_icache)
 			flush_icache_all();
 		local_flush_tlb_all();	/* start new asid cycle */
 		if (!asid)		/* fix version if needed */
-			asid = ASID_FIRST_VERSION;
+			asid = asid_first_version(cpu);
 	}
 
 	cpu_context(cpu, mm) = asid_cache(cpu) = asid;
@@ -164,7 +160,7 @@ static inline void switch_mm(struct mm_struct *prev, struct mm_struct *next,
 #endif /* CONFIG_MIPS_MT_SMTC */
 
 	/* Check if our ASID is of an older version and thus invalid */
-	if ((cpu_context(cpu, next) ^ asid_cache(cpu)) & ASID_VERSION_MASK)
+	if ((cpu_context(cpu, next) ^ asid_cache(cpu)) & asid_version_mask(cpu))
 		get_new_mmu_context(next, cpu);
 #ifdef CONFIG_MIPS_MT_SMTC
 	/*

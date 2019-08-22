@@ -2076,7 +2076,7 @@ void  per_cpu_trap_init(bool is_boot_cpu)
 #endif /* CONFIG_MIPS_MT_SMTC */
 
 	if (!cpu_data[cpu].asid_cache)
-		cpu_data[cpu].asid_cache = ASID_FIRST_VERSION;
+		cpu_data[cpu].asid_cache = asid_first_version(cpu);
 
 	if (!cpu_data[cpu].vpid_cache)
 		cpu_data[cpu].vpid_cache = VPID_FIRST_VERSION;
