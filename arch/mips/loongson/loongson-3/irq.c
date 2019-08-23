@@ -196,10 +196,9 @@ static void set_irq_route(int pos, const struct cpumask *affinity)
 		if (pos_off + k == pos) {
 			affinity_tmp = affinity;
 		} else {
-			struct irq_desc *desc = irq_to_desc(pos_off + k);
+			struct irq_desc *desc = irq_to_desc(LS3A_VECTOR2IOIRQ(pos_off + k));
 			affinity_tmp = desc->irq_data.affinity;
 		}
-		
 		for_each_cpu(cpu, affinity_tmp) {
 			nodemap[k] |= (1 << (__cpu_logical_map[cpu] / cores_per_node));
 			coremap[k][__cpu_logical_map[cpu] / cores_per_node] |= (1 << (__cpu_logical_map[cpu] % cores_per_node));
