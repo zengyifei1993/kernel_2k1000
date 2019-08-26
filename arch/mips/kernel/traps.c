@@ -1196,8 +1196,8 @@ static int enable_restore_fp_context(int msa)
 
 	if (!prior_msa) {
 		/* initialize upper 64 bit */
-		_init_msa_upper();
 		write_msa_csr(current->thread.fpu.msacsr);
+		_init_msa_upper();
 	} else {
 		/* Restore the scalar FP control & status register */
 		if (!was_fpu_owner)
