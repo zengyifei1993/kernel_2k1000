@@ -1,6 +1,9 @@
 #ifndef __ASM_TLB_H
 #define __ASM_TLB_H
 
+#include <linux/mm_types.h>
+#include <asm-generic/tlb.h>
+
 /*
  * MIPS doesn't need any special per-pte or per-vma handling, except
  * we need to flush cache for area to be unmapped.
@@ -16,7 +19,19 @@
 /*
  * .. because we flush the whole mm when it fills up.
  */
-#define tlb_flush(tlb) flush_tlb_mm((tlb)->mm)
+static inline void tlb_flush(struct mmu_gather *tlb)
+{
+	struct vm_area_struct vma;
+
+	vma.vm_mm = tlb->mm;
+	vma.vm_flags = 0;
+	if (tlb->fullmm) {
+		flush_tlb_mm(tlb->mm);
+		return;
+	}
+
+	flush_tlb_range(&vma, tlb->start, tlb->end);
+}
 
 #define _UNIQUE_ENTRYHI(base, idx)						\
 		(((base) + ((idx) << (PAGE_SHIFT + 1))) |		\
@@ -34,6 +49,5 @@ static inline unsigned int num_wired_entries(void)
 	return wired;
 }
 
-#include <asm-generic/tlb.h>
 
 #endif /* __ASM_TLB_H */
