@@ -719,6 +719,10 @@ static int msa_set(struct task_struct *target,
 	if (!err) {
 		target->thread.fpu.fcr31 = ctrl_regs.fcsr & ~FPU_CSR_ALL_X;
 		target->thread.fpu.msacsr = ctrl_regs.msacsr & ~MSA_CSR_CAUSEF;
+		if (regset->size >= 16)
+			set_tsk_thread_flag(target, TIF_MSA_CTX_LIVE);
+		if (regset->size == 32)
+			set_tsk_thread_flag(target, TIF_MSA_XCTX_LIVE);
 	}
 
 	return err;
