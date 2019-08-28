@@ -22,16 +22,15 @@
 #include <asm/uaccess.h>
 #include <asm/mipsregs.h>
 
-#ifdef CONFIG_GS464_CU2_ERRATA
 
 #define is_gs464() ((read_c0_prid() & 0xffff) == 0x6305)
+
+#ifdef CONFIG_GS464_CU2_ERRATA
 
 static void wr_gs464_cu2(void)
 {
         unsigned int fpu_owned;
 
-        if (!is_gs464())
-                return;
 
         preempt_disable();
         fpu_owned = __is_fpu_owner();
@@ -48,9 +47,13 @@ static void wr_gs464_cu2(void)
         }
         preempt_enable();
 }
+
 #else
+
 static void wr_gs464_cu2(void) {}
-#endif
+
+#endif 
+
 static int loongson_cu2_call(struct notifier_block *nfb, unsigned long action,
 	void *data)
 {
@@ -66,7 +69,12 @@ static int loongson_cu2_call(struct notifier_block *nfb, unsigned long action,
 
 	switch (action) {
 	case CU2_EXCEPTION:
-                wr_gs464_cu2();
+
+		if (!is_gs464()) 
+			force_sig(SIGILL, current);
+		else
+			wr_gs464_cu2();
+
 		return NOTIFY_STOP;	/* Don't call default notifier */
 
 	case CU2_LWC2_OP:
