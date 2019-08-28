@@ -506,6 +506,15 @@ void __init ls7a_init_irq(void)
 
 #ifdef CONFIG_PM
 
+static struct lpc_saved_regs
+{
+	unsigned int ctl_reg0;
+	unsigned int ctl_reg1;
+	unsigned int inter_sts;
+	unsigned int inter_clr;
+	unsigned int inter_pol;
+}lpc_saved_reg;
+
 static struct saved_registers
 {
 	unsigned long irq_edge;
@@ -546,6 +555,7 @@ static void init_irqs_route(void)
 	init_irq_route(LS7A_IOAPIC_HPET_INT_OFFSET, LS7A_IOAPIC_HPET_INT_IRQ);
 	init_irq_route(LS7A_IOAPIC_AC97_HDA_OFFSET, LS7A_IOAPIC_AC97_HDA_IRQ);
 	init_irq_route(LS7A_IOAPIC_LPC_OFFSET, LS7A_IOAPIC_LPC_IRQ);
+	init_irq_route(LS7A_IOAPIC_GPIO_HI_OFFSET, LS7A_IOAPIC_GPIO_HI_IRQ);
 }
 
 static void restore_registers(void)
@@ -585,6 +595,26 @@ static void loongson3_comp_iopic_resume(void)
 	}
 }
 
+static int loongson3_lpc_suspend(void)
+{
+	lpc_saved_reg.ctl_reg0 = *(volatile unsigned int *)TO_UNCAC(LS_LPC_CFG0_REG);
+	lpc_saved_reg.ctl_reg1 =  *(volatile unsigned int *)TO_UNCAC(LS_LPC_CFG1_REG);
+	lpc_saved_reg.inter_sts = *(volatile unsigned int *)TO_UNCAC(LS_LPC_CFG2_REG);
+	lpc_saved_reg.inter_clr = *(volatile unsigned int *)TO_UNCAC(LS_LPC_CFG3_REG);
+	lpc_saved_reg.inter_pol = *(volatile unsigned int *)TO_UNCAC(LS_LPC_CFG4_REG);
+
+	return 0;
+}
+
+static void loongson3_lpc_resume(void)
+{
+	 *(volatile unsigned int *)TO_UNCAC(LS_LPC_CFG0_REG) = lpc_saved_reg.ctl_reg0;
+	 *(volatile unsigned int *)TO_UNCAC(LS_LPC_CFG1_REG) = lpc_saved_reg.ctl_reg1;
+	 *(volatile unsigned int *)TO_UNCAC(LS_LPC_CFG2_REG) = lpc_saved_reg.inter_sts;
+	 *(volatile unsigned int *)TO_UNCAC(LS_LPC_CFG3_REG) = lpc_saved_reg.inter_clr;
+	 *(volatile unsigned int *)TO_UNCAC(LS_LPC_CFG4_REG) = lpc_saved_reg.inter_pol;
+}
+
 static struct syscore_ops ls7a_comp_syscore_ops = {
 	.suspend = loongson3_comp_iopic_suspend,
 	.resume = loongson3_comp_iopic_resume,
@@ -609,6 +639,11 @@ static struct syscore_ops ls7a_syscore_ops = {
 	.resume = loongson3_iopic_resume,
 };
 
+static struct syscore_ops ls7a_lpc_syscore_ops = {
+	.suspend = loongson3_lpc_suspend,
+	.resume = loongson3_lpc_resume,
+};
+
 int __init ls7a_init_ops(void)
 {
 	if ((current_cpu_type() == CPU_LOONGSON3_COMP)) {
@@ -620,6 +655,7 @@ int __init ls7a_init_ops(void)
 	} else {
 		register_syscore_ops(&ls7a_syscore_ops);
 	}
+	register_syscore_ops(&ls7a_lpc_syscore_ops);
 
 	return 0;
 }
