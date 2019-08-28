@@ -172,6 +172,15 @@ void kvm_arch_hardware_disable(void)
 
 int kvm_arch_hardware_setup(void)
 {
+	if(current_cpu_type() == CPU_LOONGSON3) {
+		return kvm_ls3a3000_timer_init(&kvm_timer_callbacks);
+	} else if(current_cpu_type() == CPU_LOONGSON3_COMP) {
+		if(read_c0_config6() & GSCFG_FLTINT) {
+			return kvm_loongson_timer_init(&kvm_timer_callbacks);
+		} else {
+			return kvm_mips_timer_init(&kvm_timer_callbacks);
+		}
+	}
 	return 0;
 }
 
@@ -210,7 +219,10 @@ int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)
 		if (!kvm->arch.cksseg_map)
 			return -ENOMEM;
                 kvm->arch.node_shift = 36;
-        } else {
+	} else if(current_cpu_type() == CPU_LOONGSON3_COMP) {
+		if(read_c0_config6() & GSCFG_FLTINT) {
+			kvm->arch.use_stable_timer = 1;
+		}
                 kvm->arch.node_shift = 44;
 
 	}
@@ -483,6 +495,8 @@ struct kvm_vcpu *kvm_arch_vcpu_create(struct kvm *kvm, unsigned int id)
 	kvm_info("exit_reason @ %lx\n", (ulong)&vcpu->run->exit_reason);
 	kvm_info("run @ %lx\n", (ulong)vcpu->run);
 	kvm_info("wait @ %lx\n", (ulong)&vcpu->arch.wait);
+	kvm_info("stable timer @ %lx\n", (ulong)&vcpu->arch.stable_timer_tick);
+	kvm_info("use stable timer %x\n", vcpu->kvm->arch.use_stable_timer);
 	kvm_info("\n\n");
 
 	/* Init */
@@ -1554,7 +1568,7 @@ static enum hrtimer_restart kvm_mips_comparecount_wakeup(struct hrtimer *timer)
 
 	vcpu = container_of(timer, struct kvm_vcpu, arch.comparecount_timer);
 	kvm_mips_comparecount_func((unsigned long) vcpu);
-	return kvm_mips_count_timeout(vcpu);
+	return kvm_timer_callbacks->count_timeout(vcpu);
 }
 
 int kvm_arch_vcpu_init(struct kvm_vcpu *vcpu)
@@ -1774,7 +1788,7 @@ skip_emul:
 	local_irq_disable();
 
 	if (ret == RESUME_GUEST)
-		kvm_vz_acquire_htimer(vcpu);
+		kvm_timer_callbacks->acquire_htimer(vcpu);
 
 	if (er == EMULATE_DONE && !(ret & RESUME_HOST))
 		kvm_mips_deliver_interrupts(vcpu, cause);

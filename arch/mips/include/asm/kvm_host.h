@@ -80,6 +80,12 @@
 #define KVM_REG_MIPS_CP0_KSCRATCH5	MIPS_CP0_64(31, 6)
 #define KVM_REG_MIPS_CP0_KSCRATCH6	MIPS_CP0_64(31, 7)
 
+#define GSCFG_VLTINT		(1 << 6)
+#define GSCFG_FLTINT		(1 << 7)
+#define STABLE_TIMER_EN		(1ULL << 61)
+#define STABLE_TIMER_CFG	0x1060
+#define STABLE_TIMER_TICK	0x1070
+#define STABLE_TIMER_MASK	0x0ffffffffffffULL
 
 #define KVM_MAX_VCPUS		16
 #define KVM_USER_MEM_SLOTS	16
@@ -252,6 +258,7 @@ struct kvm_arch {
 	s64 stablecounter_offset;
 	u64 stablecounter_value;
 	u32 node_shift;
+	u32 use_stable_timer;
 	struct loongson_kvm_7a_ioapic *v_ioapic;
 	struct loongson_kvm_ls3a_ipi *v_gipi;
 	struct loongson_kvm_ls3a_htirq *v_htirq;
@@ -493,6 +500,21 @@ struct kvm_vcpu_arch {
 	u64 vzguestid[NR_CPUS];
 
 	u64 vpid[NR_CPUS];
+
+	u64 stable_timer_tick;
+	u64 stable_timer_cfg;
+	/* Period of stable timer tick in ns */
+	u64 stable_timer_period;
+	/* Frequency of stable timer in Hz */
+	u64 stable_timer_hz;
+	/* Stable bias from the raw time */
+	u64 stable_timer_bias;
+	/* Stable timer control KVM register */
+	u32 stable_timer_ctl;
+	/* Dynamic nanosecond bias (multiple of stable_timer_period) to avoid overflow */
+	s64 stable_timer_dyn_bias;
+	/* Resume time */
+	ktime_t stable_timer_resume;
 
 	/* wired guest TLB entries */
 	struct kvm_mips_tlb *wired_tlb;
@@ -936,6 +958,20 @@ extern struct kvm_mips_callbacks *kvm_mips_callbacks;
 int kvm_mips_emulation_init(struct kvm_mips_callbacks **install_callbacks);
 int kvm_mips_ls3a3000_init(struct kvm_mips_callbacks **install_callbacks);
 
+struct kvm_timer_callbacks {
+	void (*restore_timer)(struct kvm_vcpu *vcpu);
+	void (*acquire_htimer)(struct kvm_vcpu *vcpu);
+	void (*save_timer)(struct kvm_vcpu *vcpu);
+	void (*lose_htimer)(struct kvm_vcpu *vcpu);
+	enum hrtimer_restart (*count_timeout)(struct kvm_vcpu *vcpu);
+	void (*write_count)(struct kvm_vcpu *vcpu, u32 count);
+	void (*write_stable_timer)(struct kvm_vcpu *vcpu, u64 stable_timer);
+};
+extern struct kvm_timer_callbacks *kvm_timer_callbacks;
+int kvm_mips_timer_init(struct kvm_timer_callbacks **install_callbacks);
+int kvm_ls3a3000_timer_init(struct kvm_timer_callbacks **install_callbacks);
+int kvm_loongson_timer_init(struct kvm_timer_callbacks **install_callbacks);
+
 /* Debug: dump vcpu state */
 int kvm_arch_vcpu_dump_regs(struct kvm_vcpu *vcpu);
 
@@ -1203,6 +1239,17 @@ void kvm_mips_count_enable_cause(struct kvm_vcpu *vcpu);
 void kvm_mips_count_disable_cause(struct kvm_vcpu *vcpu);
 enum hrtimer_restart kvm_mips_count_timeout(struct kvm_vcpu *vcpu);
 
+void kvm_loongson_init_stable_timer(struct kvm_vcpu *vcpu, unsigned long stable_timer_hz);
+int kvm_loongson_set_stable_timer_ctl(struct kvm_vcpu *vcpu, s64 stable_timer_ctl);
+int kvm_loongson_set_stable_timer_resume(struct kvm_vcpu *vcpu, s64 stable_timer_resume);
+int kvm_loongson_set_stable_timer_hz(struct kvm_vcpu *vcpu, s64 stable_timer_hz);
+void kvm_loongson_write_stable_timer(struct kvm_vcpu *vcpu, u64 stable_timer);
+int kvm_loongson_stable_timer_disabled(struct kvm_vcpu *vcpu);
+int kvm_loongson_restore_hrtimer(struct kvm_vcpu *vcpu, ktime_t before,
+			     u64 stable_timer, int min_drift);
+ktime_t kvm_loongson_freeze_hrtimer(struct kvm_vcpu *vcpu, u64 *stable_timer);
+enum hrtimer_restart kvm_loongson_count_timeout(struct kvm_vcpu *vcpu);
+
 /* fairly internal functions requiring some care to use */
 int kvm_mips_count_disabled(struct kvm_vcpu *vcpu);
 ktime_t kvm_mips_freeze_hrtimer(struct kvm_vcpu *vcpu, u32 *count);
@@ -1214,11 +1261,15 @@ void kvm_vz_acquire_htimer(struct kvm_vcpu *vcpu);
 void kvm_vz_lose_htimer(struct kvm_vcpu *vcpu);
 void kvm_ls3a3000_vz_acquire_htimer(struct kvm_vcpu *vcpu);
 void kvm_ls3a3000_vz_lose_htimer(struct kvm_vcpu *vcpu);
+void kvm_loongson_acquire_htimer(struct kvm_vcpu *vcpu);
+void kvm_loongson_lose_htimer(struct kvm_vcpu *vcpu);
 #else
 static inline void kvm_vz_acquire_htimer(struct kvm_vcpu *vcpu) {}
 static inline void kvm_vz_lose_htimer(struct kvm_vcpu *vcpu) {}
 static inline void kvm_ls3a3000_vz_acquire_htimer(struct kvm_vcpu *vcpu) {}
 static inline void kvm_ls3a3000_vz_lose_htimer(struct kvm_vcpu *vcpu) {}
+static inline void kvm_loongson_acquire_htimer(struct kvm_vcpu *vcpu) {}
+static inline void kvm_loongson_lose_htimer(struct kvm_vcpu *vcpu) {}
 #endif
 
 enum emulation_result kvm_mips_check_privilege(u32 cause,

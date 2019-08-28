@@ -1323,6 +1323,64 @@ static inline void dwrite_csr(int reg,unsigned long long val)
 		);
 }
 
+static inline unsigned long long read_guest_csr(int reg)
+{
+	unsigned long long __res;
+
+	__asm__ __volatile__(
+		"parse_r __res,%0\n\t"
+		"parse_r reg,%1\n\t"
+		".insn \n\t"
+		".word (0xc8040118 | (reg << 21) | (__res << 11))\n\t"
+		:"=r"(__res)
+		:"r"(reg)
+		:
+		);
+	return __res;
+}
+
+static inline void write_guest_csr(int reg,unsigned long long val)
+{
+	__asm__ __volatile__(
+		"parse_r reg,%0\n\t"
+		"parse_r val,%1\n\t"
+		".insn \n\t"
+		".word (0xc8050118 | (reg << 21) | (val << 11))\n\t"
+		:
+		:"r"(reg),"r"(val)
+		:
+		);
+}
+
+static inline unsigned long long dread_guest_csr(int reg)
+{
+	unsigned long long __res;
+
+	__asm__ __volatile__(
+		"parse_r __res,%0\n\t"
+		"parse_r reg,%1\n\t"
+		".insn \n\t"
+		".word (0xc8060118 | (reg << 21) | (__res << 11))\n\t"
+		:"=r"(__res)
+		:"r"(reg)
+		:
+		);
+	return __res;
+}
+
+static inline void dwrite_guest_csr(int reg,unsigned long long val)
+{
+	__asm__ __volatile__(
+		"parse_r reg,%0\n\t"
+		"parse_r val,%1\n\t"
+		".insn \n\t"
+		".word (0xc8070118 | (reg << 21) | (val << 11))\n\t"
+		:
+		:"r"(reg),"r"(val)
+		:
+		);
+}
+
 static inline unsigned long long drdtime(void)
 {
 	unsigned long long val = 0;
