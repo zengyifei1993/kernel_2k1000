@@ -2,6 +2,7 @@
 #include <asm/time.h>
 #include <asm/mach-loongson2/2k1000.h>
 #include <hpet.h>
+#include <asm/sched_clock.h>
 
 unsigned long get_cpu_clock(void)
 {
@@ -29,11 +30,18 @@ unsigned long get_cpu_clock(void)
 	return ret;
 }
 
+static u32 notrace mips_cp0_read_sched_clock(void)
+{
+	return read_c0_count();
+}
+
 void __init plat_time_init(void)
 {
 	mips_hpt_frequency = get_cpu_clock() / 2;
 	pr_info("MIPS Counter Frequency is: %d Mhz\n",
 			mips_hpt_frequency / 1000000);
+	setup_sched_clock(mips_cp0_read_sched_clock, 32, mips_hpt_frequency);
+	sched_clock_postinit();
 #ifdef CONFIG_LS2K_HPET
 	setup_hpet_timer();
 #endif
