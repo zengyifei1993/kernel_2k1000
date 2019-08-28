@@ -53,7 +53,23 @@ EXPORT_SYMBOL(__kvm_restore_fcsr);
 EXPORT_SYMBOL(__kvm_save_fcsr);
 #ifdef CONFIG_CPU_HAS_MSA
 EXPORT_SYMBOL(_save_msa);
+extern void __kvm_restore_msacsr(struct kvm_vcpu_arch *vcpu);
+EXPORT_SYMBOL(__kvm_restore_msacsr);
+extern void __kvm_restore_msa(struct kvm_vcpu_arch *vcpu);
+EXPORT_SYMBOL(__kvm_restore_msa);
+extern void __kvm_save_msa(struct kvm_vcpu_arch *vcpu);
+EXPORT_SYMBOL(__kvm_save_msa);
+extern void __kvm_restore_msa_upper(struct kvm_vcpu_arch *vcpu);
+EXPORT_SYMBOL(__kvm_restore_msa_upper);
 #endif
 #ifdef CONFIG_CPU_HAS_LASX
 EXPORT_SYMBOL(_save_lasx);
+extern void __kvm_restore_lasx(struct kvm_vcpu_arch *vcpu);
+EXPORT_SYMBOL(__kvm_restore_lasx);
+extern void __kvm_save_lasx(struct kvm_vcpu_arch *vcpu);
+EXPORT_SYMBOL(__kvm_save_lasx);
+extern void __kvm_restore_lasx_upper(struct kvm_vcpu_arch *vcpu);
+EXPORT_SYMBOL(__kvm_restore_lasx_upper);
+extern void __kvm_restore_lasx_uppest(struct kvm_vcpu_arch *vcpu);
+EXPORT_SYMBOL(__kvm_restore_lasx_uppest);
 #endif

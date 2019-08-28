@@ -225,6 +225,7 @@ int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)
 			kvm->arch.use_stable_timer = 1;
 		}
 		kvm->arch.node_shift = 44;
+		kvm->arch.cpucfg_lasx = (read_cfg(LS_CFG1) & LS_CFG1_LASX);
 
 	}
 	return 0;
@@ -1752,9 +1753,13 @@ int kvm_mips_handle_exit(struct kvm_run *run, struct kvm_vcpu *vcpu)
 		break;
 
 	case EXCCODE_LASX:
-		kvm_info("--lasx trigger @ %lx\n", vcpu->arch.pc);
-		++vcpu->stat.lasx_disabled_exits;
-		ret = kvm_mips_callbacks->handle_lasx_disabled(vcpu);
+		if ((((vcpu->arch.host_cp0_gscause &
+				 0x7c) >> 2) & 0x1f) == 7) {
+			++vcpu->stat.lasx_disabled_exits;
+			ret = kvm_mips_callbacks->handle_lasx_disabled(vcpu);
+		} else
+			kvm_err("Unhandled GSEXC %x @ %lx\n",
+			 (((vcpu->arch.host_cp0_gscause) & 0x7c) >> 2), vcpu->arch.pc);
 		break;
 
 	case EXCCODE_TLBRI:
@@ -1870,7 +1875,7 @@ void kvm_own_fpu(struct kvm_vcpu *vcpu)
 	 * not to clobber the status register directly via the commpage.
 	 */
 	if (cpu_has_msa && sr & ST0_CU1 && !(sr & ST0_FR) &&
-		vcpu->arch.aux_inuse & KVM_MIPS_AUX_MSA)
+	    vcpu->arch.aux_inuse & (KVM_MIPS_AUX_MSA | KVM_MIPS_AUX_LASX))
 		kvm_lose_fpu(vcpu);
 
 	/*
@@ -1919,7 +1924,7 @@ void kvm_own_msa(struct kvm_vcpu *vcpu)
 		 */
 		if (!(sr & ST0_FR) &&
 			(vcpu->arch.aux_inuse & (KVM_MIPS_AUX_FPU |
-			 KVM_MIPS_AUX_MSA)) == KVM_MIPS_AUX_FPU)
+			KVM_MIPS_AUX_MSA | KVM_MIPS_AUX_LASX)) == KVM_MIPS_AUX_FPU)
 			kvm_lose_fpu(vcpu);
 
 		change_c0_status(ST0_CU1 | ST0_FR, sr);
@@ -1933,7 +1938,8 @@ void kvm_own_msa(struct kvm_vcpu *vcpu)
 	set_c0_config5(MIPS_CONF5_MSAEN);
 	enable_fpu_hazard();
 
-	switch (vcpu->arch.aux_inuse & (KVM_MIPS_AUX_FPU | KVM_MIPS_AUX_MSA)) {
+	switch (vcpu->arch.aux_inuse & (KVM_MIPS_AUX_FPU |
+			 KVM_MIPS_AUX_MSA | KVM_MIPS_AUX_LASX)) {
 		case KVM_MIPS_AUX_FPU:
 			/*
 			 * Guest FPU state already loaded, only restore upper MSA state
@@ -1955,6 +1961,107 @@ void kvm_own_msa(struct kvm_vcpu *vcpu)
 		trace_kvm_aux(vcpu, KVM_TRACE_AUX_ENABLE, KVM_TRACE_AUX_MSA);
 		break;
 	}
+	/* Check if the guest context whether LASX or not,
+	 * if LASX state live, retsore upper LASX state
+	 */
+	if ((read_gc0_config() & MIPS_CONF_LASXEN)) {
+		set_c0_config(MIPS_CONF_LASXEN);
+		__kvm_restore_lasx_upper(&vcpu->arch);
+		vcpu->arch.aux_inuse |= KVM_MIPS_AUX_LASX;
+	}
+
+	preempt_enable();
+}
+#endif
+
+#ifdef CONFIG_CPU_HAS_LASX
+/* Enable LASX for guest and restore context */
+void kvm_own_lasx(struct kvm_vcpu *vcpu)
+{
+	struct mips_coproc *cop0 = vcpu->arch.cop0;
+	unsigned int sr;
+
+	preempt_disable();
+
+	/*
+	 * Enable FPU if enabled in guest, since we're restoring FPU context
+	 * anyway. We set FR and FRE according to guest context.
+	 */
+	if (kvm_mips_guest_has_msa(&vcpu->arch)) {
+		sr = kvm_read_c0_guest_status(cop0);
+		/*
+		 * If FR=0 FPU state is already live, it is undefined how it
+		 * interacts with 256 vector state, so play it safe and save
+		 * it first.
+		 */
+		if (!(sr & ST0_FR) &&
+		((vcpu->arch.aux_inuse & (KVM_MIPS_AUX_FPU |
+		    KVM_MIPS_AUX_MSA | KVM_MIPS_AUX_LASX)) == KVM_MIPS_AUX_MSA))
+			kvm_lose_fpu(vcpu);
+
+		/* Enable MSA for guest */
+		set_c0_config5(MIPS_CONF5_MSAEN);
+	}
+
+	/*
+	 * Enable FPU if enabled in guest, since we're restoring FPU context
+	 * anyway. We set FR and FRE according to guest context.
+	 */
+	if (kvm_mips_guest_has_fpu(&vcpu->arch)) {
+		sr = kvm_read_c0_guest_status(cop0);
+
+		/*
+		 * If FR=0 FPU state is already live, it is undefined how it
+		 * interacts with MSA state, so play it safe and save it first.
+		 */
+		if (!(sr & ST0_FR) &&
+		    (vcpu->arch.aux_inuse & (KVM_MIPS_AUX_FPU |
+				KVM_MIPS_AUX_MSA | KVM_MIPS_AUX_LASX)) == KVM_MIPS_AUX_FPU)
+			kvm_lose_fpu(vcpu);
+
+		change_c0_status(ST0_CU1 | ST0_FR, sr);
+	}
+
+	/* Enable LASX for guest */
+	set_c0_config(MIPS_CONF_LASXEN);
+	enable_fpu_hazard();
+
+	switch (vcpu->arch.aux_inuse & (KVM_MIPS_AUX_FPU |
+			 KVM_MIPS_AUX_MSA | KVM_MIPS_AUX_LASX)) {
+	case (KVM_MIPS_AUX_MSA | KVM_MIPS_AUX_FPU):
+	case KVM_MIPS_AUX_MSA:
+		/*
+		 * Guest MSA state already loaded, only restore upper LASX state
+		 */
+		__kvm_restore_lasx_upper(&vcpu->arch);
+		vcpu->arch.aux_inuse |= KVM_MIPS_AUX_LASX;
+		trace_kvm_aux(vcpu, KVM_TRACE_AUX_RESTORE, KVM_TRACE_AUX_LASX);
+		break;
+	case KVM_MIPS_AUX_FPU:
+		/*
+		 * Guest FPU state already loaded, only restore 64~256 LASX state
+		 */
+		__kvm_restore_lasx_uppest(&vcpu->arch);
+		vcpu->arch.aux_inuse |= KVM_MIPS_AUX_LASX;
+		if (kvm_mips_guest_has_msa(&vcpu->arch))
+			vcpu->arch.aux_inuse |= KVM_MIPS_AUX_MSA;
+		trace_kvm_aux(vcpu, KVM_TRACE_AUX_RESTORE, KVM_TRACE_AUX_LASX);
+		break;
+	case 0:
+		/* Neither FPU or MSA already active, restore full LASX state */
+		__kvm_restore_lasx(&vcpu->arch);
+		vcpu->arch.aux_inuse |= KVM_MIPS_AUX_LASX;
+		if (kvm_mips_guest_has_msa(&vcpu->arch))
+			vcpu->arch.aux_inuse |= KVM_MIPS_AUX_MSA;
+		if (kvm_mips_guest_has_fpu(&vcpu->arch))
+			vcpu->arch.aux_inuse |= KVM_MIPS_AUX_FPU;
+		trace_kvm_aux(vcpu, KVM_TRACE_AUX_RESTORE,
+			      KVM_TRACE_AUX_FPU_MSA_LASX);
+		break;
+	default:
+		trace_kvm_aux(vcpu, KVM_TRACE_AUX_ENABLE, KVM_TRACE_AUX_LASX);
+		break;
+	}
 
 	preempt_enable();
 }
@@ -1964,6 +2071,11 @@ void kvm_own_msa(struct kvm_vcpu *vcpu)
 void kvm_drop_fpu(struct kvm_vcpu *vcpu)
 {
 	preempt_disable();
+	if (cpu_has_lasx && (vcpu->arch.aux_inuse & KVM_MIPS_AUX_LASX)) {
+		disable_lasx();
+		trace_kvm_aux(vcpu, KVM_TRACE_AUX_DISCARD, KVM_TRACE_AUX_LASX);
+		vcpu->arch.aux_inuse &= ~KVM_MIPS_AUX_LASX;
+	}
 	if (cpu_has_msa && vcpu->arch.aux_inuse & KVM_MIPS_AUX_MSA) {
 		disable_msa();
 		trace_kvm_aux(vcpu, KVM_TRACE_AUX_DISCARD, KVM_TRACE_AUX_MSA);
@@ -1977,18 +2089,33 @@ void kvm_drop_fpu(struct kvm_vcpu *vcpu)
 	preempt_enable();
 }
 
-/* Save and disable FPU & MSA */
+/* Save and disable FPU & MSA & LASX */
 void kvm_lose_fpu(struct kvm_vcpu *vcpu)
 {
 	/*
-	 * With T&E, FPU & MSA get disabled in root context (hardware) when it
+	 * With T&E, FPU & MSA & LASX get disabled in root context (hardware) when it
 	 * is disabled in guest context (software), but the register state in
 	 * the hardware may still be in use.
 	 * This is why we explicitly re-enable the hardware before saving.
 	 */
 
 	preempt_disable();
-	if (cpu_has_msa && vcpu->arch.aux_inuse & KVM_MIPS_AUX_MSA) {
+	if (cpu_has_lasx && (vcpu->arch.aux_inuse & KVM_MIPS_AUX_LASX)) {
+
+		__kvm_save_lasx(&vcpu->arch);
+		trace_kvm_aux(vcpu, KVM_TRACE_AUX_SAVE, KVM_TRACE_AUX_FPU_MSA_LASX);
+
+		/* Disable LASX & MAS & FPU */
+		disable_lasx();
+		disable_msa();
+
+		if (vcpu->arch.aux_inuse & KVM_MIPS_AUX_FPU) {
+			clear_c0_status(ST0_CU1 | ST0_FR);
+			disable_fpu_hazard();
+		}
+		vcpu->arch.aux_inuse &= ~(KVM_MIPS_AUX_FPU |
+					 KVM_MIPS_AUX_MSA | KVM_MIPS_AUX_LASX);
+	} else if (cpu_has_msa && vcpu->arch.aux_inuse & KVM_MIPS_AUX_MSA) {
 		if (!IS_ENABLED(CONFIG_KVM_MIPS_VZ)) {
 			set_c0_config5(MIPS_CONF5_MSAEN);
 			enable_fpu_hazard();

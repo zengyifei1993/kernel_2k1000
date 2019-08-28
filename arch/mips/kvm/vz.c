@@ -1846,7 +1846,8 @@ static enum emulation_result kvm_trap_vz_handle_gsfc(u32 cause, u32 *opc,
 			 * safe and save it first.
 			 */
 			if (change & ST0_CU1 && !(val & ST0_FR) &&
-			    vcpu->arch.aux_inuse & KVM_MIPS_AUX_MSA)
+			    vcpu->arch.aux_inuse & (KVM_MIPS_AUX_MSA |
+							KVM_MIPS_AUX_LASX))
 				kvm_lose_fpu(vcpu);
 
 			write_gc0_status(val);
@@ -1881,6 +1882,7 @@ static enum emulation_result kvm_trap_vz_handle_gsfc(u32 cause, u32 *opc,
 		} else if ((rd == MIPS_CP0_STATUS) && (sel == 1)) { /* IntCtl */
 			write_gc0_intctl(val);
 		} else if ((rd == MIPS_CP0_CONFIG) && (sel == 0)) {
+			/* Handle changes in LASX modes */
 			old_val = read_gc0_config();
 			change = val ^ old_val;
 			val = old_val ^
@@ -2132,11 +2134,17 @@ static int kvm_trap_vz_handle_msa_disabled(struct kvm_vcpu *vcpu)
 	return RESUME_GUEST;
 }
 
+bool kvm_mips_guest_has_lasx(struct kvm_vcpu *vcpu)
+{
+      return (!__builtin_constant_p(cpu_has_lasx) || cpu_has_lasx) &&
+		vcpu->arch.msa_enabled && vcpu->kvm->arch.cpucfg_lasx;
+}
+
 /**
- * kvm_trap_vz_handle_lasx_disabled() - Guest used MSA while disabled in root.
+ * kvm_trap_vz_handle_lasx_disabled() - Guest used LASX while disabled in root.
  * @vcpu:	Virtual CPU context.
  *
- * Handle when the guest attempts to use MSA when it is disabled in the root
+ * Handle when the guest attempts to use LASX when it is disabled in the root
  * context.
  */
 static int kvm_trap_vz_handle_lasx_disabled(struct kvm_vcpu *vcpu)
@@ -2144,20 +2152,21 @@ static int kvm_trap_vz_handle_lasx_disabled(struct kvm_vcpu *vcpu)
 	struct kvm_run *run = vcpu->run;
 
 	/*
-	 * If MSA not present or not exposed to guest or FR=0, the MSA operation
+	 * If LASX not present or not exposed to guest or FR=0, the LASX operation
 	 * should have been treated as a reserved instruction!
 	 * Same if CU1=1, FR=0.
-	 * If MSA already in use, we shouldn't get this at all.
+	 * If LASX already in use, we shouldn't get this at all.
 	 */
-	if (!kvm_mips_guest_has_msa(&vcpu->arch) ||
+	if (!kvm_mips_guest_has_lasx(vcpu) ||
 	    (read_gc0_status() & (ST0_CU1 | ST0_FR)) == ST0_CU1 ||
 	    !(read_gc0_config5() & MIPS_CONF5_MSAEN) ||
-	    vcpu->arch.aux_inuse & KVM_MIPS_AUX_MSA) {
+	    !(read_gc0_config() & MIPS_CONF_LASXEN) ||
+	    vcpu->arch.aux_inuse & KVM_MIPS_AUX_LASX) {
 		run->exit_reason = KVM_EXIT_INTERNAL_ERROR;
 		return RESUME_HOST;
 	}
 
-	kvm_own_msa(vcpu);
+	kvm_own_lasx(vcpu);
 
 	return RESUME_GUEST;
 }

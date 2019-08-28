@@ -260,6 +260,7 @@ struct kvm_arch {
 	u64 stablecounter_value;
 	u32 node_shift;
 	u32 use_stable_timer;
+	u32 cpucfg_lasx;
 	struct loongson_kvm_7a_ioapic *v_ioapic;
 	struct loongson_kvm_ls3a_ipi *v_gipi;
 	struct loongson_kvm_ls3a_htirq *v_htirq;
@@ -386,6 +387,7 @@ struct kvm_mmu_memory_cache {
 
 #define KVM_MIPS_AUX_FPU	0x1
 #define KVM_MIPS_AUX_MSA	0x2
+#define KVM_MIPS_AUX_LASX	0x4
 
 #define KVM_MIPS_GUEST_TLB_SIZE	64
 
@@ -904,6 +906,8 @@ static inline bool kvm_mips_guest_has_msa(struct kvm_vcpu_arch *vcpu)
 		kvm_read_c0_guest_config3(vcpu->cop0) & MIPS_CONF3_MSA;
 }
 
+bool kvm_mips_guest_has_lasx(struct kvm_vcpu *vcpu);
+
 struct kvm_mips_callbacks {
 	int (*handle_cop_unusable)(struct kvm_vcpu *vcpu);
 	int (*handle_tlb_mod)(struct kvm_vcpu *vcpu);
@@ -1015,6 +1019,11 @@ void kvm_own_fpu(struct kvm_vcpu *vcpu);
 void kvm_own_msa(struct kvm_vcpu *vcpu);
 void kvm_drop_fpu(struct kvm_vcpu *vcpu);
 void kvm_lose_fpu(struct kvm_vcpu *vcpu);
+void __kvm_save_lasx(struct kvm_vcpu_arch *vcpu);
+void __kvm_restore_lasx(struct kvm_vcpu_arch *vcpu);
+void __kvm_restore_lasx_upper(struct kvm_vcpu_arch *vcpu);
+void __kvm_restore_lasx_uppest(struct kvm_vcpu_arch *vcpu);
+void kvm_own_lasx(struct kvm_vcpu *vcpu);
 
 /* TLB handling */
 u32 kvm_get_kernel_asid(struct kvm_vcpu *vcpu);
