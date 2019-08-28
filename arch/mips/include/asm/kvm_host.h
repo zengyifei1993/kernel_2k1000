@@ -359,14 +359,14 @@ enum emulation_result {
 #define KVM_ENTRYHI_ASID	MIPS_ENTRYHI_ASID
 #define TLB_IS_GLOBAL(x)	((x).tlb_lo[0] & (x).tlb_lo[1] & ENTRYLO_G)
 #define TLB_VPN2(x)		((x).tlb_hi & VPN2_MASK)
-#define TLB_ASID(x)		((x).tlb_hi & KVM_ENTRYHI_ASID)
+#define TLB_ASID(x)		((x).tlb_hi & cpu_asid_mask(&current_cpu_data))
 #define TLB_LO_IDX(x, va)	(((va) >> PAGE_SHIFT) & 1)
 #define TLB_IS_VALID(x, va)	((x).tlb_lo[TLB_LO_IDX(x, va)] & ENTRYLO_V)
 #define TLB_IS_DIRTY(x, va)	((x).tlb_lo[TLB_LO_IDX(x, va)] & ENTRYLO_D)
 #define TLB_HI_VPN2_HIT(x, y)	((TLB_VPN2(x) & ~(x).tlb_mask) ==	\
 				 ((y) & VPN2_MASK & ~(x).tlb_mask))
 #define TLB_HI_ASID_HIT(x, y)	(TLB_IS_GLOBAL(x) ||			\
-				 TLB_ASID(x) == ((y) & KVM_ENTRYHI_ASID))
+				 TLB_ASID(x) == ((y) & cpu_asid_mask(&current_cpu_data)))
 
 struct kvm_mips_tlb {
 	long tlb_mask;
