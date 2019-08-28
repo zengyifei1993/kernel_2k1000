@@ -98,23 +98,22 @@ static inline void local_flush_tlb_all_fast(void)
 void local_flush_tlb_all(void)
 {
 	unsigned long flags;
-	unsigned long old_ctx;
-	int entry;
 #ifndef CONFIG_KVM_GUEST_LS3A3000
+	int entry;
+	unsigned long old_ctx;
 	int ftlbhighset;
 #endif
 
-	ENTER_CRITICAL(flags);
-	/* Save old context and create impossible VPN2 value */
-	htw_stop();
 
-	entry = read_c0_wired();
+	ENTER_CRITICAL(flags);
 
 	/* Blast 'em all away. */
 #ifdef CONFIG_KVM_GUEST_LS3A3000
-	if (cpu_has_tlbinv) {
-		emulate_tlb_ops(0, 1088, 0, 0, 0x5002, 2);
+	emulate_tlb_ops(0, 1088, 0, 0, 0x5002, 2);
 #else
+	/* Save old context and create impossible VPN2 value */
+	htw_stop();
+	entry = read_c0_wired();
 	if (!entry) {
 		if (cpu_has_tlbinv)  {
 #ifndef CONFIG_CPU_LOONGSON3
@@ -132,13 +131,13 @@ void local_flush_tlb_all(void)
 				tlbinvf();  /* invalidate one FTLB set */
 			}
 
-#else			 /* here is optimization for 3A2000+ */ 
+#else			 /* here is optimization for 3A2000+ */
 
 			local_flush_tlb_all_fast();
 			EXIT_CRITICAL(flags);
 			return;
 #endif
-		} else { 
+		} else {
 			old_ctx = read_c0_entryhi();
 			write_c0_entrylo0(0);
 			write_c0_entrylo1(0);
@@ -192,9 +191,9 @@ void local_flush_tlb_all(void)
 		write_c0_entryhi(old_ctx);
 
 	}
-#endif
 	flush_micro_tlb();
 	htw_start();
+#endif
 	EXIT_CRITICAL(flags);
 }
 EXPORT_SYMBOL(local_flush_tlb_all);
