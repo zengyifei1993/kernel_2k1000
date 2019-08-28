@@ -84,7 +84,7 @@ static inline void kvm_vz_write_gc0_ebase(long v)
 
 static inline unsigned int kvm_vz_config_guest_wrmask(struct kvm_vcpu *vcpu)
 {
-	return CONF_CM_CMASK;
+	return CONF_CM_CMASK | MIPS_CONF_LASXEN;
 }
 
 static inline unsigned int kvm_vz_config1_guest_wrmask(struct kvm_vcpu *vcpu)
@@ -1880,6 +1880,12 @@ static enum emulation_result kvm_trap_vz_handle_gsfc(u32 cause, u32 *opc,
 			write_gc0_cause(old_cause ^ change);
 		} else if ((rd == MIPS_CP0_STATUS) && (sel == 1)) { /* IntCtl */
 			write_gc0_intctl(val);
+		} else if ((rd == MIPS_CP0_CONFIG) && (sel == 0)) {
+			old_val = read_gc0_config();
+			change = val ^ old_val;
+			val = old_val ^
+				(change & kvm_vz_config_guest_wrmask(vcpu));
+			write_gc0_config(val);
 		} else if ((rd == MIPS_CP0_CONFIG) && (sel == 5)) {
 			old_val = read_gc0_config5();
 			change = val ^ old_val;
@@ -2125,6 +2131,37 @@ static int kvm_trap_vz_handle_msa_disabled(struct kvm_vcpu *vcpu)
 
 	return RESUME_GUEST;
 }
+
+/**
+ * kvm_trap_vz_handle_lasx_disabled() - Guest used MSA while disabled in root.
+ * @vcpu:	Virtual CPU context.
+ *
+ * Handle when the guest attempts to use MSA when it is disabled in the root
+ * context.
+ */
+static int kvm_trap_vz_handle_lasx_disabled(struct kvm_vcpu *vcpu)
+{
+	struct kvm_run *run = vcpu->run;
+
+	/*
+	 * If MSA not present or not exposed to guest or FR=0, the MSA operation
+	 * should have been treated as a reserved instruction!
+	 * Same if CU1=1, FR=0.
+	 * If MSA already in use, we shouldn't get this at all.
+	 */
+	if (!kvm_mips_guest_has_msa(&vcpu->arch) ||
+	    (read_gc0_status() & (ST0_CU1 | ST0_FR)) == ST0_CU1 ||
+	    !(read_gc0_config5() & MIPS_CONF5_MSAEN) ||
+	    vcpu->arch.aux_inuse & KVM_MIPS_AUX_MSA) {
+		run->exit_reason = KVM_EXIT_INTERNAL_ERROR;
+		return RESUME_HOST;
+	}
+
+	kvm_own_msa(vcpu);
+
+	return RESUME_GUEST;
+}
+
 
 static int kvm_trap_vz_handle_tlb_ld_miss(struct kvm_vcpu *vcpu)
 {
@@ -3855,6 +3892,7 @@ static struct kvm_mips_callbacks kvm_vz_callbacks = {
 	.handle_res_inst = kvm_trap_vz_no_handler,
 	.handle_break = kvm_trap_vz_no_handler,
 	.handle_msa_disabled = kvm_trap_vz_handle_msa_disabled,
+	.handle_lasx_disabled = kvm_trap_vz_handle_lasx_disabled,
 	.handle_guest_exit = kvm_trap_vz_handle_guest_exit,
 	.handle_tlbri = kvm_trap_vz_handle_tlb_ld_miss,
 	.handle_tlbxi = kvm_trap_vz_handle_tlb_ld_miss,

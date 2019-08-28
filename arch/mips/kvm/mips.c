@@ -62,6 +62,7 @@ struct kvm_stats_debugfs_item debugfs_entries[] = {
 	{ "tlbri",	  VCPU_STAT(tlbri_exits),	 KVM_STAT_VCPU },
 	{ "tlbxi",	  VCPU_STAT(tlbxi_exits),	 KVM_STAT_VCPU },
 	{ "msa_disabled", VCPU_STAT(msa_disabled_exits), KVM_STAT_VCPU },
+	{ "lasx_disabled", VCPU_STAT(lasx_disabled_exits), KVM_STAT_VCPU },
 	{ "flush_dcache", VCPU_STAT(flush_dcache_exits), KVM_STAT_VCPU },
 #ifdef CONFIG_KVM_MIPS_VZ
 	{ "vz_gpsi",	  VCPU_STAT(vz_gpsi_exits),	 KVM_STAT_VCPU },
@@ -1614,6 +1615,7 @@ static void kvm_mips_set_c0_status(void)
 	}
 }
 
+#define EXCCODE_LASX		16	/* LASX exception */
 /*
  * Return value is in the form (errcode<<2 | RESUME_FLAG_HOST | RESUME_FLAG_NV)
  */
@@ -1747,6 +1749,12 @@ int kvm_mips_handle_exit(struct kvm_run *run, struct kvm_vcpu *vcpu)
 	case EXCCODE_FPE:
 		++vcpu->stat.fpe_exits;
 		ret = kvm_mips_callbacks->handle_fpe(vcpu);
+		break;
+
+	case EXCCODE_LASX:
+		kvm_info("--lasx trigger @ %lx\n", vcpu->arch.pc);
+		++vcpu->stat.lasx_disabled_exits;
+		ret = kvm_mips_callbacks->handle_lasx_disabled(vcpu);
 		break;
 
 	case EXCCODE_TLBRI:

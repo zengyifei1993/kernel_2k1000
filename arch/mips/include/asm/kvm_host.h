@@ -185,6 +185,7 @@ struct kvm_vcpu_stat {
 	u64 tlbri_exits;
 	u64 tlbxi_exits;
 	u64 msa_disabled_exits;
+	u64 lasx_disabled_exits;
 	u64 flush_dcache_exits;
 #ifdef CONFIG_KVM_MIPS_VZ
 	u64 vz_gpsi_exits;
@@ -919,6 +920,7 @@ struct kvm_mips_callbacks {
 	int (*handle_tlbri)(struct kvm_vcpu *vcpu);
 	int (*handle_tlbxi)(struct kvm_vcpu *vcpu);
 	int (*handle_msa_disabled)(struct kvm_vcpu *vcpu);
+	int (*handle_lasx_disabled)(struct kvm_vcpu *vcpu);
 	int (*handle_guest_exit)(struct kvm_vcpu *vcpu);
 	int (*hardware_enable)(void);
 	void (*hardware_disable)(void);
