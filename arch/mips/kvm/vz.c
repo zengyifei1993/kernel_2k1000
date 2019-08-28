@@ -642,9 +642,27 @@ static bool kvm_loongson_should_use_htimer(struct kvm_vcpu *vcpu)
  */
 static void _kvm_vz_restore_stable_stimer(struct kvm_vcpu *vcpu, u32 cause)
 {
+	ktime_t saved_ktime, now;
+	u64 stable_timer;
+	u64 delta = 0;
 	/*
 	 * Set guest stable timer cfg csr
 	 */
+
+	now = ktime_get();
+	saved_ktime = vcpu->arch.stable_ktime_saved;
+	stable_timer = vcpu->arch.stable_timer_tick;
+
+	/*hrtimer not expire */
+	delta = ktime_to_ns(ktime_sub(now, saved_ktime)) *
+			vcpu->arch.stable_timer_hz / NSEC_PER_SEC;
+	if((delta < (stable_timer + 1)) &&
+		(stable_timer != ((u64)(1ULL << 48) - 1))) {
+		dwrite_guest_csr(STABLE_TIMER_CFG, ((stable_timer - delta) &
+					 STABLE_TIMER_MASK) | STABLE_TIMER_EN);
+	} else
+		kvm_vz_queue_irq(vcpu, MIPS_EXC_INT_TIMER);
+
 	back_to_back_c0_hazard();
 	write_gc0_cause(cause);
 }
@@ -676,7 +694,6 @@ static void _kvm_vz_restore_stable_htimer(struct kvm_vcpu *vcpu,
 					  u32 cause)
 {
 	u64 start_stable_timer, after_stable_timer;
-	ktime_t freeze_time;
 	unsigned long flags;
 
 	/*
@@ -684,7 +701,8 @@ static void _kvm_vz_restore_stable_htimer(struct kvm_vcpu *vcpu,
 	 * this with interrupts disabled to avoid latency.
 	 */
 	local_irq_save(flags);
-	freeze_time = kvm_loongson_freeze_hrtimer(vcpu, &start_stable_timer);
+	hrtimer_cancel(&vcpu->arch.comparecount_timer);
+	start_stable_timer = dread_guest_csr(STABLE_TIMER_TICK);
 	local_irq_restore(flags);
 
 	/* restore guest CP0_Cause, as TI may already be set */
@@ -699,7 +717,8 @@ static void _kvm_vz_restore_stable_htimer(struct kvm_vcpu *vcpu,
 	back_to_back_c0_hazard();
 	after_stable_timer = dread_guest_csr(STABLE_TIMER_TICK);
 	/* Stable timer count down to 48bits -1 */
-	if (after_stable_timer == ((u64)(1ULL << 48) - 1))
+	if ((after_stable_timer == 0) ||
+		(after_stable_timer == ((u64)(1ULL << 48) - 1)))
 		kvm_vz_queue_irq(vcpu, MIPS_EXC_INT_TIMER);
 }
 
@@ -734,7 +753,7 @@ void kvm_loongson_acquire_htimer(struct kvm_vcpu *vcpu)
  * timer. The hard timer must already be in use, so preemption should be
  * disabled.
  */
-static void _kvm_vz_save_stable_htimer(struct kvm_vcpu *vcpu,
+static ktime_t _kvm_vz_save_stable_htimer(struct kvm_vcpu *vcpu,
 				u64 *stable_timer, u32 *out_cause)
 {
 	u64 before_stable_timer, end_stable_timer;
@@ -766,7 +785,8 @@ static void _kvm_vz_save_stable_htimer(struct kvm_vcpu *vcpu,
 	 * between reading CP0_Cause and end_stable_timer. Detect and record any timer
 	 * interrupt due between before_stable_timer and end_stable_timer.
 	 */
-	if (end_stable_timer == ((u64)(1ULL << 48) - 1))
+	if ((end_stable_timer == 0) ||
+		 (end_stable_timer == ((u64)(1ULL << 48) - 1)))
 		kvm_vz_queue_irq(vcpu, MIPS_EXC_INT_TIMER);
 
 	/*
@@ -774,6 +794,7 @@ static void _kvm_vz_save_stable_htimer(struct kvm_vcpu *vcpu,
 	 * delay between freeze_hrtimer and setting CP0_GTOffset.
 	 */
 	kvm_loongson_restore_hrtimer(vcpu, before_time, end_stable_timer, 0x10000);
+	return before_time;
 }
 
 /**
@@ -789,6 +810,7 @@ static void kvm_loongson_save_timer(struct kvm_vcpu *vcpu)
 	u32 gctl0, cause;
 
 	u64 stable_timer = 0;
+	ktime_t save_ktime;
 
 	gctl0 = read_c0_guestctl0();
 	if (gctl0 & MIPS_GCTL0_GT) {
@@ -797,14 +819,17 @@ static void kvm_loongson_save_timer(struct kvm_vcpu *vcpu)
 
 		/* save hard timer state */
 		_kvm_vz_save_stable_htimer(vcpu, &stable_timer, &cause);
+		save_ktime = _kvm_vz_save_stable_htimer(vcpu, &stable_timer, &cause);
 	} else {
 		stable_timer = dread_guest_csr(STABLE_TIMER_TICK);
 		cause = read_gc0_cause();
+		save_ktime = ktime_get();
 	}
 
 	/* save timer-related state to VCPU context */
 	kvm_write_sw_gc0_cause(cop0, cause);
 	vcpu->arch.stable_timer_tick = stable_timer;
+	vcpu->arch.stable_ktime_saved = save_ktime;
 }
 
 /**
@@ -818,6 +843,7 @@ void kvm_loongson_lose_htimer(struct kvm_vcpu *vcpu)
 {
 	u32 gctl0, cause;
 	u64 stable_timer = 0;
+	ktime_t save_ktime;
 
 	preempt_disable();
 	gctl0 = read_c0_guestctl0();
@@ -825,8 +851,9 @@ void kvm_loongson_lose_htimer(struct kvm_vcpu *vcpu)
 		/* disable guest use of timer */
 		write_c0_guestctl0(gctl0 & ~MIPS_GCTL0_GT);
 
-		_kvm_vz_save_stable_htimer(vcpu, &stable_timer, &cause);
+		save_ktime = _kvm_vz_save_stable_htimer(vcpu, &stable_timer, &cause);
 		vcpu->arch.stable_timer_tick = stable_timer;
+		vcpu->arch.stable_ktime_saved = save_ktime;
 		_kvm_vz_restore_stable_stimer(vcpu, cause);
 	}
 	preempt_enable();

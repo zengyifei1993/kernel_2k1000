@@ -223,8 +223,6 @@ static void kvm_loongson_resume_hrtimer(struct kvm_vcpu *vcpu,
 	/* Stable timer decreased to zero or
 	 * initialize to zero, set 4 second timer
 	*/
-//	if((stable_timer == 0) || (stable_timer == ((u64)(1ULL << 48) - 1)))
-//		stable_timer = vcpu->arch.stable_timer_period;
 	delta = div_u64(stable_timer * NSEC_PER_SEC, vcpu->arch.stable_timer_hz);
 	expire = ktime_add_ns(now, delta);
 
@@ -257,58 +255,12 @@ static void kvm_loongson_resume_hrtimer(struct kvm_vcpu *vcpu,
 int kvm_loongson_restore_hrtimer(struct kvm_vcpu *vcpu, ktime_t before,
 			     u64 stable_timer, int min_drift)
 {
-	ktime_t now, count_time;
-	u64 now_stable_timer = 0, before_stable_timer = 0;
-	u64 delta;
-	long drift;
 	int ret = 0;
-	/* Calculate expected count at before */
-	before_stable_timer = vcpu->arch.stable_timer_bias +
-			kvm_mips_ktime_to_stable_timer(vcpu, before);
-
-	before_stable_timer &= STABLE_TIMER_MASK;
-	/*
-	 * Detect significantly negative drift, where count is lower than
-	 * expected. Some negative drift is expected when hardware counter is
-	 * set after kvm_mips_freeze_timer(), and it is harmless to allow the
-	 * time to jump forwards a little, within reason. If the drift is too
-	 * significant, adjust the bias to avoid a big Guest.CP0_Count jump.
-	 */
-	drift = stable_timer - before_stable_timer;
-	drift &= STABLE_TIMER_MASK;
-	if (drift >= min_drift) {
-		count_time = before;
-		vcpu->arch.stable_timer_bias -= drift;
-		ret = drift;
-		goto resume;
-	}
-
-	/* Calculate expected count right now */
-	now = ktime_get();
-	now_stable_timer = vcpu->arch.stable_timer_bias +
-			kvm_mips_ktime_to_stable_timer(vcpu, now);
-	now_stable_timer &= STABLE_TIMER_MASK;
-
-	/*
-	 * Detect positive drift, where count is higher than expected, and
-	 * adjust the bias to avoid guest time going backwards.
-	 */
-	drift = stable_timer - now_stable_timer;
-	drift &= STABLE_TIMER_MASK;
-	if (drift <= 0) {
-		count_time = now;
-		vcpu->arch.stable_timer_bias -= drift;
-		ret = drift;
-		goto resume;
-	}
-	/* Subtract nanosecond delta to find ktime when count was read */
-	delta = (u64)(stable_timer - now_stable_timer );
-	delta = div_u64(delta * NSEC_PER_SEC, vcpu->arch.stable_timer_hz);
-	count_time = ktime_sub_ns(now, delta);
-
-resume:
+	if ((stable_timer == 0) ||
+		(stable_timer == ((u64)(1ULL << 48) - 1)))
+		stable_timer = vcpu->arch.stable_timer_period;
 	/* Resume using the calculated ktime */
-	kvm_loongson_resume_hrtimer(vcpu, count_time, stable_timer);
+	kvm_loongson_resume_hrtimer(vcpu, before, stable_timer);
 	return ret;
 }
 

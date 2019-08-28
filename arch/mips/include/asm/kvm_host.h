@@ -515,6 +515,8 @@ struct kvm_vcpu_arch {
 	s64 stable_timer_dyn_bias;
 	/* Resume time */
 	ktime_t stable_timer_resume;
+	/* Save ktime */
+	ktime_t stable_ktime_saved;
 
 	/* wired guest TLB entries */
 	struct kvm_mips_tlb *wired_tlb;
