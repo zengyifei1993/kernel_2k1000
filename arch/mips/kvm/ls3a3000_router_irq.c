@@ -77,154 +77,154 @@ void route_update_reg(struct kvm *kvm,int irqnum,int level)
 uint64_t ls3a_router_intctl_read(struct kvm *kvm, gpa_t addr, unsigned size,void *val)
 {
 	struct loongson_kvm_ls3a_routerirq *s = ls3a_router_irqchip(kvm);
-        uint64_t ret,offset;
+	uint64_t ret,offset;
 	uint8_t *mem;
 
 	mem = s->ls3a_router_reg;
-        offset =addr & 0xff;
-        switch(size) {
-        case 1:
-                *(uint8_t *)val = (*(uint8_t *)(mem + offset));
-                break;
-        case 2:
-                *(uint16_t *)val = (*(uint16_t *)(mem + offset));
-                break;
-        case 4:
-                *(uint32_t *)val = (*(uint32_t *)(mem + offset));
-                break;
-        case 8:
-                *(uint64_t *)val = (*(uint64_t *)(mem + offset));
-                break;
-        default:
-                ret = 0;
-                break;
-        }
-        return ret;
+	offset =addr & 0xff;
+	switch(size) {
+		case 1:
+			*(uint8_t *)val = (*(uint8_t *)(mem + offset));
+			break;
+		case 2:
+			*(uint16_t *)val = (*(uint16_t *)(mem + offset));
+			break;
+		case 4:
+			*(uint32_t *)val = (*(uint32_t *)(mem + offset));
+			break;
+		case 8:
+			*(uint64_t *)val = (*(uint64_t *)(mem + offset));
+			break;
+		default:
+			ret = 0;
+			break;
+	}
+	return ret;
 }
 
 int ls3a_router_intctl_write(struct kvm *kvm , gpa_t addr, unsigned size, const void *val)
 {
-        uint64_t val_data,offset;
-        int i,change;
-        uint8_t old;
+	uint64_t val_data,offset;
+	int i,change;
+	uint8_t old;
 	uint8_t *mem;
-        struct loongson_kvm_ls3a_routerirq *s = ls3a_router_irqchip(kvm);
+	struct loongson_kvm_ls3a_routerirq *s = ls3a_router_irqchip(kvm);
 
 	mem = s->ls3a_router_reg;
-        offset = addr & 0xff;
-        change = 0;
+	offset = addr & 0xff;
+	change = 0;
 	val_data = *(uint64_t *)val;
-        if(offset >= 0 && (offset < 0x20)){
-                for(i=0;i < size;i++){
-                        if(offset + i < 0x20){
-                                old = *(uint8_t *)(mem + offset + i);
-                                if(old != (uint8_t)(val_data >> (i*8))){
+	if(offset >= 0 && (offset < 0x20)){
+		for(i=0;i < size;i++){
+			if(offset + i < 0x20){
+				old = *(uint8_t *)(mem + offset + i);
+				if(old != (uint8_t)(val_data >> (i*8))){
 					route_update_reg(kvm,offset+i,0);
-                                        *(uint8_t *)(mem + offset) = (uint8_t)(val_data >> (i*8));
+					*(uint8_t *)(mem + offset) = (uint8_t)(val_data >> (i*8));
 					route_update_reg(kvm,offset+i,1);
-                                }
-                        }
-                }
-        }
-        if(offset == INT_ROUTER_REGS_EN_SET){
-                if(4 == size){
-                        *(uint32_t *)(mem + INT_ROUTER_REGS_EN) |= (uint32_t)(val_data);
-                }
-        }
-        if(offset == INT_ROUTER_REGS_EN_CLR){
-                if(4 == size){
-                        *(uint32_t *)(mem + INT_ROUTER_REGS_EN) &= ~((uint32_t)(val_data));
-                        *(uint32_t *)(mem + INT_ROUTER_REGS_ISR) &= ~((~((uint32_t)(val_data))) & (*(uint32_t *)(mem + INT_ROUTER_REGS_EDGE)));
-                }
-        }
-        if(offset == INT_ROUTER_REGS_EDGE){
-                if(4 == size){
-                        *(uint32_t *)(mem + offset) = (uint32_t)(val_data);
-                }
-        }
+				}
+			}
+		}
+	}
+	if(offset == INT_ROUTER_REGS_EN_SET){
+		if(4 == size){
+			*(uint32_t *)(mem + INT_ROUTER_REGS_EN) |= (uint32_t)(val_data);
+		}
+	}
+	if(offset == INT_ROUTER_REGS_EN_CLR){
+		if(4 == size){
+			*(uint32_t *)(mem + INT_ROUTER_REGS_EN) &= ~((uint32_t)(val_data));
+			*(uint32_t *)(mem + INT_ROUTER_REGS_ISR) &= ~((~((uint32_t)(val_data))) & (*(uint32_t *)(mem + INT_ROUTER_REGS_EDGE)));
+		}
+	}
+	if(offset == INT_ROUTER_REGS_EDGE){
+		if(4 == size){
+			*(uint32_t *)(mem + offset) = (uint32_t)(val_data);
+		}
+	}
 	return 0;
 }
 
 static int kvm_ls3a_router_write(struct kvm_io_device * dev,
-                         gpa_t addr, int len, const void *val)
+		gpa_t addr, int len, const void *val)
 {
-        struct loongson_kvm_ls3a_routerirq *s;
-        s = container_of(dev, struct loongson_kvm_ls3a_routerirq, dev_ls3a_router_irq);
+	struct loongson_kvm_ls3a_routerirq *s;
+	s = container_of(dev, struct loongson_kvm_ls3a_routerirq, dev_ls3a_router_irq);
 
-        return ls3a_router_intctl_write(s->kvm,addr,len,val);
+	return ls3a_router_intctl_write(s->kvm,addr,len,val);
 }
 
 
 static int kvm_ls3a_router_read(struct kvm_io_device *dev,
-                       gpa_t addr, int len, void *val)
+		gpa_t addr, int len, void *val)
 {
-        struct loongson_kvm_ls3a_routerirq *s;
-        uint64_t result=0;
+	struct loongson_kvm_ls3a_routerirq *s;
+	uint64_t result=0;
 
-        s = container_of(dev, struct loongson_kvm_ls3a_routerirq, dev_ls3a_router_irq);
-        result = ls3a_router_intctl_read(s->kvm,addr,len,val);
-        return 0;
+	s = container_of(dev, struct loongson_kvm_ls3a_routerirq, dev_ls3a_router_irq);
+	result = ls3a_router_intctl_read(s->kvm,addr,len,val);
+	return 0;
 }
 
 static const struct kvm_io_device_ops kvm_ls3a_router_irq_ops = {
-        .read     = kvm_ls3a_router_read,
-        .write    = kvm_ls3a_router_write,
+	.read     = kvm_ls3a_router_read,
+	.write    = kvm_ls3a_router_write,
 };
 
 struct loongson_kvm_ls3a_routerirq *kvm_create_ls3a_router_irq(struct kvm *kvm)
 {
-        struct loongson_kvm_ls3a_routerirq *s;
-        int ret;
+	struct loongson_kvm_ls3a_routerirq *s;
+	int ret;
 
-        s = kzalloc(sizeof(struct loongson_kvm_ls3a_routerirq), GFP_KERNEL);
-        if (!s)
-                return NULL;
-        spin_lock_init(&s->lock);
-        s->kvm = kvm;
+	s = kzalloc(sizeof(struct loongson_kvm_ls3a_routerirq), GFP_KERNEL);
+	if (!s)
+		return NULL;
+	spin_lock_init(&s->lock);
+	s->kvm = kvm;
 
 
-        kvm_iodevice_init(&s->dev_ls3a_router_irq, &kvm_ls3a_router_irq_ops);
-        mutex_lock(&kvm->slots_lock);
-        ret = kvm_io_bus_register_dev(kvm, KVM_PIO_BUS, INT_ROUTER_REGS_BASE, 0x100,
-                                      &s->dev_ls3a_router_irq);
-        if (ret < 0)
-                goto fail_unlock;
+	kvm_iodevice_init(&s->dev_ls3a_router_irq, &kvm_ls3a_router_irq_ops);
+	mutex_lock(&kvm->slots_lock);
+	ret = kvm_io_bus_register_dev(kvm, KVM_PIO_BUS, INT_ROUTER_REGS_BASE, 0x100,
+			&s->dev_ls3a_router_irq);
+	if (ret < 0)
+		goto fail_unlock;
 
-        mutex_unlock(&kvm->slots_lock);
-        return s;
+	mutex_unlock(&kvm->slots_lock);
+	return s;
 
 fail_unlock:
-        mutex_unlock(&kvm->slots_lock);
-        kfree(s);
+	mutex_unlock(&kvm->slots_lock);
+	kfree(s);
 
-        return NULL;
+	return NULL;
 }
 
 int kvm_get_ls3a_router_irq(struct kvm *kvm, uint8_t *state)
 {
-        struct loongson_kvm_ls3a_routerirq *ls3a_router_irq = ls3a_router_irqchip(kvm);
-        uint8_t *router_irq_reg =  ls3a_router_irq->ls3a_router_reg;
+	struct loongson_kvm_ls3a_routerirq *ls3a_router_irq = ls3a_router_irqchip(kvm);
+	uint8_t *router_irq_reg =  ls3a_router_irq->ls3a_router_reg;
 	unsigned long flags;
 
-        ls3a_router_irq_lock(ls3a_router_irq, flags);
-        memcpy(state, router_irq_reg, 0x100);
-        ls3a_router_irq_unlock(ls3a_router_irq, flags);
-        kvm->stat.lsvz_kvm_get_ls3a_router_irq++;
-        return 0;
+	ls3a_router_irq_lock(ls3a_router_irq, flags);
+	memcpy(state, router_irq_reg, 0x100);
+	ls3a_router_irq_unlock(ls3a_router_irq, flags);
+	kvm->stat.lsvz_kvm_get_ls3a_router_irq++;
+	return 0;
 }
 
 int kvm_set_ls3a_router_irq(struct kvm *kvm, uint8_t *state)
 {
-        struct loongson_kvm_ls3a_routerirq *ls3a_router_irq = ls3a_router_irqchip(kvm);
-        uint8_t *router_irq_reg =  ls3a_router_irq->ls3a_router_reg;
+	struct loongson_kvm_ls3a_routerirq *ls3a_router_irq = ls3a_router_irqchip(kvm);
+	uint8_t *router_irq_reg =  ls3a_router_irq->ls3a_router_reg;
 	unsigned long flags;
-        if (!router_irq_reg)
-                return -EINVAL;
+	if (!router_irq_reg)
+		return -EINVAL;
 
-        ls3a_router_irq_lock(ls3a_router_irq, flags);
-        memcpy(router_irq_reg, state, 0x100);
-        ls3a_router_irq_unlock(ls3a_router_irq, flags);
-        kvm->stat.lsvz_kvm_set_ls3a_router_irq++;
-        return 0;
+	ls3a_router_irq_lock(ls3a_router_irq, flags);
+	memcpy(router_irq_reg, state, 0x100);
+	ls3a_router_irq_unlock(ls3a_router_irq, flags);
+	kvm->stat.lsvz_kvm_set_ls3a_router_irq++;
+	return 0;
 }
 

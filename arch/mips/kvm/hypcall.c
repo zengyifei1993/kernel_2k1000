@@ -171,10 +171,10 @@ static void kvm_flush_stlb_one(struct kvm_vcpu *vcpu, unsigned long gva)
 
 static void kvm_flush_stlb_range(struct kvm_vcpu *vcpu, unsigned long gva_start, unsigned long gva_end)
 {
-        unsigned int s_index, start, end;
-        unsigned int s_asid, vatag;
-        soft_tlb *ptlb;
-        int i;
+	unsigned int s_index, start, end;
+	unsigned int s_asid, vatag;
+	soft_tlb *ptlb;
+	int i;
 
 	i = (gva_end - gva_start) >> (PAGE_SHIFT + 1);
 	if (i > 1024) {
@@ -229,11 +229,11 @@ static void kvm_flush_stlb_range(struct kvm_vcpu *vcpu, unsigned long gva_start,
 
 static void kvm_add_stlb(struct kvm_vcpu *vcpu, unsigned long gva, struct kvm_mips_tlb *hosttlb)
 {
-        unsigned int s_index;
-        unsigned int s_asid, vatag;
+	unsigned int s_index;
+	unsigned int s_asid, vatag;
 	unsigned long min_weight;
-        soft_tlb *ptlb;
-        int i, min_set, priority;
+	soft_tlb *ptlb;
+	int i, min_set, priority;
 
 	/* not commpage */
 	if ((gva & (PAGE_MASK << 1)) == 0)

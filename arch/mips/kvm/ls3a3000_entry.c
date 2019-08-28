@@ -468,16 +468,16 @@ skip_asid_restore:
 	uasm_i_nop(&p);
 
 	/* Copy root entryhi asid with guest entryhi asid info,
-         * a workaround read wrong root.entryhi.asid bug
-         */
-        UASM_i_MFC0(&p, A0, C0_ENTRYHI);//save root entryhi
-        uasm_i_dsrl(&p, A3, A0, 8);
-        uasm_i_dsll(&p, A3, A3, 8);    //A3 = hi & ~0xff
-        UASM_i_MFGC0(&p, A2, C0_ENTRYHI);
-        uasm_i_andi(&p, A2, A2, 0xff);
-        uasm_i_or(&p, A2, A3, A2);
-        UASM_i_MTC0(&p, A2, C0_ENTRYHI);//write entryhi
-        uasm_i_ehb(&p);
+	 * a workaround read wrong root.entryhi.asid bug
+	 */
+	UASM_i_MFC0(&p, A0, C0_ENTRYHI);//save root entryhi
+	uasm_i_dsrl(&p, A3, A0, 8);
+	uasm_i_dsll(&p, A3, A3, 8);    //A3 = hi & ~0xff
+	UASM_i_MFGC0(&p, A2, C0_ENTRYHI);
+	uasm_i_andi(&p, A2, A2, 0xff);
+	uasm_i_or(&p, A2, A3, A2);
+	UASM_i_MTC0(&p, A2, C0_ENTRYHI);//write entryhi
+	uasm_i_ehb(&p);
 
 #if 0
 	//Flush ITLB to workaround read wrong root.entryhi.asid bug
@@ -789,8 +789,8 @@ void *kvm_mips_ls3a3000_build_tlb_refill_target(void *addr, void *handler)
 	UASM_i_MFC0(&p, K0, C0_BADVADDR);
 
 	/* Copy root entryhi asid with guest entryhi asid info,
-         * a workaround read wrong root.entryhi.asid bug
-         */
+	 * a workaround read wrong root.entryhi.asid bug
+	 */
 	UASM_i_MFC0(&p, A0, C0_ENTRYHI);//save root entryhi
 	uasm_i_dsrl(&p, A3, K0, STLB_ENTRYHI_SHIFT);    //A3 = badv >> 15
 	uasm_i_dsll(&p, A3, A3, STLB_ENTRYHI_SHIFT);    //A3 = hi & ~0xff
@@ -905,10 +905,10 @@ void *kvm_mips_ls3a3000_build_tlb_refill_target(void *addr, void *handler)
 		UASM_i_ADDIU(&p, A4, A4, 1);
 		uasm_i_move(&p, A3, A4);
 		UASM_i_ADDIU(&p, A1, A1, sizeof(soft_tlb));	//A1 = next sltb within stlb set
-	        UASM_i_ADDIU(&p, A2, ZERO, STLB_SET);
-        	uasm_i_sltu(&p, A3, A3, A2);
-	        /* A2 == 0 means (setindex <= STLB_SET) */
-               	uasm_il_beqz(&p, &r, A3, label_mapped);
+		UASM_i_ADDIU(&p, A2, ZERO, STLB_SET);
+		uasm_i_sltu(&p, A3, A3, A2);
+		/* A2 == 0 means (setindex <= STLB_SET) */
+		uasm_il_beqz(&p, &r, A3, label_mapped);
 		uasm_i_nop(&p);
 		uasm_il_b(&p, &r, label_refill_loop);
 		uasm_i_nop(&p);
@@ -988,11 +988,11 @@ void *kvm_mips_ls3a3000_build_tlb_refill_target(void *addr, void *handler)
 
 	uasm_l_mapped(&l, p);
 
-        if (stlb_debug == 1) {
+	if (stlb_debug == 1) {
 		UASM_i_LW(&p, A1, offsetof(struct kvm_vcpu, stat.lsvz_tlb_refill_fail), K1);
 		uasm_i_daddiu(&p, A1, A1, 1);
 		UASM_i_SW(&p, A1, offsetof(struct kvm_vcpu, stat.lsvz_tlb_refill_fail), K1);
-        }
+	}
 
 	UASM_i_MFC0(&p, A0, C0_EPC);
 	UASM_i_MTGC0(&p, A0, C0_EPC);

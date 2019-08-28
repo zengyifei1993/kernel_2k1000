@@ -1325,7 +1325,7 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 			if(vcpu->arch.gprs[rs] == 0x1020) {
 				/*then get guest phys*/
 				run->mmio.phys_addr = ((unsigned long)(vcpu->vcpu_id / 4) << NODE_ADDRSPACE_SHIFT) | LOONGSON3_REG_BASE |
-								 vcpu->arch.gprs[rs] | ((vcpu->vcpu_id % 4) << 8);
+					vcpu->arch.gprs[rs] | ((vcpu->vcpu_id % 4) << 8);
 				er = EMULATE_DO_MMIO;
 				run->mmio.is_write = 1;
 				vcpu->mmio_needed = 1;
@@ -1336,7 +1336,7 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 			} else if(vcpu->arch.gprs[rs] == 0x1158) {
 				/*7A any send */
 				kvm_info("Not implement dwrcsr %lx @ %lx for now\n",vcpu->arch.gprs[rs], curr_pc);
-		        } else if(vcpu->arch.gprs[rs] == 0x1048) {
+			} else if(vcpu->arch.gprs[rs] == 0x1048) {
 				/*process mailbox send write*/
 				int cpu = ((vcpu->arch.gprs[rd] & 0xffffffff) >> 16) & 0x3ff;
 				int mailbox = ((vcpu->arch.gprs[rd] & 0xffffffff) >> 3) & 0xf;
@@ -1356,13 +1356,13 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 						er = EMULATE_DONE;
 					} else {
 						run->mmio.phys_addr = ((unsigned long)(cpu / 4) << NODE_ADDRSPACE_SHIFT) |
-									 LOONGSON3_REG_BASE | 0x1000 |
-									 ((cpu % 4) << 8) | (0x20 + mailbox * 8);
+							LOONGSON3_REG_BASE | 0x1000 |
+							((cpu % 4) << 8) | (0x20 + mailbox * 8);
 						if(ls3a_ipi_in_kernel(vcpu->kvm)) {
 							ls3a_ipi_lock(vcpu->kvm->arch.v_gipi, &flags);
 							ls3a_gipi_writel(vcpu->kvm->arch.v_gipi,run->mmio.phys_addr,run->mmio.len,data);
 							ls3a_ipi_unlock(vcpu->kvm->arch.v_gipi, &flags);
-					 		er = EMULATE_DONE;
+							er = EMULATE_DONE;
 						} else {
 							er = EMULATE_DO_MMIO;
 							run->mmio.is_write = 1;
@@ -1377,16 +1377,16 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 			}
 
 			break;
-                /* CPUCFG read */
+			/* CPUCFG read */
 		case 0x8:
 			++vcpu->stat.lsvz_cpucfg_exits;
 			vcpu->arch.gprs[rd] = read_cfg(vcpu->arch.gprs[rs]);
 			break;
-                /* Stable counter read */
+			/* Stable counter read */
 		case 0x9:
 			++vcpu->stat.lsvz_stable_counter_exits;
 			vcpu->arch.gprs[rd] = drdtime();
-//			vcpu->arch.gprs[rs] = rdcsr();
+			//			vcpu->arch.gprs[rs] = rdcsr();
 			break;
 		default:
 			kvm_info("lwc2 emulate not impl %d rs %lx @%lx\n",inst.loongson3_lscsr_format.fr, vcpu->arch.gprs[rs], curr_pc);

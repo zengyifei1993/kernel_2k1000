@@ -2620,28 +2620,28 @@ int handle_tlb_general_exception(struct kvm_run *run, struct kvm_vcpu *vcpu)
 	enum emulation_result er = EMULATE_DONE;
 	vcpu->mode = OUTSIDE_GUEST_MODE;
 
-        if (lsvz_vcpu_dump0 && (vcpu->vcpu_id == 0)) {
+	if (lsvz_vcpu_dump0 && (vcpu->vcpu_id == 0)) {
 		printk("#### TLB General Exception: vcpu[%d] dumping:\n", vcpu->vcpu_id);
 		kvm_arch_vcpu_dump_regs(vcpu);
 		lsvz_vcpu_dump0 = 0;
 	}
-        if (lsvz_vcpu_dump1 && (vcpu->vcpu_id == 1)) {
+	if (lsvz_vcpu_dump1 && (vcpu->vcpu_id == 1)) {
 		printk("#### TLB General Exception: vcpu[%d] dumping:\n", vcpu->vcpu_id);
 		kvm_arch_vcpu_dump_regs(vcpu);
 		lsvz_vcpu_dump1 = 0;
 	}
 
-{
-        if (lsvz_gpa_trans) {
-		int err = 0;
-		int gpa_index = 0;
-		unsigned long gpa_offset = 0;
-		pte_t pte_gpa[2];
-		int idx = (lsvz_gpa_trans >> PAGE_SHIFT) & 1;
-		err = _kvm_mips_map_page_fast(vcpu, lsvz_gpa_trans, 0, &pte_gpa[idx], &pte_gpa[!idx]);
-		if (err)
-			printk("#### GPA Trans Failed!\n");
-		else {
+	{
+		if (lsvz_gpa_trans) {
+			int err = 0;
+			int gpa_index = 0;
+			unsigned long gpa_offset = 0;
+			pte_t pte_gpa[2];
+			int idx = (lsvz_gpa_trans >> PAGE_SHIFT) & 1;
+			err = _kvm_mips_map_page_fast(vcpu, lsvz_gpa_trans, 0, &pte_gpa[idx], &pte_gpa[!idx]);
+			if (err)
+				printk("#### GPA Trans Failed!\n");
+			else {
 				if (lsvz_gpa_trans & 0x4000)
 					gpa_index = 1;
 
@@ -2650,10 +2650,10 @@ int handle_tlb_general_exception(struct kvm_run *run, struct kvm_vcpu *vcpu)
 				printk("pte_gpa[0] is %lx, pte_gpa[1] is %lx\n", pte_gpa[0].pte, pte_gpa[1].pte);
 				printk("gpa_trans is %lx, hpa is: %lx\n", lsvz_gpa_trans, ((pte_gpa[gpa_index].pte >> 18) << 14) + gpa_offset);
 				printk("\n************************************\n");
+			}
+			lsvz_gpa_trans = 0;
 		}
-		lsvz_gpa_trans = 0;
 	}
-}
 	if(((vcpu->arch.host_cp0_badvaddr & ~TO_PHYS_MASK) == UNCAC_BASE) &&
 			    ((vcpu->arch.host_cp0_badvaddr >> 40) & 0xff)) {
 		kvm_err("vpid area can not be used for addr %lx\n", vcpu->arch.host_cp0_badvaddr);
@@ -2860,27 +2860,27 @@ int kvm_mips_ls3a3000_handle_exit(struct kvm_run *run, struct kvm_vcpu *vcpu)
 	u32 inst;
 	int ret = RESUME_GUEST;
 
-        if (lsvz_vcpu_dump0 && (vcpu->vcpu_id == 0)) {
+	if (lsvz_vcpu_dump0 && (vcpu->vcpu_id == 0)) {
 		printk("#### Handle Exit: vcpu[%d] dumping:\n", vcpu->vcpu_id);
 		kvm_arch_vcpu_dump_regs(vcpu);
 		lsvz_vcpu_dump0 = 0;
 	}
-        if (lsvz_vcpu_dump1 && (vcpu->vcpu_id == 1)) {
+	if (lsvz_vcpu_dump1 && (vcpu->vcpu_id == 1)) {
 		printk("#### Handle Exit: vcpu[%d] dumping:\n", vcpu->vcpu_id);
 		kvm_arch_vcpu_dump_regs(vcpu);
 		lsvz_vcpu_dump1 = 0;
 	}
-{
-        if (lsvz_gpa_trans) {
-		int err = 0;
-		int gpa_index = 0;
-		unsigned long gpa_offset = 0;
-		pte_t pte_gpa[2];
-		int idx = (lsvz_gpa_trans >> PAGE_SHIFT) & 1;
-		err = _kvm_mips_map_page_fast(vcpu, lsvz_gpa_trans, 0, &pte_gpa[idx], &pte_gpa[!idx]);
-		if (err)
-			printk("#### GPA Trans Failed!\n");
-		else {
+	{
+		if (lsvz_gpa_trans) {
+			int err = 0;
+			int gpa_index = 0;
+			unsigned long gpa_offset = 0;
+			pte_t pte_gpa[2];
+			int idx = (lsvz_gpa_trans >> PAGE_SHIFT) & 1;
+			err = _kvm_mips_map_page_fast(vcpu, lsvz_gpa_trans, 0, &pte_gpa[idx], &pte_gpa[!idx]);
+			if (err)
+				printk("#### GPA Trans Failed!\n");
+			else {
 				if (lsvz_gpa_trans & 0x4000)
 					gpa_index = 1;
 
@@ -2889,10 +2889,10 @@ int kvm_mips_ls3a3000_handle_exit(struct kvm_run *run, struct kvm_vcpu *vcpu)
 				printk("pte_gpa[0] is %lx, pte_gpa[1] is %lx\n", pte_gpa[0].pte, pte_gpa[1].pte);
 				printk("gpa_trans is %lx, hpa is: %lx\n", lsvz_gpa_trans, ((pte_gpa[gpa_index].pte >> 18) << 14) + gpa_offset);
 				printk("\n************************************\n");
+			}
+			lsvz_gpa_trans = 0;
 		}
-		lsvz_gpa_trans = 0;
 	}
-}
 	vcpu->mode = OUTSIDE_GUEST_MODE;
 
 	/* re-enable HTW before enabling interrupts */

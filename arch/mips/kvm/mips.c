@@ -219,12 +219,12 @@ int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)
 		kvm_info("cksseg_map @ %p\n",kvm->arch.cksseg_map);
 		if (!kvm->arch.cksseg_map)
 			return -ENOMEM;
-                kvm->arch.node_shift = 36;
+		kvm->arch.node_shift = 36;
 	} else if(current_cpu_type() == CPU_LOONGSON3_COMP) {
 		if(read_c0_config6() & GSCFG_FLTINT) {
 			kvm->arch.use_stable_timer = 1;
 		}
-                kvm->arch.node_shift = 44;
+		kvm->arch.node_shift = 44;
 
 	}
 	return 0;
@@ -329,8 +329,8 @@ void kvm_arch_commit_memory_region(struct kvm *kvm,
 	int needs_flush;
 
 	kvm_debug("%s: kvm: %p slot: %d, GPA: %llx, size: %llx, QVA: %llx\n",
-		  __func__, kvm, mem->slot, mem->guest_phys_addr,
-		  mem->memory_size, mem->userspace_addr);
+			__func__, kvm, mem->slot, mem->guest_phys_addr,
+			mem->memory_size, mem->userspace_addr);
 
 	/*
 	 * If dirty page logging is enabled, write protect all pages in the slot
@@ -342,12 +342,12 @@ void kvm_arch_commit_memory_region(struct kvm *kvm,
 	 *		kvm_arch_flush_shadow_memslot()
 	 */
 	if (change == KVM_MR_FLAGS_ONLY &&
-	    (!(old->flags & KVM_MEM_LOG_DIRTY_PAGES) &&
-	     new->flags & KVM_MEM_LOG_DIRTY_PAGES)) {
+		(!(old->flags & KVM_MEM_LOG_DIRTY_PAGES) &&
+		 new->flags & KVM_MEM_LOG_DIRTY_PAGES)) {
 		spin_lock(&kvm->mmu_lock);
 		/* Write protect GPA page table entries */
 		needs_flush = kvm_mips_mkclean_gpa_pt(kvm, new->base_gfn,
-					new->base_gfn + new->npages - 1);
+				new->base_gfn + new->npages - 1);
 		/* Let implementation do the rest */
 		if (needs_flush)
 			kvm_mips_callbacks->flush_shadow_memslot(kvm, new);
@@ -1201,41 +1201,41 @@ long kvm_arch_vcpu_ioctl(struct file *filp, unsigned int ioctl,
 		break;
 	}
 
-       case KVM_MIPS_SET_VCPU_STATE:
-       {
-	        struct  kvm_mips_vcpu_state vcpu_state;
-	        r = -EFAULT;
+	case KVM_MIPS_SET_VCPU_STATE:
+	{
+		struct  kvm_mips_vcpu_state vcpu_state;
+		r = -EFAULT;
 
-                if (copy_from_user(&vcpu_state, argp, sizeof(struct kvm_mips_vcpu_state)))
-                        return -EFAULT;
+		if (copy_from_user(&vcpu_state, argp, sizeof(struct kvm_mips_vcpu_state)))
+			return -EFAULT;
 
-                vcpu->kvm->arch.online_vcpus = vcpu_state.online_vcpus;
-                vcpu->kvm->arch.is_migrate = vcpu_state.is_migrate;
-                vcpu->kvm->arch.nodecounter_value = vcpu_state.nodecounter_value;
+		vcpu->kvm->arch.online_vcpus = vcpu_state.online_vcpus;
+		vcpu->kvm->arch.is_migrate = vcpu_state.is_migrate;
+		vcpu->kvm->arch.nodecounter_value = vcpu_state.nodecounter_value;
 		if(current_cpu_type() == CPU_LOONGSON3_COMP) {
-	                vcpu->kvm->arch.stablecounter_value = vcpu_state.stablecounter_value;
-	                vcpu->kvm->arch.stablecounter_offset = vcpu_state.stablecounter_offset +
-								(vcpu->kvm->arch.stablecounter_value - drdtime());
+			vcpu->kvm->arch.stablecounter_value = vcpu_state.stablecounter_value;
+			vcpu->kvm->arch.stablecounter_offset = vcpu_state.stablecounter_offset +
+				(vcpu->kvm->arch.stablecounter_value - drdtime());
 			dwrite_csr(0xfffffff8, (unsigned long)vcpu->kvm->arch.stablecounter_offset);
 			kvm_info("---set old stable value %lx offset %lx \n", (unsigned long)vcpu_state.stablecounter_value,
-							(signed long)vcpu_state.stablecounter_offset);
+					(signed long)vcpu_state.stablecounter_offset);
 			kvm_info("---set stable value %lx offset %lx total %lx\n", (unsigned long)drdtime(), (signed long)dread_csr(0xfffffff8),
-							(unsigned long)(drdtime()+dread_csr(0xfffffff8)));
+					(unsigned long)(drdtime()+dread_csr(0xfffffff8)));
 		}
 
-                vcpu->arch.pending_exceptions = vcpu_state.pending_exceptions;
-                vcpu->arch.pending_exceptions_clr = vcpu_state.pending_exceptions_clr;
-                vcpu->arch.count_ctl = vcpu_state.count_ctl;
+		vcpu->arch.pending_exceptions = vcpu_state.pending_exceptions;
+		vcpu->arch.pending_exceptions_clr = vcpu_state.pending_exceptions_clr;
+		vcpu->arch.count_ctl = vcpu_state.count_ctl;
 
-	        if((vcpu_state.cpu_freq != vcpu->arch.count_hz) && (vcpu->vcpu_id == 0)){
+		if((vcpu_state.cpu_freq != vcpu->arch.count_hz) && (vcpu->vcpu_id == 0)){
 			struct kvm_mips_interrupt irq = {0};
 			irq.irq = 5;
 			kvm_mips_callbacks->queue_io_int(vcpu, &irq);
-	        }
+		}
 
-                r = 0;
-                break;
-       }
+		r = 0;
+		break;
+	}
 
 
 	default:
@@ -1298,7 +1298,7 @@ long kvm_arch_vm_ioctl(struct file *filp, unsigned int ioctl, unsigned long arg)
 		struct loongson_kvm_7a_ioapic *vpic;
 		struct loongson_kvm_ls3a_ipi *v_gipi;
 		struct loongson_kvm_ls3a_htirq *v_htirq;
-        	struct loongson_kvm_ls3a_routerirq *v_routerirq;
+		struct loongson_kvm_ls3a_routerirq *v_routerirq;
 		mutex_lock(&kvm->lock);
 		r = -EEXIST;
 		if (kvm->arch.v_ioapic)
@@ -1506,9 +1506,9 @@ int kvm_arch_vcpu_dump_regs(struct kvm_vcpu *vcpu)
 
 	for (i = 0; i < 32; i += 4) {
 		kvm_debug("\tgpr%02d: %08lx %08lx %08lx %08lx\n", i,
-		       vcpu->arch.gprs[i],
-		       vcpu->arch.gprs[i + 1],
-		       vcpu->arch.gprs[i + 2], vcpu->arch.gprs[i + 3]);
+				vcpu->arch.gprs[i],
+				vcpu->arch.gprs[i + 1],
+				vcpu->arch.gprs[i + 2], vcpu->arch.gprs[i + 3]);
 	}
 	kvm_debug("\thi: 0x%08lx\n", vcpu->arch.hi);
 	kvm_debug("\tlo: 0x%08lx\n", vcpu->arch.lo);
@@ -1581,7 +1581,7 @@ int kvm_arch_vcpu_init(struct kvm_vcpu *vcpu)
 		return err;
 
 	hrtimer_init(&vcpu->arch.comparecount_timer, CLOCK_MONOTONIC,
-		     HRTIMER_MODE_REL);
+			HRTIMER_MODE_REL);
 	vcpu->arch.comparecount_timer.function = kvm_mips_comparecount_wakeup;
 	return 0;
 }
@@ -1834,11 +1834,11 @@ skip_emul:
 		 * kvm_mips_csr_die_notifier() for how that is handled).
 		 */
 		if (kvm_mips_guest_has_fpu(&vcpu->arch) &&
-		    read_c0_status() & ST0_CU1)
+			read_c0_status() & ST0_CU1)
 			__kvm_restore_fcsr(&vcpu->arch);
 
 		if (kvm_mips_guest_has_msa(&vcpu->arch) &&
-		    read_c0_config5() & MIPS_CONF5_MSAEN)
+			read_c0_config5() & MIPS_CONF5_MSAEN)
 			__kvm_restore_msacsr(&vcpu->arch);
 	}
 
@@ -1870,7 +1870,7 @@ void kvm_own_fpu(struct kvm_vcpu *vcpu)
 	 * not to clobber the status register directly via the commpage.
 	 */
 	if (cpu_has_msa && sr & ST0_CU1 && !(sr & ST0_FR) &&
-	    vcpu->arch.aux_inuse & KVM_MIPS_AUX_MSA)
+		vcpu->arch.aux_inuse & KVM_MIPS_AUX_MSA)
 		kvm_lose_fpu(vcpu);
 
 	/*
@@ -1918,8 +1918,8 @@ void kvm_own_msa(struct kvm_vcpu *vcpu)
 		 * interacts with MSA state, so play it safe and save it first.
 		 */
 		if (!(sr & ST0_FR) &&
-		    (vcpu->arch.aux_inuse & (KVM_MIPS_AUX_FPU |
-				KVM_MIPS_AUX_MSA)) == KVM_MIPS_AUX_FPU)
+			(vcpu->arch.aux_inuse & (KVM_MIPS_AUX_FPU |
+			 KVM_MIPS_AUX_MSA)) == KVM_MIPS_AUX_FPU)
 			kvm_lose_fpu(vcpu);
 
 		change_c0_status(ST0_CU1 | ST0_FR, sr);
@@ -1934,22 +1934,22 @@ void kvm_own_msa(struct kvm_vcpu *vcpu)
 	enable_fpu_hazard();
 
 	switch (vcpu->arch.aux_inuse & (KVM_MIPS_AUX_FPU | KVM_MIPS_AUX_MSA)) {
-	case KVM_MIPS_AUX_FPU:
-		/*
-		 * Guest FPU state already loaded, only restore upper MSA state
-		 */
-		__kvm_restore_msa_upper(&vcpu->arch);
-		vcpu->arch.aux_inuse |= KVM_MIPS_AUX_MSA;
-		trace_kvm_aux(vcpu, KVM_TRACE_AUX_RESTORE, KVM_TRACE_AUX_MSA);
-		break;
-	case 0:
-		/* Neither FPU or MSA already active, restore full MSA state */
-		__kvm_restore_msa(&vcpu->arch);
-		vcpu->arch.aux_inuse |= KVM_MIPS_AUX_MSA;
-		if (kvm_mips_guest_has_fpu(&vcpu->arch))
-			vcpu->arch.aux_inuse |= KVM_MIPS_AUX_FPU;
-		trace_kvm_aux(vcpu, KVM_TRACE_AUX_RESTORE,
-			      KVM_TRACE_AUX_FPU_MSA);
+		case KVM_MIPS_AUX_FPU:
+			/*
+			 * Guest FPU state already loaded, only restore upper MSA state
+			 */
+			__kvm_restore_msa_upper(&vcpu->arch);
+			vcpu->arch.aux_inuse |= KVM_MIPS_AUX_MSA;
+			trace_kvm_aux(vcpu, KVM_TRACE_AUX_RESTORE, KVM_TRACE_AUX_MSA);
+			break;
+		case 0:
+			/* Neither FPU or MSA already active, restore full MSA state */
+			__kvm_restore_msa(&vcpu->arch);
+			vcpu->arch.aux_inuse |= KVM_MIPS_AUX_MSA;
+			if (kvm_mips_guest_has_fpu(&vcpu->arch))
+				vcpu->arch.aux_inuse |= KVM_MIPS_AUX_FPU;
+			trace_kvm_aux(vcpu, KVM_TRACE_AUX_RESTORE,
+					KVM_TRACE_AUX_FPU_MSA);
 		break;
 	default:
 		trace_kvm_aux(vcpu, KVM_TRACE_AUX_ENABLE, KVM_TRACE_AUX_MSA);
@@ -2056,8 +2056,8 @@ static int kvm_mips_csr_die_notify(struct notifier_block *self,
 	case DIE_MSAFP:
 		/* match 2nd/3rd instruction in __kvm_restore_msacsr */
 		if (!cpu_has_msa ||
-		    pc < (unsigned long)&__kvm_restore_msacsr + 4 ||
-		    pc > (unsigned long)&__kvm_restore_msacsr + 8)
+			pc < (unsigned long)&__kvm_restore_msacsr + 4 ||
+			pc > (unsigned long)&__kvm_restore_msacsr + 8)
 			return NOTIFY_DONE;
 		break;
 	}
