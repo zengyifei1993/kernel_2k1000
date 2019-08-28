@@ -1410,7 +1410,15 @@ static inline void tlbinvf(void)
 		".set pop");
 }
 
+static inline void tlbinv(void)
+{
+	__asm__ __volatile__(
+		".set push\n\t"
+		".set noreorder\n\t"
+		".word 0x42000003\n\t" /* tlbinv  */
+		".set pop");
 
+}
 /*
  * Functions to access the R10000 performance counters.	 These are basically
  * mfc0 and mtc0 instructions from and to coprocessor register with a 5-bit
