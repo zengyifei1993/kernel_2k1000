@@ -16,10 +16,58 @@
 #include <asm/bootinfo.h>
 #include <linux/module.h>
 #include <ec_npce985x.h>
+#include <linux/dmi.h>
 
 #define DRIVER_NAME "ls_pm_hotkey"
 #define EC_SCI_DEV	"sci"
-#define SCI_IRQ_NUM		0x03
+
+struct quirk_entry {
+	int sci_irq_num;
+};
+
+static struct quirk_entry *quirks;
+
+static struct quirk_entry quirk_czc_rs780e = {
+	.sci_irq_num = 3,
+};
+
+static struct quirk_entry quirk_czc_ls7a = {
+	.sci_irq_num = 123,
+};
+
+static int dmi_check_cb(const struct dmi_system_id *dmi)
+{
+	pr_info("Identified laptop model '%s'\n", dmi->ident);
+
+	quirks = dmi->driver_data;
+
+	return 1;
+}
+
+static const struct dmi_system_id loongson_device_table[] __initconst = {
+	{
+		.ident = "RS78OE laptop",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Loongson Technology Co.,Ltd."),
+			DMI_MATCH(DMI_PRODUCT_NAME, "CZC-LS3A3000-RS780E-laptop"),
+			DMI_MATCH(DMI_CHASSIS_TYPE, "9"),
+		},
+		.callback = dmi_check_cb,
+		.driver_data = &quirk_czc_rs780e,
+	},
+	{
+		.ident = "LS7A laptop",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Loongson"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "CZC-LS3A3000-LS7A-laptop"),
+			DMI_MATCH(DMI_CHASSIS_TYPE, "9"),
+		},
+		.callback = dmi_check_cb,
+		.driver_data = &quirk_czc_ls7a,
+	},
+	{}
+};
+MODULE_DEVICE_TABLE(dmi, loongson_device_table);
 
 extern struct board_devices *eboard;
 
@@ -349,7 +397,6 @@ static int sci_pci_init(void)
 	struct pci_dev *pdev;
 
 	printk(KERN_INFO "Loongson-czc: SCI PCI init.\n");
-	pdev = pci_get_device(PCI_VENDOR_ID_ATI, PCI_DEVICE_ID_ATI_SBX00_SMBUS, NULL);
 
 	loongson_sci_device = kmalloc(sizeof(struct sci_device), GFP_KERNEL);
 	if (!loongson_sci_device) {
@@ -357,17 +404,24 @@ static int sci_pci_init(void)
 		return -ENOMEM;
 	}
 
-	loongson_sci_device->irq = SCI_IRQ_NUM;
+	if (strstr(eboard->name, "B20-"))
+		loongson_sci_device->irq = 3;
+	else
+		loongson_sci_device->irq = quirks->sci_irq_num;
+	printk(KERN_INFO "Loongson-czc: SCI irq_num:%d.\n", loongson_sci_device->irq);
 	loongson_sci_device->irq_data = 0x00;
 	loongson_sci_device->number = 0x00;
 	loongson_sci_device->parameter = 0x00;
 	strcpy(loongson_sci_device->name, EC_SCI_DEV);
 
 	/* Enable pci device and get the GPIO resources. */
-	if ((ret = pci_enable_device(pdev))) {
-		printk(KERN_ERR "Loongson-czc: Enable pci device fail.\n");
-		ret = -ENODEV;
-		goto out_pdev;
+	if (strstr(eboard->name, "B20-")) {
+		pdev = pci_get_device(PCI_VENDOR_ID_ATI, PCI_DEVICE_ID_ATI_SBX00_SMBUS, NULL);
+		if (ret = pci_enable_device(pdev)) {
+			printk(KERN_ERR "Loongson-czc: Enable pci device fail.\n");
+			ret = -ENODEV;
+			goto out_pdev;
+		}
 	}
 
 	clean_ec985x_event_status();
@@ -788,9 +842,10 @@ static int loongson_laptop_suspend(struct platform_device * pdev, pm_message_t s
 {
 	struct pci_dev *dev;
 
-	dev = pci_get_device(PCI_VENDOR_ID_ATI, PCI_DEVICE_ID_ATI_SBX00_SMBUS, NULL);
-	pci_disable_device(dev);
-
+	if (strstr(eboard->name, "B20-")) {
+		dev = pci_get_device(PCI_VENDOR_ID_ATI, PCI_DEVICE_ID_ATI_SBX00_SMBUS, NULL);
+		pci_disable_device(dev);
+	}
 	return 0;
 }
 
@@ -799,9 +854,10 @@ static int loongson_laptop_resume(struct platform_device * pdev)
 {
 	struct pci_dev *dev;
 
-	dev = pci_get_device(PCI_VENDOR_ID_ATI, PCI_DEVICE_ID_ATI_SBX00_SMBUS, NULL);
-	pci_enable_device(dev);
-
+	if (strstr(eboard->name, "B20-")) {
+		dev = pci_get_device(PCI_VENDOR_ID_ATI, PCI_DEVICE_ID_ATI_SBX00_SMBUS, NULL);
+		pci_enable_device(dev);
+	}
 	/* Process LID event */
 	loongson_sci_hotkey_handler(SCI_EVENT_NUM_LID);
 
@@ -907,9 +963,14 @@ static int __init loongson_czc_laptop_init(void)
 {
 	int ret;
 
-	if (!strstr(eboard->name,"B20-"))
-		return 0;
+	if (!strstr(eboard->name, "B20-")) {
+		if ((!dmi_check_system(loongson_device_table))) {
+			printk(KERN_ERR "Loongson-czc Laptop not dmimatch devices! \n");
+			return -ENODEV;
+		}
+	}
 
+	printk(KERN_INFO "Loongson-czc Laptop dmimatch devices success! \n");
 	printk(KERN_INFO "Loongson-czc Laptop Platform Driver:regist loongson platform driver begain.\n");
 	ret = platform_driver_register(&loongson_czc_pdriver);
 	if (ret) {

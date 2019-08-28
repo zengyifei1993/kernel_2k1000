@@ -269,6 +269,7 @@ void init_7a_irqs(struct irq_chip *pirq_chip)
 	/*lpc irq is level trigged*/
 	*irq_edge   = 0x00000ULL;
 	*irq_pol    = 0x00000000ULL;
+	*irq_pol   |= (1ULL << 59);
 	*irq_status = 0ULL;
 	*irq_mask   = 0xffffffffffffffffULL;
 	*irq_clear  = -1ULL;
@@ -304,6 +305,7 @@ void init_7a_irqs(struct irq_chip *pirq_chip)
 	init_7a_irq(LS7A_IOAPIC_HPET_INT_OFFSET, LS7A_IOAPIC_HPET_INT_IRQ, pirq_chip);
 	init_7a_irq(LS7A_IOAPIC_AC97_HDA_OFFSET, LS7A_IOAPIC_AC97_HDA_IRQ, pirq_chip);
 	init_7a_irq(LS7A_IOAPIC_LPC_OFFSET, LS7A_IOAPIC_LPC_IRQ, pirq_chip);
+	init_7a_irq(LS7A_IOAPIC_GPIO_HI_OFFSET, LS7A_IOAPIC_GPIO_HI_IRQ, pirq_chip);
 }
 
 void ls7a_irq_router_init(void)
