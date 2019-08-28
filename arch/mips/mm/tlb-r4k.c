@@ -412,7 +412,7 @@ void __update_tlb(struct vm_area_struct * vma, unsigned long address, pte_t pte)
 
 	emulate_tlb_ops(tmp_address, pageshift, even_pte, odd_pte, 0x4000, vm_flags);
 #else
-	pid = read_c0_entryhi() & ASID_MASK;
+	pid = read_c0_entryhi() & cpu_asid_mask(&current_cpu_data);
 	address &= (PAGE_MASK << 1);
 	write_c0_entryhi(address | pid);
 	pgdp = pgd_offset(vma->vm_mm, address);

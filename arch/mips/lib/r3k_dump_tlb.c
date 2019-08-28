@@ -19,9 +19,10 @@ static void dump_tlb(int first, int last)
 {
 	int	i;
 	unsigned int asid;
-	unsigned long entryhi, entrylo0;
+	unsigned long entryhi, entrylo0, asid_mask;;
 
-	asid = read_c0_entryhi() & 0xfc0;
+	asid_mask = cpu_asid_mask(&current_cpu_data);
+	asid = read_c0_entryhi() & asid_mask;
 
 	for (i = first; i <= last; i++) {
 		write_c0_index(i<<8);
