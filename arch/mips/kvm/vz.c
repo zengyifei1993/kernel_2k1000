@@ -196,6 +196,11 @@ static inline unsigned int kvm_vz_config6_user_wrmask(struct kvm_vcpu *vcpu)
 	       MIPS_CONF6_INSTPREF | MIPS_CONF6_DATAPREF;
 }
 
+static inline unsigned int kvm_vz_config7_user_wrmask(struct kvm_vcpu *vcpu)
+{
+	return MIPS_CONF7_VFPUCGEN | MIPS_CONF7_UNIMUEN | MIPS_CONF7_RPS;
+}
+
 static gpa_t kvm_vz_gva_to_gpa_cb(gva_t gva)
 {
 	/* VZ guest has already converted gva to gpa */
@@ -1499,6 +1504,8 @@ static enum emulation_result kvm_vz_gpsi_cop0(union mips_instruction inst,
 					val = cop0->reg[rd][sel] | GSCFG_FLTINT;
 				else
 					val = cop0->reg[rd][sel] & (~GSCFG_FLTINT);
+			} else if (rd == MIPS_CP0_CONFIG && sel == 7) {
+				val = cop0->reg[rd][sel] = read_c0_config7();
 			} else if (rd == MIPS_CP0_DIAG && sel == 0) {
 				val = cop0->reg[rd][sel];       // Diag
 			} else {
@@ -1571,6 +1578,8 @@ static enum emulation_result kvm_vz_gpsi_cop0(union mips_instruction inst,
 				/* GSconfig Sign extend */
 				if (inst.c0r_format.rs == mtc_op)
 					val = (int)val;
+				cop0->reg[rd][sel] = val;
+			} else if (rd == MIPS_CP0_CONFIG && sel == 7) {
 				cop0->reg[rd][sel] = val;
 			} else if (rd == MIPS_CP0_DIAG && sel == 0) {
 				unsigned long flags;
@@ -2305,6 +2314,7 @@ static u64 kvm_vz_get_one_regs[] = {
 	KVM_REG_MIPS_CP0_CONFIG4,
 	KVM_REG_MIPS_CP0_CONFIG5,
 	KVM_REG_MIPS_CP0_CONFIG6,
+	KVM_REG_MIPS_CP0_CONFIG7,
 #ifdef CONFIG_64BIT
 	KVM_REG_MIPS_CP0_XCONTEXT,
 #endif
@@ -2639,6 +2649,9 @@ static int kvm_vz_get_one_reg(struct kvm_vcpu *vcpu,
 	case KVM_REG_MIPS_CP0_CONFIG6:
 		*v = kvm_read_sw_gc0_config6(cop0);
 		break;
+	case KVM_REG_MIPS_CP0_CONFIG7:
+		*v = kvm_read_sw_gc0_config7(cop0);
+		break;
 	case KVM_REG_MIPS_CP0_MAAR(0) ... KVM_REG_MIPS_CP0_MAAR(0x3f):
 		if (!cpu_guest_has_maar || cpu_guest_has_dyn_maar)
 			return -EINVAL;
@@ -2930,6 +2943,14 @@ static int kvm_vz_set_one_reg(struct kvm_vcpu *vcpu,
 		if (change) {
 			v = cur ^ change;
 			kvm_write_sw_gc0_config6(cop0, (int)v);
+		}
+		break;
+	case KVM_REG_MIPS_CP0_CONFIG7:
+		cur = kvm_read_sw_gc0_config7(cop0);
+		change = (cur ^ v) & kvm_vz_config7_user_wrmask(vcpu);
+		if (change) {
+			v = cur ^ change;
+			kvm_write_sw_gc0_config7(cop0, v);
 		}
 		break;
 	case KVM_REG_MIPS_CP0_MAAR(0) ... KVM_REG_MIPS_CP0_MAAR(0x3f):

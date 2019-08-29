@@ -1800,6 +1800,9 @@ static int kvm_vz_get_one_reg(struct kvm_vcpu *vcpu,
 	case KVM_REG_MIPS_CP0_CONFIG6:
 		ret = 0;
 		break;
+	case KVM_REG_MIPS_CP0_CONFIG7:
+		ret = 0;
+		break;
 #ifdef CONFIG_64BIT
 	case KVM_REG_MIPS_CP0_XCONTEXT:
 		*v = (long)kvm_read_sw_gc0_xcontext(cop0);
@@ -2014,6 +2017,9 @@ static int kvm_vz_set_one_reg(struct kvm_vcpu *vcpu,
 		}
 		break;
 	case KVM_REG_MIPS_CP0_CONFIG6:
+		ret = 0;
+		break;
+	case KVM_REG_MIPS_CP0_CONFIG7:
 		ret = 0;
 		break;
 #ifdef CONFIG_64BIT

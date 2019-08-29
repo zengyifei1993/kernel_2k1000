@@ -682,6 +682,8 @@
 
 #define MIPS_CONF7_WII		(_ULCAST_(1) << 31)
 
+#define MIPS_CONF7_VFPUCGEN	(_ULCAST_(1) << 0)
+#define MIPS_CONF7_UNIMUEN	(_ULCAST_(1) << 1)
 #define MIPS_CONF7_RPS		(_ULCAST_(1) << 2)
 
 /* WatchLo* register definitions */
