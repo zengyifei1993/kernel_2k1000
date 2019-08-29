@@ -1126,6 +1126,7 @@ struct kvm_s390_ucas_mapping {
 #define KVM_LSVZ_NODECOUNTER       _IOR(KVMIO,   0xb8, unsigned long)
 #define KVM_MIPS_GET_VCPU_STATE   _IOR(KVMIO,   0xb9, struct kvm_mips_vcpu_state)
 #define KVM_MIPS_SET_VCPU_STATE   _IOW(KVMIO,   0xba, struct kvm_mips_vcpu_state)
+#define KVM_MIPS_GET_CPUCFG	 _IOR(KVMIO,   0xbb, struct kvm_cpucfg)
 
 #define KVM_DEV_ASSIGN_ENABLE_IOMMU	(1 << 0)
 #define KVM_DEV_ASSIGN_PCI_2_3		(1 << 1)

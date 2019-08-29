@@ -714,6 +714,8 @@ static unsigned long kvm_mips_num_regs(struct kvm_vcpu *vcpu)
 	}
 	if (kvm_mips_guest_can_have_msa(&vcpu->arch))
 		ret += ARRAY_SIZE(kvm_mips_get_one_regs_msa) + 32;
+	if (kvm_mips_guest_has_lasx(vcpu))
+		ret += 32;
 	ret += kvm_mips_callbacks->num_regs(vcpu);
 
 	return ret;
@@ -758,11 +760,20 @@ static int kvm_mips_copy_reg_indices(struct kvm_vcpu *vcpu, u64 __user *indices)
 			return -EFAULT;
 		indices += ARRAY_SIZE(kvm_mips_get_one_regs_msa);
 
-		for (i = 0; i < 32; ++i) {
-			index = KVM_REG_MIPS_VEC_128(i);
-			if (copy_to_user(indices, &index, sizeof(index)))
-				return -EFAULT;
-			++indices;
+		if (kvm_mips_guest_has_lasx(vcpu)) {
+			for (i = 0; i < 32; ++i) {
+				index = KVM_REG_MIPS_VEC_256(i);
+				if (copy_to_user(indices, &index, sizeof(index)))
+					return -EFAULT;
+				++indices;
+			}
+		} else {
+			for (i = 0; i < 32; ++i) {
+				index = KVM_REG_MIPS_VEC_128(i);
+				if (copy_to_user(indices, &index, sizeof(index)))
+					return -EFAULT;
+				++indices;
+			}
 		}
 	}
 
@@ -777,6 +788,7 @@ static int kvm_mips_get_reg(struct kvm_vcpu *vcpu,
 	int ret;
 	s64 v;
 	s64 vs[2];
+	s64 lasx[4];
 	unsigned int idx;
 
 	switch (reg->id) {
@@ -835,6 +847,29 @@ static int kvm_mips_get_reg(struct kvm_vcpu *vcpu,
 		if (!(kvm_read_c0_guest_status(cop0) & ST0_FR))
 			return -EINVAL;
 		idx = reg->id - KVM_REG_MIPS_VEC_128(0);
+
+	/* LOONGSON SIMD Architecture Extention (LASX) registers */
+	case KVM_REG_MIPS_VEC_256(0) ... KVM_REG_MIPS_VEC_256(31):
+		if (!kvm_mips_guest_has_lasx(vcpu))
+			return -EINVAL;
+		/* Can't access MSA registers in FR=0 mode */
+		if (!(kvm_read_c0_guest_status(cop0) & ST0_FR))
+			return -EINVAL;
+		idx = reg->id - KVM_REG_MIPS_VEC_256(0);
+#ifdef CONFIG_CPU_LITTLE_ENDIAN
+		/* least significant byte first */
+		lasx[0] = get_fpr64(&fpu->fpr[idx], 0);
+		lasx[1] = get_fpr64(&fpu->fpr[idx], 1);
+		lasx[2] = get_fpr64(&fpu->fpr[idx], 2);
+		lasx[3] = get_fpr64(&fpu->fpr[idx], 3);
+#else
+		/* most significant byte first */
+		lasx[0] = get_fpr64(&fpu->fpr[idx], 3);
+		lasx[1] = get_fpr64(&fpu->fpr[idx], 2);
+		lasx[2] = get_fpr64(&fpu->fpr[idx], 1);
+		lasx[3] = get_fpr64(&fpu->fpr[idx], 0);
+#endif
+		break;
 #ifdef CONFIG_CPU_LITTLE_ENDIAN
 		/* least significant byte first */
 		vs[0] = get_fpr64(&fpu->fpr[idx], 0);
@@ -876,6 +911,10 @@ static int kvm_mips_get_reg(struct kvm_vcpu *vcpu,
 		void __user *uaddr = (void __user *)(long)reg->addr;
 
 		return copy_to_user(uaddr, vs, 16) ? -EFAULT : 0;
+	} else if ((reg->id & KVM_REG_SIZE_MASK) == KVM_REG_SIZE_U256) {
+		void __user *uaddr = (void __user *)(long)reg->addr;
+
+		return copy_to_user(uaddr, lasx, 32) ? -EFAULT : 0;
 	} else {
 		return -EINVAL;
 	}
@@ -888,6 +927,7 @@ static int kvm_mips_set_reg(struct kvm_vcpu *vcpu,
 	struct mips_fpu_struct *fpu = &vcpu->arch.fpu;
 	s64 v;
 	s64 vs[2];
+	s64 lasx[4];
 	unsigned int idx;
 
 	if ((reg->id & KVM_REG_SIZE_MASK) == KVM_REG_SIZE_U64) {
@@ -906,6 +946,10 @@ static int kvm_mips_set_reg(struct kvm_vcpu *vcpu,
 		void __user *uaddr = (void __user *)(long)reg->addr;
 
 		return copy_from_user(vs, uaddr, 16) ? -EFAULT : 0;
+	} else if ((reg->id & KVM_REG_SIZE_MASK) == KVM_REG_SIZE_U256) {
+		void __user *uaddr = (void __user *)(long)reg->addr;
+
+		return copy_from_user(lasx, uaddr, 32) ? -EFAULT : 0;
 	} else {
 		return -EINVAL;
 	}
@@ -974,6 +1018,26 @@ static int kvm_mips_set_reg(struct kvm_vcpu *vcpu,
 		/* most significant byte first */
 		set_fpr64(&fpu->fpr[idx], 1, vs[0]);
 		set_fpr64(&fpu->fpr[idx], 0, vs[1]);
+#endif
+		break;
+
+	/* LOONGSON SIMD Architecture Extention (LASX) registers */
+	case KVM_REG_MIPS_VEC_256(0) ... KVM_REG_MIPS_VEC_256(31):
+		if (!kvm_mips_guest_has_lasx(vcpu))
+			return -EINVAL;
+		idx = reg->id - KVM_REG_MIPS_VEC_256(0);
+#ifdef CONFIG_CPU_LITTLE_ENDIAN
+		/* least significant byte first */
+		set_fpr64(&fpu->fpr[idx], 0, lasx[0]);
+		set_fpr64(&fpu->fpr[idx], 1, lasx[1]);
+		set_fpr64(&fpu->fpr[idx], 2, lasx[2]);
+		set_fpr64(&fpu->fpr[idx], 3, lasx[3]);
+#else
+		/* most significant byte first */
+		set_fpr64(&fpu->fpr[idx], 3, lasx[0]);
+		set_fpr64(&fpu->fpr[idx], 2, lasx[1]);
+		set_fpr64(&fpu->fpr[idx], 1, lasx[2]);
+		set_fpr64(&fpu->fpr[idx], 0, lasx[3]);
 #endif
 		break;
 	case KVM_REG_MIPS_MSA_IR:
@@ -1237,8 +1301,17 @@ long kvm_arch_vcpu_ioctl(struct file *filp, unsigned int ioctl,
 		r = 0;
 		break;
 	}
+	case KVM_MIPS_GET_CPUCFG: {
+		struct kvm_cpucfg cpucfg;
+		int i;
 
-
+		if (copy_from_user(&cpucfg, argp, sizeof(cpucfg)))
+			return -EFAULT;
+		for (i = 0; i < 16; i++) {
+			cpucfg.cpucfg[i] = read_cfg(i);
+		}
+		return copy_to_user(argp, &cpucfg, sizeof(cpucfg)) ? -EFAULT : 0;
+	}
 	default:
 		r = -ENOIOCTLCMD;
 	}

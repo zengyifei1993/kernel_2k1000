@@ -39,6 +39,17 @@ struct kvm_regs {
 };
 
 /*
+ * for KVM_GET_CPUCFG
+ *
+ * If Config[AT] is zero (32-bit CPU), the register contents are
+ * stored in the lower 32-bits of the struct kvm_cpucfg.
+ */
+struct kvm_cpucfg {
+	/* out (KVM_GET_CPUCFG) */
+	__u32 cpucfg[16];
+};
+
+/*
  * for KVM_GET_FPU and KVM_SET_FPU
  */
 struct kvm_fpu {
@@ -183,6 +194,7 @@ struct kvm_fpu {
 #define KVM_REG_MIPS_FPR_32(n)	(KVM_REG_MIPS_FPR | KVM_REG_SIZE_U32  | (n))
 #define KVM_REG_MIPS_FPR_64(n)	(KVM_REG_MIPS_FPR | KVM_REG_SIZE_U64  | (n))
 #define KVM_REG_MIPS_VEC_128(n)	(KVM_REG_MIPS_FPR | KVM_REG_SIZE_U128 | (n))
+#define KVM_REG_MIPS_VEC_256(n)	(KVM_REG_MIPS_FPR | KVM_REG_SIZE_U256 | (n))
 
 /*
  * KVM_REG_MIPS_FCR - Floating point control registers.
