@@ -1797,21 +1797,9 @@ static int kvm_vz_get_one_reg(struct kvm_vcpu *vcpu,
 	case KVM_REG_MIPS_CP0_CONFIG5:
 		*v = read_gc0_config5();
 		break;
-#if 0
-	case KVM_REG_MIPS_CP0_MAAR(0) ... KVM_REG_MIPS_CP0_MAAR(0x3f):
-		if (!cpu_guest_has_maar || cpu_guest_has_dyn_maar)
-			return -EINVAL;
-		idx = reg->id - KVM_REG_MIPS_CP0_MAAR(0);
-		if (idx >= ARRAY_SIZE(vcpu->arch.maar))
-			return -EINVAL;
-		*v = vcpu->arch.maar[idx];
+	case KVM_REG_MIPS_CP0_CONFIG6:
+		ret = 0;
 		break;
-	case KVM_REG_MIPS_CP0_MAARI:
-		if (!cpu_guest_has_maar || cpu_guest_has_dyn_maar)
-			return -EINVAL;
-		*v = kvm_read_sw_gc0_maari(vcpu->arch.cop0);
-		break;
-#endif
 #ifdef CONFIG_64BIT
 	case KVM_REG_MIPS_CP0_XCONTEXT:
 		*v = (long)kvm_read_sw_gc0_xcontext(cop0);
@@ -2025,21 +2013,9 @@ static int kvm_vz_set_one_reg(struct kvm_vcpu *vcpu,
 			write_gc0_config5(v);
 		}
 		break;
-#if 0
-	case KVM_REG_MIPS_CP0_MAAR(0) ... KVM_REG_MIPS_CP0_MAAR(0x3f):
-		if (!cpu_guest_has_maar || cpu_guest_has_dyn_maar)
-			return -EINVAL;
-		idx = reg->id - KVM_REG_MIPS_CP0_MAAR(0);
-		if (idx >= ARRAY_SIZE(vcpu->arch.maar))
-			return -EINVAL;
-		vcpu->arch.maar[idx] = mips_process_maar(dmtc_op, v);
+	case KVM_REG_MIPS_CP0_CONFIG6:
+		ret = 0;
 		break;
-	case KVM_REG_MIPS_CP0_MAARI:
-		if (!cpu_guest_has_maar || cpu_guest_has_dyn_maar)
-			return -EINVAL;
-		kvm_write_maari(vcpu, v);
-		break;
-#endif
 #ifdef CONFIG_64BIT
 	case KVM_REG_MIPS_CP0_XCONTEXT:
 		kvm_write_sw_gc0_xcontext(cop0,v);

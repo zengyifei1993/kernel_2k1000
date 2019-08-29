@@ -184,6 +184,18 @@ static inline unsigned int kvm_vz_config5_user_wrmask(struct kvm_vcpu *vcpu)
 	return kvm_vz_config5_guest_wrmask(vcpu) | MIPS_CONF5_MRP;
 }
 
+static inline unsigned int kvm_vz_config6_user_wrmask(struct kvm_vcpu *vcpu)
+{
+	return MIPS_CONF6_BPPASS | MIPS_CONF6_KPOS | MIPS_CONF6_KE |
+	       MIPS_CONF6_FTLBDIS | MIPS_CONF6_LASXMODE | MIPS_CONF6_SSEN |
+	       MIPS_CONF6_DISRDTIME | MIPS_CONF6_PIXNUEN | MIPS_CONF6_SCRAND |
+	       MIPS_CONF6_LLEXCEN | MIPS_CONF6_FTLBEN | MIPS_CONF6_VCLRU |
+	       MIPS_CONF6_SYND | MIPS_CONF6_PIXUEN | MIPS_CONF6_DISBLKLYEN |
+	       MIPS_CONF6_UMEMUALEN | MIPS_CONF6_SFBEN | MIPS_CONF6_EXTIMER |
+	       MIPS_CONF6_INNTIMER | MIPS_CONF6_DISBTB | MIPS_CONF6_STPREFCTL |
+	       MIPS_CONF6_INSTPREF | MIPS_CONF6_DATAPREF;
+}
+
 static gpa_t kvm_vz_gva_to_gpa_cb(gva_t gva)
 {
 	/* VZ guest has already converted gva to gpa */
@@ -2292,6 +2304,7 @@ static u64 kvm_vz_get_one_regs[] = {
 	KVM_REG_MIPS_CP0_CONFIG3,
 	KVM_REG_MIPS_CP0_CONFIG4,
 	KVM_REG_MIPS_CP0_CONFIG5,
+	KVM_REG_MIPS_CP0_CONFIG6,
 #ifdef CONFIG_64BIT
 	KVM_REG_MIPS_CP0_XCONTEXT,
 #endif
@@ -2623,6 +2636,9 @@ static int kvm_vz_get_one_reg(struct kvm_vcpu *vcpu,
 			return -EINVAL;
 		*v = read_gc0_config5();
 		break;
+	case KVM_REG_MIPS_CP0_CONFIG6:
+		*v = kvm_read_sw_gc0_config6(cop0);
+		break;
 	case KVM_REG_MIPS_CP0_MAAR(0) ... KVM_REG_MIPS_CP0_MAAR(0x3f):
 		if (!cpu_guest_has_maar || cpu_guest_has_dyn_maar)
 			return -EINVAL;
@@ -2906,6 +2922,14 @@ static int kvm_vz_set_one_reg(struct kvm_vcpu *vcpu,
 		if (change) {
 			v = cur ^ change;
 			write_gc0_config5(v);
+		}
+		break;
+	case KVM_REG_MIPS_CP0_CONFIG6:
+		cur = kvm_read_sw_gc0_config6(cop0);
+		change = (cur ^ v) & kvm_vz_config6_user_wrmask(vcpu);
+		if (change) {
+			v = cur ^ change;
+			kvm_write_sw_gc0_config6(cop0, (int)v);
 		}
 		break;
 	case KVM_REG_MIPS_CP0_MAAR(0) ... KVM_REG_MIPS_CP0_MAAR(0x3f):
