@@ -1690,6 +1690,9 @@ static int kvm_vz_get_one_reg(struct kvm_vcpu *vcpu,
 	case KVM_REG_MIPS_CP0_INDEX:
 		*v = (long)kvm_read_sw_gc0_index(cop0);
 		break;
+	case KVM_REG_MIPS_CP0_RANDOM:
+		ret = 0;
+		break;
 	case KVM_REG_MIPS_CP0_ENTRYLO0:
 		*v = (long)kvm_read_sw_gc0_entrylo0(cop0);
 		break;
@@ -1861,6 +1864,9 @@ static int kvm_vz_set_one_reg(struct kvm_vcpu *vcpu,
 	switch (reg->id) {
 	case KVM_REG_MIPS_CP0_INDEX:
 		kvm_write_sw_gc0_index(cop0,v);
+		break;
+	case KVM_REG_MIPS_CP0_RANDOM:
+		ret = 0;
 		break;
 	case KVM_REG_MIPS_CP0_ENTRYLO0:
 		kvm_write_sw_gc0_entrylo0(cop0,v);
