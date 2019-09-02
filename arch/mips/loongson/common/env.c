@@ -218,6 +218,7 @@ void __init prom_init_env(void)
 	cpu_clock_freq = ecpu->cpu_clock_freq;
 	loongson_boot_cpu_id = ecpu->cpu_startup_core_id;
 	loongson_reserved_cpus_mask = ecpu->reserved_cores_mask;
+	nr_nodes_loongson = ecpu->total_node;
 #ifdef CONFIG_KEXEC
 #ifdef CONFIG_KVM_GUEST_LS3A3000
 	loongson_boot_cpu_id = read_c0_ebase() & 0xff;
@@ -231,7 +232,11 @@ void __init prom_init_env(void)
 #endif
 	if (nr_cpus_loongson > NR_CPUS || nr_cpus_loongson == 0)
 		nr_cpus_loongson = NR_CPUS;
-	nr_nodes_loongson = (nr_cpus_loongson + cores_per_node - 1) / cores_per_node;
+	if ((nr_nodes_loongson*cores_per_node) < nr_cpus_loongson) {
+		nr_nodes_loongson = (nr_cpus_loongson + cores_per_node - 1) / cores_per_node;
+		pr_err("node num %d does not match nrcpus %d \n", 
+			nr_nodes_loongson, nr_cpus_loongson);
+	}
 	possible_cpus_loongson = nr_nodes_loongson * cores_per_node;
 
 	pci_mem_start_addr = eirq_source->pci_mem_start_addr;
