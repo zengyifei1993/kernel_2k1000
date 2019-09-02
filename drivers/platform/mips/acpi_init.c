@@ -5,7 +5,9 @@
 #include <linux/export.h>
 #include <linux/interrupt.h>
 #include <linux/notifier.h>
+#include <linux/reboot.h>
 #include <loongson-pch.h>
+#include <loongson.h>
 
 typedef enum {
 	ACPI_PCI_HOTPLUG_STATUS = 2,
@@ -119,10 +121,15 @@ static irqreturn_t acpi_int_routine(int irq, void *dev_id)
 	if (value & (1 << 8)) {
 		writew(1 << 8, acpi_status_reg);
 		pr_info("Power Button pressed...\n");
-		input_report_key(button, KEY_POWER, 1);
-		input_sync(button);
-		input_report_key(button, KEY_POWER, 0);
-		input_sync(button);
+		if (cpu_guestmode) {
+			orderly_poweroff(true);
+		} else {
+
+			input_report_key(button, KEY_POWER, 1);
+			input_sync(button);
+			input_report_key(button, KEY_POWER, 0);
+			input_sync(button);
+		}
 		return IRQ_HANDLED;
 	}
 

@@ -23,7 +23,6 @@ extern void bonito_irq_init(void);
 /* machine-specific reboot/halt operation */
 extern void mach_prepare_reboot(void);
 extern void mach_prepare_shutdown(void);
-extern void lsvirt_button_poweroff(void);
 
 extern u32 cpu_guestmode;
 /* environment arguments from bootloader */

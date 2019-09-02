@@ -307,10 +307,6 @@ static void mach_guest_irq_dispatch(unsigned int pending)
 	pending = read_c0_cause() & read_c0_status() & ST0_IM;
 	if (pending & CAUSEF_IP5)
 		loongson_nodecounter_adjust();
-	pending = read_c0_cause() & read_c0_status() & ST0_IM;
-	if (pending & CAUSEF_IP4) {
-		lsvirt_button_poweroff();
-	}
 	if (pending & CAUSEF_IP3)
 		loongson_pch->irq_dispatch();
 	if (pending & CAUSEF_IP2)
@@ -469,7 +465,7 @@ void __init mach_init_irq(void)
 	}
 
 	if(cpu_guestmode)
-		set_c0_status(STATUSF_IP2  | STATUSF_IP4 | STATUSF_IP5 | STATUSF_IP6);
+		set_c0_status(STATUSF_IP2  | STATUSF_IP5 | STATUSF_IP6);
 	else
 		set_c0_status(STATUSF_IP2 | STATUSF_IP6);
 }
