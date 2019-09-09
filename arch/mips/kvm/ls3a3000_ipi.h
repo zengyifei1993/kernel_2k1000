@@ -20,24 +20,31 @@
 #include "iodev.h"
 
 typedef struct gipi_single {
-    uint32_t status;
-    uint32_t en;
-    uint32_t set;
-    uint32_t clear;
-    uint64_t buf[8];
+	uint32_t status;
+	uint32_t en;
+	uint32_t set;
+	uint32_t clear;
+	uint64_t buf[8];
 } gipi_single;
 
-typedef struct gipiState gipiState;
+typedef struct gipiState {
+	gipi_single core[16];
+} gipiState;
 
-struct gipiState {
-    gipi_single core[16];
-};
+struct loongson_kvm_ls3a_ipi;
+
+typedef struct ipi_io_device {
+	struct loongson_kvm_ls3a_ipi *ipi;
+	struct kvm_io_device device;
+	int nodeNum;
+} ipi_io_device;
 
 struct loongson_kvm_ls3a_ipi {
-       spinlock_t lock;
-       struct kvm *kvm;
-       gipiState ls3a_gipistate;
-       struct kvm_io_device dev_ls3a_ipi;
+	spinlock_t lock;
+	struct kvm *kvm;
+	gipiState ls3a_gipistate;
+	int nodeNum;
+	ipi_io_device dev_ls3a_ipi[4];
 };
 
 #define SMP_MAILBOX            0x3ff01000ULL
