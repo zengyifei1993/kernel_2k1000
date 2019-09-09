@@ -939,7 +939,6 @@ static const struct mips_perf_event loongson3_event_map[PERF_COUNT_HW_MAX] = {
 static const struct mips_perf_event loongson3_event_map2[PERF_COUNT_HW_MAX] = {
 	[PERF_COUNT_HW_CPU_CYCLES] = { 0x80, CNTR_ALL },
 	[PERF_COUNT_HW_INSTRUCTIONS] = { 0x81, CNTR_ALL },
-	[PERF_COUNT_HW_CACHE_REFERENCES] = { 0x17, CNTR_ALL },
 	[PERF_COUNT_HW_CACHE_MISSES] = { 0x18, CNTR_ALL },
 	[PERF_COUNT_HW_BRANCH_INSTRUCTIONS] = { 0x94, CNTR_ALL },
 	[PERF_COUNT_HW_BRANCH_MISSES] = { 0x9c, CNTR_ALL },
@@ -952,10 +951,6 @@ static const struct mips_perf_event loongson_new_event_map[PERF_COUNT_HW_MAX] = 
 	[PERF_COUNT_HW_CACHE_MISSES] = { 0x1d, CNTR_ALL },
 	[PERF_COUNT_HW_BRANCH_INSTRUCTIONS] = { 0x02, CNTR_ALL },
 	[PERF_COUNT_HW_BRANCH_MISSES] = { 0x08, CNTR_ALL },
-	[PERF_COUNT_HW_BUS_CYCLES] = { UNSUPPORTED_PERF_EVENT_ID },
-	[PERF_COUNT_HW_STALLED_CYCLES_FRONTEND] = { UNSUPPORTED_PERF_EVENT_ID },
-	[PERF_COUNT_HW_STALLED_CYCLES_BACKEND] = { UNSUPPORTED_PERF_EVENT_ID },
-	[PERF_COUNT_HW_REF_CPU_CYCLES] = { UNSUPPORTED_PERF_EVENT_ID },
 };
 
 static const struct mips_perf_event octeon_event_map[PERF_COUNT_HW_MAX] = {
@@ -1162,14 +1157,6 @@ static const struct mips_perf_event loongson3_cache_map
 		[C(RESULT_MISS)]        = { 0x04, CNTR_EVEN },
 	},
 },
-[C(DTLB)] = {
-	[C(OP_READ)] = {
-		[C(RESULT_MISS)]        = { 0x09, CNTR_ODD },
-	},
-	[C(OP_WRITE)] = {
-		[C(RESULT_MISS)]        = { 0x09, CNTR_ODD },
-	},
-},
 [C(ITLB)] = {
 	[C(OP_READ)] = {
 		[C(RESULT_MISS)]        = { 0x0c, CNTR_ODD },
@@ -1181,12 +1168,12 @@ static const struct mips_perf_event loongson3_cache_map
 [C(BPU)] = {
 	/* Using the same code for *HW_BRANCH* */
 	[C(OP_READ)] = {
-		[C(RESULT_ACCESS)]      = { 0x02, CNTR_EVEN },
-		[C(RESULT_MISS)]        = { 0x02, CNTR_ODD },
+		[C(RESULT_ACCESS)]      = { 0x01, CNTR_EVEN },
+		[C(RESULT_MISS)]        = { 0x01, CNTR_ODD },
 	},
 	[C(OP_WRITE)] = {
-		[C(RESULT_ACCESS)]      = { 0x02, CNTR_EVEN },
-		[C(RESULT_MISS)]        = { 0x02, CNTR_ODD },
+		[C(RESULT_ACCESS)]      = { 0x01, CNTR_EVEN },
+		[C(RESULT_MISS)]        = { 0x01, CNTR_ODD },
 	},
 },
 };
@@ -1203,19 +1190,19 @@ static const struct mips_perf_event loongson3_cache_map2
 	 * best we can do. Writes and reads get combined.
 	 */
 	[C(OP_READ)] = {
-		[C(RESULT_MISS)]        = { 0x04, CNTR_ODD },
+		[C(RESULT_ACCESS)]		= { 0x156, CNTR_ALL },
 	},
 	[C(OP_WRITE)] = {
-		[C(RESULT_MISS)]        = { 0x04, CNTR_ODD },
+		[C(RESULT_ACCESS)]		= { 0x155, CNTR_ALL },
+		[C(RESULT_MISS)]        = { 0x153, CNTR_ALL },
 	},
 },
 [C(L1I)] = {
 	[C(OP_READ)] = {
-		[C(RESULT_ACCESS)]	= { 0x17, CNTR_ALL },
-		[C(RESULT_MISS)]	= { 0x18, CNTR_ALL },
+		[C(RESULT_MISS)]        = { 0x18, CNTR_ALL },
 	},
 	[C(OP_WRITE)] = {
-		[C(RESULT_MISS)]        = { 0x04, CNTR_EVEN },
+		[C(RESULT_MISS)]        = { 0x18, CNTR_ALL },
 	},
 },
 [C(LL)] = {
@@ -1229,34 +1216,58 @@ static const struct mips_perf_event loongson3_cache_map2
 		[C(RESULT_ACCESS)]	= { 0x1bf, CNTR_ALL },
 	},
 },
-[C(DTLB)] = {
-	[C(OP_READ)] = {
-		[C(RESULT_MISS)]        = { 0x92, CNTR_ODD },
-	},
-	[C(OP_WRITE)] = {
-		[C(RESULT_MISS)]        = { 0x09, CNTR_ODD },
-	},
-},
 [C(ITLB)] = {
 	[C(OP_READ)] = {
-		[C(RESULT_MISS)]	= { 0x1a, CNTR_ALL },
+		[C(RESULT_MISS)]    = { 0x1a, CNTR_ALL },
 	},
 	[C(OP_WRITE)] = {
-		[C(RESULT_MISS)]        = { 0x0c, CNTR_ODD },
+		[C(RESULT_MISS)]    = { 0x1a, CNTR_ALL },
 	},
 },
 [C(BPU)] = {
 	/* Using the same code for *HW_BRANCH* */
 	[C(OP_READ)] = {
-		[C(RESULT_ACCESS)]      = { 0x02, CNTR_EVEN },
-		[C(RESULT_MISS)]        = { 0x02, CNTR_ODD },
-	},
-	[C(OP_WRITE)] = {
-		[C(RESULT_ACCESS)]      = { 0x02, CNTR_EVEN },
-		[C(RESULT_MISS)]        = { 0x02, CNTR_ODD },
+		[C(RESULT_ACCESS)]      = { 0x94, CNTR_ALL },
+		[C(RESULT_MISS)]        = { 0x9c, CNTR_ALL },
 	},
 },
 };
+static const struct mips_perf_event loongson2k_cache_map
+				[PERF_COUNT_HW_CACHE_MAX]
+				[PERF_COUNT_HW_CACHE_OP_MAX]
+				[PERF_COUNT_HW_CACHE_RESULT_MAX] = {
+[C(L1D)] = {
+	/*
+	 * Like some other architectures (e.g. ARM), the performance
+	 * counters don't differentiate between read and write
+	 * accesses/misses, so this isn't strictly correct, but it's the
+	 * best we can do. Writes and reads get combined.
+	 */
+	[C(OP_READ)] = {
+		[C(RESULT_ACCESS)]	= { 0x1e, CNTR_ALL },
+		[C(RESULT_MISS)]    = { 0x1f, CNTR_ALL },
+	},
+},
+[C(L1I)] = {
+	[C(OP_READ)] = {
+		[C(RESULT_ACCESS)]	= { 0x1c, CNTR_ALL },
+		[C(RESULT_MISS)]	= { 0x1d, CNTR_ALL },
+	},
+},
+[C(ITLB)] = {
+	[C(OP_READ)] = {
+		[C(RESULT_MISS)]    = { 0x1a, CNTR_ALL },
+	},
+},
+[C(BPU)] = {
+	/* Using the same code for *HW_BRANCH* */
+	[C(OP_READ)] = {
+		[C(RESULT_ACCESS)]  = { 0x02, CNTR_ALL },
+		[C(RESULT_MISS)]    = { 0x08, CNTR_ALL },
+	},
+},
+};
+
 static const struct mips_perf_event loongson_new_cache_map
 				[PERF_COUNT_HW_CACHE_MAX]
 				[PERF_COUNT_HW_CACHE_OP_MAX]
@@ -1270,11 +1281,11 @@ static const struct mips_perf_event loongson_new_cache_map
 	 */
 	[C(OP_READ)] = {
 		[C(RESULT_ACCESS)]	= { 0x1e, CNTR_ALL },
-		[C(RESULT_MISS)]        = { 0x1f, CNTR_ALL },
+		[C(RESULT_MISS)]    = { 0x1f, CNTR_ALL },
 	},
-	[C(OP_WRITE)] = {
-		[C(RESULT_ACCESS)]	= { 0x1e, CNTR_ALL },
-		[C(RESULT_MISS)]        = { 0x1f, CNTR_ALL },
+	[C(OP_PREFETCH)] = {
+		[C(RESULT_ACCESS)]	= { 0xaa, CNTR_ALL },
+		[C(RESULT_MISS)]    = { 0xa9, CNTR_ALL },
 	},
 },
 [C(L1I)] = {
@@ -1282,38 +1293,29 @@ static const struct mips_perf_event loongson_new_cache_map
 		[C(RESULT_ACCESS)]	= { 0x1c, CNTR_ALL },
 		[C(RESULT_MISS)]	= { 0x1d, CNTR_ALL },
 	},
-	[C(OP_WRITE)] = {
-		[C(RESULT_ACCESS)]	= { 0x1c, CNTR_ALL },
-		[C(RESULT_MISS)]        = { 0x1d, CNTR_ALL },
-	},
 },
 [C(LL)] = {
 	[C(OP_READ)] = {
 		[C(RESULT_ACCESS)]	= { 0x2e, CNTR_ALL },
-		[C(RESULT_MISS)]        = { 0x2f, CNTR_ALL },
+		[C(RESULT_MISS)]    = { 0x2f, CNTR_ALL },
 	},
-	[C(OP_WRITE)] = {
-		[C(RESULT_ACCESS)]	= { 0x2e, CNTR_ALL },
-		[C(RESULT_MISS)]        = { 0x2f, CNTR_ALL },
+},
+[C(ITLB)] = {
+	[C(OP_READ)] = {
+		[C(RESULT_MISS)]    = { 0x1a, CNTR_ALL },
 	},
 },
 [C(DTLB)] = {
 	[C(OP_READ)] = {
-		[C(RESULT_ACCESS)]	= { 0xb4, CNTR_ALL },
-	},
-	[C(OP_WRITE)] = {
-		[C(RESULT_ACCESS)]	= { 0xb5, CNTR_ALL },
+		[C(RESULT_ACCESS)]	= { 0x14, CNTR_ALL },
+		[C(RESULT_MISS)]    = { 0x1b, CNTR_ALL },
 	},
 },
 [C(BPU)] = {
 	/* Using the same code for *HW_BRANCH* */
 	[C(OP_READ)] = {
-		[C(RESULT_ACCESS)]      = { 0x02, CNTR_EVEN },
-		[C(RESULT_MISS)]        = { 0x08, CNTR_ODD },
-	},
-	[C(OP_WRITE)] = {
-		[C(RESULT_ACCESS)]      = { 0x02, CNTR_EVEN },
-		[C(RESULT_MISS)]        = { 0x08, CNTR_ODD },
+		[C(RESULT_ACCESS)]  = { 0x02, CNTR_ALL },
+		[C(RESULT_MISS)]    = { 0x08, CNTR_ALL },
 	},
 },
 };
@@ -1955,7 +1957,7 @@ init_hw_perf_events(void)
 	case CPU_LOONGSON2K:
 		mipspmu.name = "mips/loongson2k";
 		mipspmu.general_event_map = &loongson_new_event_map;
-		mipspmu.cache_event_map = &loongson_new_cache_map;
+		mipspmu.cache_event_map = &loongson2k_cache_map;
 		break;
 	case CPU_CAVIUM_OCTEON:
 	case CPU_CAVIUM_OCTEON_PLUS:
