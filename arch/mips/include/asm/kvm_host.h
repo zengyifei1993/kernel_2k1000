@@ -163,6 +163,10 @@ struct kvm_vm_stat {
 	u64 lsvz_kvm_get_ls3a_ht_irq;
 	u64 lsvz_kvm_set_ls3a_router_irq;
 	u64 lsvz_kvm_get_ls3a_router_irq;
+	u64 lsvz_kvm_set_ls3a_ext_irq;
+	u64 lsvz_kvm_get_ls3a_ext_irq;
+	u64 lsvz_kvm_set_ls3a_ipmask;
+	u64 lsvz_kvm_get_ls3a_ipmask;
 #endif
 };
 
@@ -265,7 +269,10 @@ struct kvm_arch {
 	struct loongson_kvm_7a_ioapic *v_ioapic;
 	struct loongson_kvm_ls3a_ipi *v_gipi;
 	struct loongson_kvm_ls3a_htirq *v_htirq;
-	struct loongson_kvm_ls3a_routerirq *v_routerirq; 
+	struct loongson_kvm_ls3a_routerirq *v_routerirq;
+	struct loongson_kvm_ls3a_extirq *v_extirq;
+	uint16_t core_ip_mask[KVM_MAX_VCPUS][4];
+
 };
 
 #define N_MIPS_COPROC_REGS     32
@@ -543,6 +550,7 @@ struct kvm_vcpu_arch {
 	u8 msa_enabled;
 
 	soft_tlb *stlb;
+	u64 core_ext_ioisr[4];
 };
 
 static inline void _kvm_atomic_set_c0_guest_reg(unsigned long *reg,

@@ -59,15 +59,19 @@ void route_update_reg(struct kvm *kvm,int irqnum,int level)
 		*(uint32_t *)(mem + core_route_state[i]) |= (1ULL<<irqnum);
 		irq.cpu = i;
 		irq.irq = ip_num;
+		kvm->arch.core_ip_mask [i][ip_num] |= 0x1;
 		kvm_vcpu_ioctl_interrupt(kvm->vcpus[i],&irq);
 
 	} else {
 		*(uint32_t *)(mem + INT_ROUTER_REGS_ISR) &= (~(1ULL<<irqnum));
 		*(uint32_t *)(mem + core_route_state[i]) &= (~(1ULL<<irqnum));
 		if (*(uint32_t *)(mem + core_route_state[i]) == 0) {
-			irq.cpu = i;
-			irq.irq = -ip_num;
-			kvm_vcpu_ioctl_interrupt(kvm->vcpus[i],&irq);
+			kvm->arch.core_ip_mask[i][ip_num -2] &= ~0x1;
+			if(kvm->arch.core_ip_mask[i][ip_num -2] == 0){
+				irq.cpu = i;
+				irq.irq = -ip_num;
+				kvm_vcpu_ioctl_interrupt(kvm->vcpus[i],&irq);\
+			}
 		}
 	}
 
@@ -174,7 +178,7 @@ static const struct kvm_io_device_ops kvm_ls3a_router_irq_ops = {
 struct loongson_kvm_ls3a_routerirq *kvm_create_ls3a_router_irq(struct kvm *kvm)
 {
 	struct loongson_kvm_ls3a_routerirq *s;
-	int ret;
+	int ret,i,j;
 
 	s = kzalloc(sizeof(struct loongson_kvm_ls3a_routerirq), GFP_KERNEL);
 	if (!s)
@@ -191,6 +195,11 @@ struct loongson_kvm_ls3a_routerirq *kvm_create_ls3a_router_irq(struct kvm *kvm)
 		goto fail_unlock;
 
 	mutex_unlock(&kvm->slots_lock);
+	for(i=0;i<4;i++){
+		for(j=0;j<4;j++){
+			kvm->arch.core_ip_mask[i][j]=0;
+		}
+	}
 	return s;
 
 fail_unlock:

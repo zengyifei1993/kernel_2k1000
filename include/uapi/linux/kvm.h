@@ -460,6 +460,7 @@ struct kvm_mips_vcpu_state {
 	__u64 pending_exceptions_clr;
 	__s64 stablecounter_offset;
 	__u64 stablecounter_value;
+	__u64 core_ext_ioisr[4];
  };
 
 

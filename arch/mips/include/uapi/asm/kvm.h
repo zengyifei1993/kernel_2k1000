@@ -240,6 +240,8 @@ struct kvm_mips_interrupt {
 #define KVM_IRQCHIP_LS3A_GIPI	0x1
 #define KVM_IRQCHIP_LS3A_HT_IRQ	0x2
 #define KVM_IRQCHIP_LS3A_ROUTE	0x3
+#define KVM_IRQCHIP_LS3A_EXTIRQ	0x4
+#define KVM_IRQCHIP_LS3A_IPMASK	0x5
 
 struct kvm_loongson_ls7a_ioapic_state {
     __u64 int_mask; /*0x020 interrupt mask register*/
@@ -270,6 +272,17 @@ struct loongson_gipiState {
     struct loongson_gipi_single core[16];
 };
 
+struct kvm_loongson_ls3a_extirq_state {
+	__u64 en[4];
+	__u64 bounce[4];
+	__u64 isr[4];
+	__u64 core_isr[4][4];
+	__u64 map;
+	__u64 core_map[32];
+	__u64 node_type[4];
+	__u64 ext_en;
+};
+
 struct loongson_kvm_irqchip {
 	__u32 chip_id;
 	__u32 node;
@@ -278,7 +291,9 @@ struct loongson_kvm_irqchip {
 		struct kvm_loongson_ls7a_ioapic_state ls7a_ioapic;
 		struct loongson_gipiState ls3a_gipistate;
 		__u8 ht_irq_reg[0x100];
-		__u8 ls3a_router_reg[0x100];;
+		__u8 ls3a_router_reg[0x100];
+		struct kvm_loongson_ls3a_extirq_state ls3a_extirq;
+		__u16 core_ipmask[128][4];
 	} chip;
 };
 

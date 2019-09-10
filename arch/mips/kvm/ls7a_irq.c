@@ -52,7 +52,8 @@ static void kvm_ls7a_ioapic_raise(struct kvm *kvm, unsigned long mask)
 			if ((state->intisr & (0x1ULL << i)) == 0) {
 				state->intisr |= 0x1ULL << i;
 				irqnum = state->htmsi_vector[i];
-				ht_irq_handler(kvm, irqnum, 1);
+				kvm_debug("msi_irq_handler,%ld,up\n",irqnum);
+				msi_irq_handler(kvm, irqnum, 1);
 			}
 		}
 
@@ -85,7 +86,8 @@ static void kvm_ls7a_ioapic_lower(struct kvm *kvm, unsigned long mask)
 			if (state->intisr & (0x1ULL << i)) {
 				state->intisr &= ~(0x1ULL << i);
 				irqnum = state->htmsi_vector[i];
-				ht_irq_handler(kvm, irqnum, 0);
+				kvm_debug("msi_irq_handler,%ld,down\n",irqnum);
+				msi_irq_handler(kvm, irqnum, 0);
 			}
 		}
 
