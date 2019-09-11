@@ -318,6 +318,55 @@ static void mach_guest_irq_dispatch(unsigned int pending)
 	}
 }
 
+asmlinkage void ip7_dispatch(void)
+{
+	do_IRQ(LOONGSON_TIMER_IRQ);
+}
+
+#ifdef CONFIG_SMP
+asmlinkage void ip6_dispatch(void)
+{
+	loongson3_ipi_interrupt(NULL);
+}
+#endif
+
+asmlinkage void ip2_dispatch(void)
+{
+	int cpu = cpu_logical_map(smp_processor_id());
+	int irqs, irq, irqs_pci, irq_lpc;
+
+	if(cpu == loongson_boot_cpu_id)
+	{
+		int core_index = loongson_boot_cpu_id % cores_per_node;
+		irqs_pci = LOONGSON_INT_ROUTER_ISR(core_index) & 0xf0;
+		irq_lpc = LOONGSON_INT_ROUTER_ISR(core_index) & 0x400;
+		if(irqs_pci)
+		{
+			while ((irq = ffs(irqs_pci)) != 0) {
+			do_IRQ(irq - 1 + SYS_IRQ_BASE);
+				irqs_pci &= ~(1 << (irq-1));
+			}
+		}
+		else if(irq_lpc)
+		{
+			if(ls_lpc_reg_base == LS3_LPC_REG_BASE)
+			{
+				irqs = ls2h_readl(LS_LPC_INT_ENA) & ls2h_readl(LS_LPC_INT_STS) & 0xfeff;
+				if (irqs) {
+					while ((irq = ffs(irqs)) != 0) {
+						do_IRQ(irq - 1);
+						irqs &= ~(1 << (irq-1));
+					}
+				}
+			}
+
+			do_IRQ(LOONGSON_UART_IRQ);
+		}
+	}
+	else
+		do_IRQ(LOONGSON_UART_IRQ);
+}
+
 void mach_irq_dispatch(unsigned int pending)
 {
 	if(cpu_guestmode)
@@ -419,7 +468,7 @@ static inline void shutdown_loongson_irq(struct irq_data *d)
 
 }
 
- /* For MIPS IRQs which shared by all cores */
+/* For MIPS IRQs which shared by all cores */
 static struct irq_chip loongson_irq_chip = {
 	.name		= "Loongson",
 	.irq_ack	= mask_loongson_irq,
@@ -430,6 +479,15 @@ static struct irq_chip loongson_irq_chip = {
 	.irq_startup	= startup_loongson_irq,
 	.irq_shutdown	= shutdown_loongson_irq,
 };
+
+static void set_irq_mode(void)
+{
+	if(cpu_has_vint) {
+		set_vi_handler(7, ip7_dispatch);
+		set_vi_handler(6, ip6_dispatch);
+		set_vi_handler(2, ip2_dispatch);
+	}
+}
 
 void __init mach_init_irq(void)
 {
@@ -458,7 +516,7 @@ void __init mach_init_irq(void)
 		introuter_lpc_addr = smp_group[i] | (u64)(&LOONGSON_INT_ROUTER_LPC);
 		if (i == 0) {
 			*(volatile u8 *)introuter_lpc_addr = LOONGSON_INT_COREx_INTy(loongson_boot_cpu_id, 0);
-                } else {
+		} else {
 			*(volatile u8 *)introuter_lpc_addr = LOONGSON_INT_COREx_INTy(0, 0);
 		}
 		*(volatile u32 *)intenset_addr = 1 << 10;
@@ -468,6 +526,8 @@ void __init mach_init_irq(void)
 		set_c0_status(STATUSF_IP2  | STATUSF_IP5 | STATUSF_IP6);
 	else
 		set_c0_status(STATUSF_IP2 | STATUSF_IP6);
+
+	set_irq_mode();
 }
 
 #ifdef CONFIG_HOTPLUG_CPU

@@ -100,6 +100,8 @@ EXPORT_SYMBOL(cpu_clock_freq);
 EXPORT_SYMBOL(loongson_ec_sci_irq);
 EXPORT_SYMBOL(loongson_pch);
 
+extern int mips_vint_enabled;
+
 #define parse_even_earlier(res, option, p)				\
 do {									\
 	unsigned int tmp __maybe_unused;				\
@@ -387,6 +389,13 @@ void __init prom_init_env(void)
 	cpu_guestmode = (!cpu_has_vz && (((read_c0_prid() & 0xffff) >=
 		(PRID_IMP_LOONGSON2 | PRID_REV_LOONGSON3A_R2_0)) ||
 		((read_c0_prid() & 0xffff) == 0)));
+
+#ifdef CONFIG_VIRTUALIZATION
+	if ((read_c0_prid() & 0xffff) >= 0x6308) {
+		mips_vint_enabled = 0;
+		pr_info("In Guest mode, disable mips vint\n");
+	}
+#endif
 }
 
 static int __init init_cpu_fullname(void)

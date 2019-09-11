@@ -1134,8 +1134,8 @@ static inline void cpu_probe_legacy(struct cpuinfo_mips *c, unsigned int cpu)
 		}
 
 		c->options = R4K_OPTS |
-			     MIPS_CPU_FPU | MIPS_CPU_LLSC |
-			     MIPS_CPU_32FPR;
+				MIPS_CPU_FPU | MIPS_CPU_LLSC |
+				MIPS_CPU_32FPR | MIPS_CPU_VINT;
 		c->tlbsize = 64;
 		set_cpu_asid_mask(c, MIPS_ENTRYHI_ASID);
 		break;

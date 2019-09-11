@@ -167,7 +167,7 @@ void handle_irqs(unsigned long long irqs, int i) {
 	}
 }
 
-void ls7a_irq_dispatch(void)
+asmlinkage void ls7a_irq_dispatch(void)
 {
 	unsigned long flags;
 	volatile unsigned long long intmask;
@@ -454,10 +454,10 @@ static int ls7a_lpc_init(void)
 void __init ls7a_init_irq(void)
 {
 	switch (current_cpu_type()) {
-	case CPU_LOONGSON3:
-		if(((read_c0_prid() & 0xff) > PRID_REV_LOONGSON3A_R1) && ((read_c0_prid() & 0xff) < PRID_REV_LOONGSON3A_R3_1)) {
-			pr_info("Do not supports HT MSI interrupt, disabling LS7A MSI Interrupt.\n");
-			ls3a_msi_enabled = 0;
+		case CPU_LOONGSON3:
+			if(((read_c0_prid() & 0xff) > PRID_REV_LOONGSON3A_R1) && ((read_c0_prid() & 0xff) < PRID_REV_LOONGSON3A_R3_1)) {
+				pr_info("Do not supports HT MSI interrupt, disabling LS7A MSI Interrupt.\n");
+				ls3a_msi_enabled = 0;
 		} else {
 #ifdef CONFIG_LS7A_MSI_SUPPORT
 			pr_info("Supports HT MSI interrupt, enabling LS7A MSI Interrupt.\n");
@@ -502,6 +502,8 @@ void __init ls7a_init_irq(void)
 	}
 
 	ls7a_lpc_init();
+	if(cpu_has_vint)
+		set_vi_handler(3, ls7a_irq_dispatch);
 }
 
 #ifdef CONFIG_PM
