@@ -49,10 +49,7 @@
  */
 int kvm_loongson_stable_timer_disabled(struct kvm_vcpu *vcpu)
 {
-	struct mips_coproc *cop0 = vcpu->arch.cop0;
-
-	return	(vcpu->arch.stable_timer_ctl & KVM_REG_MIPS_COUNT_CTL_DC) ||
-		(kvm_read_c0_guest_cause(cop0) & CAUSEF_DC);
+	return	(vcpu->arch.stable_timer_ctl & KVM_REG_MIPS_COUNT_CTL_DC);
 }
 
 /**
@@ -170,6 +167,24 @@ static u64 kvm_loongson_read_stable_running(struct kvm_vcpu *vcpu, ktime_t now)
 }
 
 /**
+ * kvm_mips_loongson_read_stable_timer() - Read the current stable timer value.
+ * @vcpu:	Virtual CPU.
+ *
+ * Read the current guest stable timer value, taking into account whether the timer
+ * is stopped.
+ *
+ * Returns:	The current guest stable timer value.
+ */
+u32 kvm_loongson_read_stable_timer(struct kvm_vcpu *vcpu)
+{
+	/* If count disabled just read static copy of count */
+	if (kvm_loongson_stable_timer_disabled(vcpu))
+		return vcpu->arch.stable_timer_tick;
+
+	return kvm_loongson_read_stable_running(vcpu, ktime_get());
+}
+
+/**
  * kvm_loongson_freeze_hrtimer() - Safely stop the hrtimer.
  * @vcpu:	Virtual CPU.
  * @count:	Output pointer for stable timer value at point of freeze.
@@ -281,8 +296,8 @@ void kvm_loongson_write_stable_timer(struct kvm_vcpu *vcpu, u64 stable_timer)
 	vcpu->arch.stable_timer_bias &= STABLE_TIMER_MASK;
 
 	if (kvm_loongson_stable_timer_disabled(vcpu)) {
-		/* The timer's disabled, adjust the static count */
-		vcpu->arch.stable_timer_cfg |= STABLE_TIMER_EN;
+		/* The timer's disabled, adjust the static stable timer */
+		vcpu->arch.stable_timer_tick = stable_timer;
 	} else {
 		/* Update timeout */
 		kvm_loongson_resume_hrtimer(vcpu, now, stable_timer);
@@ -335,7 +350,7 @@ int kvm_loongson_set_stable_timer_hz(struct kvm_vcpu *vcpu, s64 stable_timer_hz)
 	dc = kvm_loongson_stable_timer_disabled(vcpu);
 	if (dc) {
 		now = kvm_loongson_stable_timer_time(vcpu);
-		stable_timer = dread_guest_csr(STABLE_TIMER_TICK);
+		stable_timer = vcpu->arch.stable_timer_tick;
 	} else {
 		now = kvm_loongson_freeze_hrtimer(vcpu, &stable_timer);
 	}
@@ -378,8 +393,8 @@ static ktime_t kvm_loongson_stable_timer_disable(struct kvm_vcpu *vcpu)
 	/* Set the static count from the dynamic count, handling pending TI */
 	now = ktime_get();
 	stable_timer = kvm_loongson_read_stable_running(vcpu, now);
-	/* Disable stable timer */
-	dwrite_guest_csr(STABLE_TIMER_CFG, dread_guest_csr(STABLE_TIMER_CFG) & (~STABLE_TIMER_EN));
+
+	vcpu->arch.stable_timer_tick = stable_timer;
 
 	return now;
 }
@@ -424,7 +439,7 @@ int kvm_loongson_set_stable_timer_ctl(struct kvm_vcpu *vcpu, s64 stable_timer_ct
 			 * Calculate timeout relative to static count at resume
 			 * time (wrap 0 to 2^32).
 			 */
-			stable_timer = dread_guest_csr(STABLE_TIMER_TICK);
+			stable_timer = vcpu->arch.stable_timer_tick;
 			delta = div_u64(stable_timer * NSEC_PER_SEC,
 					vcpu->arch.stable_timer_hz);
 			expire = ktime_add_ns(vcpu->arch.stable_timer_resume, delta);

@@ -2007,14 +2007,10 @@ enum emulation_result kvm_mips_emulate_load(union mips_instruction inst,
 	/* Emulate nodecounter read */
 	if((vcpu->arch.gprs[rs] + offset) == NODE_COUNTER_ADDR) {
 		vcpu->arch.gprs[rt] = node_counter_read_for_guest();
-
-		//when we do live migrate update the time between two machine
-		if(vcpu->kvm->arch.is_migrate){
-			if(!vcpu->kvm->arch.nodecounter_offset){
-		        	vcpu->kvm->arch.nodecounter_offset = vcpu->kvm->arch.nodecounter_value - vcpu->arch.gprs[rt];
-			}
+		
+		if(vcpu->kvm->arch.nodecounter_offset)
 			vcpu->arch.gprs[rt] += vcpu->kvm->arch.nodecounter_offset;
-		}
+
 		vcpu->kvm->arch.nodecounter_value = vcpu->arch.gprs[rt];
 
 		++vcpu->stat.lsvz_nc_exits;
@@ -2048,8 +2044,14 @@ enum emulation_result kvm_mips_emulate_load(union mips_instruction inst,
 			irq.irq = -5;
 			kvm_mips_callbacks->dequeue_io_int(vcpu, &irq);
 		}
+	
+	#ifdef CONFIG_GS464V_STABLE_COUNTER
+		if((current_cpu_type() == CPU_LOONGSON3_COMP) && vcpu->kvm->arch.use_stable_timer)
+			vcpu->arch.gprs[rt] = calc_const_freq();
+		else
+	#endif
+			vcpu->arch.gprs[rt] = cpu_clock_freq;
 
-		vcpu->arch.gprs[rt] = cpu_clock_freq;
 		++vcpu->stat.lsvz_nc_exits;
 
 		vcpu->arch.pc = vcpu->arch.io_pc;

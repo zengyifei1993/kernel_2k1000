@@ -175,6 +175,9 @@ struct kvm_fpu {
  */
 #define KVM_REG_MIPS_COUNT_HZ	    (KVM_REG_MIPS_KVM | KVM_REG_SIZE_U64 | 2)
 
+#define KVM_REG_MIPS_COUNTER    (KVM_REG_MIPS_KVM | KVM_REG_SIZE_U64 | 3)
+
+#define KVM_REG_MIPS_OFFSET    (KVM_REG_MIPS_KVM | KVM_REG_SIZE_U64 | 4)
 
 /*
  * KVM_REG_MIPS_FPU - Floating Point and MIPS SIMD Architecture (MSA) registers.

@@ -612,6 +612,7 @@ struct cpucfg_info{
 };
 
 void loongson_nodecounter_adjust(void);
+void loongson_stablecounter_adjust(void);
 static inline unsigned int calc_const_freq(void)
 {
 	unsigned int res;

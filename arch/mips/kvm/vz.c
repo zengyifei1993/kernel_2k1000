@@ -645,7 +645,7 @@ void kvm_vz_lose_htimer(struct kvm_vcpu *vcpu)
  */
 static bool kvm_loongson_should_use_htimer(struct kvm_vcpu *vcpu)
 {
-	if (kvm_mips_count_disabled(vcpu))
+	if (kvm_loongson_stable_timer_disabled(vcpu))
 		return false;
 
 	return true;
@@ -1317,6 +1317,8 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 				/* dread node counter */
 				++vcpu->stat.lsvz_rdcsr_node_counter_exits;
 				vcpu->arch.gprs[rd] = dread_csr(LOONGSON_CSR_NODE_CONTER);
+				if(vcpu->kvm->arch.nodecounter_offset)
+ 					vcpu->arch.gprs[rd] += vcpu->kvm->arch.nodecounter_offset;
 			} else if((vcpu->arch.gprs[rs] & 0x1f00) == 0x1800) {
 				/*ext ioi mode for 7A */
 				offset = ((vcpu->arch.gprs[rs] & 0xffff) - 0x1800)/0x8;
@@ -2638,7 +2640,10 @@ static int kvm_vz_get_one_reg(struct kvm_vcpu *vcpu,
 		*v = read_gc0_badinstrp();
 		break;
 	case KVM_REG_MIPS_CP0_COUNT:
-		*v = kvm_mips_read_count(vcpu);
+		if(!vcpu->kvm->arch.use_stable_timer)
+			*v = kvm_mips_read_count(vcpu);
+		else
+			*v = kvm_loongson_read_stable_timer(vcpu);
 		break;
 	case KVM_REG_MIPS_CP0_ENTRYHI:
 		*v = (long)read_gc0_entryhi();
@@ -2773,6 +2778,16 @@ static int kvm_vz_get_one_reg(struct kvm_vcpu *vcpu,
 		else
 			*v = vcpu->arch.count_hz;
 		break;
+	case KVM_REG_MIPS_OFFSET:
+		if(vcpu->kvm->arch.use_stable_timer)
+			*v = (signed long)dread_csr(0xfffffff8);
+		break;
+	case KVM_REG_MIPS_COUNTER:
+		if(vcpu->kvm->arch.use_stable_timer){
+			*v = drdtime();
+		}else
+			*v = dread_csr(LOONGSON_CSR_NODE_CONTER);
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -2787,6 +2802,7 @@ static int kvm_vz_set_one_reg(struct kvm_vcpu *vcpu,
 	unsigned int idx;
 	int ret = 0;
 	unsigned int cur, change;
+	unsigned long flags;
 
 	switch (reg->id) {
 	case KVM_REG_MIPS_CP0_INDEX:
@@ -2884,6 +2900,8 @@ static int kvm_vz_set_one_reg(struct kvm_vcpu *vcpu,
 	case KVM_REG_MIPS_CP0_COUNT:
 		if(!vcpu->kvm->arch.use_stable_timer)
 			kvm_timer_callbacks->write_count(vcpu, v);
+		else
+			kvm_timer_callbacks->write_stable_timer(vcpu, v);
 		break;
 	case KVM_REG_MIPS_CP0_ENTRYHI:
 		write_gc0_entryhi(v);
@@ -3073,6 +3091,20 @@ static int kvm_vz_set_one_reg(struct kvm_vcpu *vcpu,
 			ret = kvm_loongson_set_stable_timer_hz(vcpu, v);
 		else
 			ret = kvm_mips_set_count_hz(vcpu, v);
+		break;
+	case KVM_REG_MIPS_OFFSET:
+		vcpu->kvm->arch.stablecounter_offset_old = v;
+		break;
+	case KVM_REG_MIPS_COUNTER:
+		if(v){
+			if(vcpu->kvm->arch.use_stable_timer){
+				local_irq_save(flags);
+				vcpu->kvm->arch.stablecounter_gftoffset = (signed long)(vcpu->kvm->arch.stablecounter_offset_old + (v - drdtime()));
+				dwrite_csr(0xfffffff8, (unsigned long)vcpu->kvm->arch.stablecounter_gftoffset);
+				local_irq_restore(flags);
+			} else
+				vcpu->kvm->arch.nodecounter_offset = v - dread_csr(LOONGSON_CSR_NODE_CONTER);
+		}
 		break;
 	default:
 		return -EINVAL;
@@ -3276,6 +3308,8 @@ static int kvm_vz_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 	/* Don't bother restoring registers multiple times unless necessary */
 	if (!all)
 		return 0;
+
+	dwrite_csr(0xfffffff8,(unsigned long)vcpu->kvm->arch.stablecounter_gftoffset);
 
 	/*
 	 * Restore config registers first, as some implementations restrict
@@ -3485,6 +3519,8 @@ static int kvm_vz_vcpu_put(struct kvm_vcpu *vcpu, int cpu)
 	if (cpu_has_guestctl2)
 		cop0->reg[MIPS_CP0_GUESTCTL2][MIPS_CP0_GUESTCTL2_SEL] =
 			read_c0_guestctl2();
+
+	vcpu->kvm->arch.stablecounter_gftoffset = (signed long)dread_csr(0xfffffff8);
 
 	return 0;
 }

@@ -305,8 +305,14 @@ static void mach_guest_irq_dispatch(unsigned int pending)
 		loongson3_ipi_interrupt(NULL);
 #endif
 	pending = read_c0_cause() & read_c0_status() & ST0_IM;
-	if (pending & CAUSEF_IP5)
-		loongson_nodecounter_adjust();
+	if (pending & CAUSEF_IP5){
+		#ifdef CONFIG_GS464V_STABLE_COUNTER
+		if((current_cpu_type() == CPU_LOONGSON3_COMP) && stable_timer_enabled)
+			loongson_stablecounter_adjust();
+		else
+		#endif
+			loongson_nodecounter_adjust();
+	}
 	if (pending & CAUSEF_IP3)
 		loongson_pch->irq_dispatch();
 	if (pending & CAUSEF_IP2)
