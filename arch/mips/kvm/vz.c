@@ -673,7 +673,7 @@ static void _kvm_vz_restore_stable_stimer(struct kvm_vcpu *vcpu, u32 cause)
 	/*hrtimer not expire */
 	delta = ktime_to_ns(ktime_sub(now, saved_ktime)) *
 			vcpu->arch.stable_timer_hz / NSEC_PER_SEC;
-	if((delta < (stable_timer + 1)) &&
+	if((delta < stable_timer) &&
 		(stable_timer != ((u64)(1ULL << 48) - 1))) {
 		dwrite_guest_csr(STABLE_TIMER_CFG, ((stable_timer - delta) &
 					 STABLE_TIMER_MASK) | STABLE_TIMER_EN);
@@ -710,7 +710,7 @@ static void kvm_loongson_restore_timer(struct kvm_vcpu *vcpu)
 static void _kvm_vz_restore_stable_htimer(struct kvm_vcpu *vcpu,
 					  u32 cause)
 {
-	u64 start_stable_timer, after_stable_timer;
+	u64 after_stable_timer;
 	unsigned long flags;
 
 	/*
@@ -719,7 +719,6 @@ static void _kvm_vz_restore_stable_htimer(struct kvm_vcpu *vcpu,
 	 */
 	local_irq_save(flags);
 	hrtimer_cancel(&vcpu->arch.comparecount_timer);
-	start_stable_timer = dread_guest_csr(STABLE_TIMER_TICK);
 	local_irq_restore(flags);
 
 	/* restore guest CP0_Cause, as TI may already be set */
@@ -734,9 +733,9 @@ static void _kvm_vz_restore_stable_htimer(struct kvm_vcpu *vcpu,
 	back_to_back_c0_hazard();
 	after_stable_timer = dread_guest_csr(STABLE_TIMER_TICK);
 	/* Stable timer count down to 48bits -1 */
-	if ((after_stable_timer == 0) ||
-		(after_stable_timer == ((u64)(1ULL << 48) - 1)))
+	if ((after_stable_timer == ((u64)(1ULL << 48) - 1)))
 		kvm_vz_queue_irq(vcpu, MIPS_EXC_INT_TIMER);
+
 }
 
 /**
@@ -773,7 +772,7 @@ void kvm_loongson_acquire_htimer(struct kvm_vcpu *vcpu)
 static ktime_t _kvm_vz_save_stable_htimer(struct kvm_vcpu *vcpu,
 				u64 *stable_timer, u32 *out_cause)
 {
-	u64 before_stable_timer, end_stable_timer;
+	u64 end_stable_timer;
 	u32 cause;
 	ktime_t before_time;
 
@@ -783,7 +782,6 @@ static ktime_t _kvm_vz_save_stable_htimer(struct kvm_vcpu *vcpu,
 	 * Record the stable timer *prior* to saving CP0_Cause, so we have a time
 	 * at which no pending timer interrupt is missing.
 	 */
-	before_stable_timer = dread_guest_csr(STABLE_TIMER_TICK);
 	back_to_back_c0_hazard();
 	cause = read_gc0_cause();
 	*out_cause = cause;
@@ -800,10 +798,9 @@ static ktime_t _kvm_vz_save_stable_htimer(struct kvm_vcpu *vcpu,
 	/*
 	 * The above sequence isn't atomic, so we could miss a timer interrupt
 	 * between reading CP0_Cause and end_stable_timer. Detect and record any timer
-	 * interrupt due between before_stable_timer and end_stable_timer.
+	 * interrupt due before end_stable_timer.
 	 */
-	if ((end_stable_timer == 0) ||
-		 (end_stable_timer == ((u64)(1ULL << 48) - 1)))
+	if ((end_stable_timer == ((u64)(1ULL << 48) - 1)))
 		kvm_vz_queue_irq(vcpu, MIPS_EXC_INT_TIMER);
 
 	/*
@@ -835,7 +832,6 @@ static void kvm_loongson_save_timer(struct kvm_vcpu *vcpu)
 		write_c0_guestctl0(gctl0 & ~MIPS_GCTL0_GT);
 
 		/* save hard timer state */
-		_kvm_vz_save_stable_htimer(vcpu, &stable_timer, &cause);
 		save_ktime = _kvm_vz_save_stable_htimer(vcpu, &stable_timer, &cause);
 	} else {
 		stable_timer = dread_guest_csr(STABLE_TIMER_TICK);
