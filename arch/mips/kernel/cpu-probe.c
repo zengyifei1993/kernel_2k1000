@@ -1137,6 +1137,7 @@ static inline void cpu_probe_legacy(struct cpuinfo_mips *c, unsigned int cpu)
 			     MIPS_CPU_FPU | MIPS_CPU_LLSC |
 			     MIPS_CPU_32FPR;
 		c->tlbsize = 64;
+		set_cpu_asid_mask(c, MIPS_ENTRYHI_ASID);
 		break;
 	case PRID_IMP_LOONGSON1:
 		decode_configs(c);
