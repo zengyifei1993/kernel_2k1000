@@ -1927,6 +1927,7 @@ out_fail:
 #define NODE_COUNTER_ADDR 0x900000003FF00408UL
 #define NODE_ID_OFFSET_ADDR 0x900000E01001041CULL
 #define LS3A4000_NODE_ID_OFFSET_ADDR 0x90000E001001041CULL
+#define TEMP_ADDR 0x1fe0019c
 
 cycle_t node_counter_read_for_guest(void)
 {
@@ -1999,6 +2000,7 @@ enum emulation_result kvm_mips_emulate_load(union mips_instruction inst,
 		dma_nodeid_offset_base = NODE_ID_OFFSET_ADDR;
 	}
 
+	/* Emulate nodecounter read */
 	if((vcpu->arch.gprs[rs] + offset) == NODE_COUNTER_ADDR) {
 		vcpu->arch.gprs[rt] = node_counter_read_for_guest();
 
@@ -2010,10 +2012,17 @@ enum emulation_result kvm_mips_emulate_load(union mips_instruction inst,
 			vcpu->arch.gprs[rt] += vcpu->kvm->arch.nodecounter_offset;
 		}
 		vcpu->kvm->arch.nodecounter_value = vcpu->arch.gprs[rt];
-		
+
 		++vcpu->stat.lsvz_nc_exits;
 
 		vcpu->arch.is_nodecounter = 1;
+		vcpu->arch.pc = vcpu->arch.io_pc;
+		return EMULATE_DONE;
+	}
+
+	/* Emulate temperature read */
+	if(((vcpu->arch.gprs[rs] + offset) && ((0x1ULL << 32) -1)) == TEMP_ADDR) {
+		vcpu->arch.gprs[rt] = (*(volatile u32 *)(vcpu->arch.gprs[rs] + offset));
 		vcpu->arch.pc = vcpu->arch.io_pc;
 		return EMULATE_DONE;
 	}
