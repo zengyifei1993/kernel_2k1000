@@ -355,6 +355,7 @@ static void  r4k_blast_scache_setup(void)
 }
 
 #ifdef CONFIG_CPU_LOONGSON3
+#include <loongson.h>
 void (* r4k_blast_scache_node)(long node);
 
 static void  r4k_blast_scache_node_setup(void)
@@ -362,6 +363,8 @@ static void  r4k_blast_scache_node_setup(void)
 	unsigned long sc_lsize = cpu_scache_line_size();
 
 	r4k_blast_scache_node = (void *)cache_noop;
+	if (cpu_guestmode)
+		return;
 	if (sc_lsize == 16)
 		r4k_blast_scache_node = blast_scache16_node;
 	else if (sc_lsize == 32)
@@ -376,9 +379,7 @@ static void  r4k_blast_scache_node_setup(void)
 static inline void local_r4k___flush_cache_all(void * args)
 {
 #if defined(CONFIG_CPU_LOONGSON3)
-#ifndef CONFIG_KVM_GUEST_LS3A3000
 	r4k_blast_scache_node(((read_c0_ebase() & 0x3FF)) >> 2);
-#endif
 	return;
 #endif
 
