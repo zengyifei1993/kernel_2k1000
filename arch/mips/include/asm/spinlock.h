@@ -121,7 +121,7 @@ static inline void arch_spin_lock(arch_spinlock_t *lock)
 		"4:							\n"
 			__LS_WAR_LLSC
 		"	.set pop					\n"
-		: [ticket_ptr] "+m" (lock->lock),
+		: [ticket_ptr] "+ZB" (lock->lock),
 		  [serving_now_ptr] "+m" (lock->h.serving_now),
 		  [ticket] "=&r" (tmp),
 		  [my_ticket] "=&r" (my_ticket)
