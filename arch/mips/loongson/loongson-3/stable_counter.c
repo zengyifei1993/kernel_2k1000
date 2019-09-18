@@ -16,6 +16,7 @@
 
 int stable_timer_irq_installed;
 static unsigned long long GSconfigFlag;
+int stable_timer_enabled = 0;
 
 static DEFINE_SPINLOCK(stable_lock);
 DEFINE_PER_CPU(struct clock_event_device, stable_clockevent_device);
@@ -173,6 +174,7 @@ int stable_clockevent_init(void)
 
 	stable_timer_irq_installed = 1;
 	setup_irq(irq, &stable_irq_irqaction);
+	stable_timer_enabled = 1;
 
 	printk(KERN_INFO "stable clock event device register\n");
 

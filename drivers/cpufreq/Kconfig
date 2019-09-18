@@ -258,6 +258,26 @@ config LOONGSON3_CPUFREQ
 
 	  If in doubt, say N.
 
+config CPU_FREQ_GOV_LOONGSON_BOOST
+	tristate "'loongson_boost' cpufreq policy governor"
+	select CPU_FREQ_TABLE
+	select CPU_FREQ_GOV_COMMON
+	depends on CPU_LOONGSON3 && GS464V_STABLE_COUNTER
+	help
+	  'loongson_boost' - This driver adds a dynamic cpufreq policy governor.
+	  The governor does a periodic polling and
+	  changes frequency based on the CPU utilization.
+	  The support for this governor depends on CPU capability to
+	  do fast frequency switching (i.e, very low latency frequency
+	  transitions).
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called cpufreq_loongson_boost.
+
+	  For details, take a look at linux/Documentation/cpu-freq.
+
+	  If in doubt, say N.
+
 endmenu
 
 menu "PowerPC CPU frequency scaling drivers"
