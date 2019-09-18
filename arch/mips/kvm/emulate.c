@@ -1616,6 +1616,7 @@ enum emulation_result kvm_mips_emulate_store(union mips_instruction inst,
 	unsigned int imme;
 	unsigned long ls7a_ioapic_reg_base;
 	unsigned long ht_control_reg_base, flags;
+	int ret = 0;
 
 	/*
 	 * Update PC and hold onto current PC in case there is
@@ -1902,14 +1903,16 @@ enum emulation_result kvm_mips_emulate_store(union mips_instruction inst,
 		return EMULATE_DONE;
 	}
 
-	if(((run->mmio.phys_addr & (~(0x3ffUL|(0x3UL<< vcpu->kvm->arch.node_shift)))) == SMP_MAILBOX) &&
-						ls3a_ipi_in_kernel(vcpu->kvm)) {
-		vcpu->stat.lsvz_ls3a_pip_write_exits++;
-		ls3a_ipi_lock(vcpu->kvm->arch.v_gipi, &flags);
-		ls3a_gipi_writel(vcpu->kvm->arch.v_gipi,run->mmio.phys_addr,run->mmio.len,data);
-		ls3a_ipi_unlock(vcpu->kvm->arch.v_gipi, &flags);
- 		return EMULATE_DONE;
+	ret = 1;
+	if ((run->mmio.phys_addr & (~(0x3ffUL|(0x3UL<< vcpu->kvm->arch.node_shift)))) == SMP_MAILBOX) {
+		ret = kvm_io_bus_write(vcpu->kvm, KVM_MMIO_BUS, run->mmio.phys_addr,
+					run->mmio.len, data);
  	}
+
+	if (!ret) {
+		vcpu->mmio_needed = 0;
+		return EMULATE_DONE;
+	}
 
 	run->mmio.is_write = 1;
 	vcpu->mmio_needed = 1;
@@ -1971,6 +1974,7 @@ enum emulation_result kvm_mips_emulate_load(union mips_instruction inst,
 	unsigned long ls7a_ioapic_reg_base, flags;
 	unsigned long ht_control_reg_base;
 	unsigned long dma_nodeid_offset_base;
+	int ret = 0;
 
 	rt = inst.i_format.rt;
 	op = inst.i_format.opcode;
@@ -2289,20 +2293,19 @@ enum emulation_result kvm_mips_emulate_load(union mips_instruction inst,
 		return EMULATE_DONE;
 	}
 
-	if(((run->mmio.phys_addr & (~(0x3ffUL|(0x3UL<< vcpu->kvm->arch.node_shift)))) == SMP_MAILBOX) &&
-	
-					ls3a_ipi_in_kernel(vcpu->kvm)){
-		vcpu->stat.lsvz_ls3a_pip_read_exits++;
-		ls3a_ipi_lock(vcpu->kvm->arch.v_gipi, &flags);
-		ls3a_gipi_readl(vcpu->kvm->arch.v_gipi,run->mmio.phys_addr,run->mmio.len,&vcpu->arch.gprs[rt]);
-		ls3a_ipi_unlock(vcpu->kvm->arch.v_gipi, &flags);
-		vcpu->arch.pc = vcpu->arch.io_pc;
-		vcpu->mmio_needed = 0;
- 		return EMULATE_DONE;
+	ret = 1;
+	if ((run->mmio.phys_addr & (~(0x3ffUL|(0x3UL<< vcpu->kvm->arch.node_shift)))) == SMP_MAILBOX) {
+		ret = kvm_io_bus_read(vcpu->kvm, KVM_MMIO_BUS, run->mmio.phys_addr, run->mmio.len, run->mmio.data);
  	}
 
 	run->mmio.is_write = 0;
 	vcpu->mmio_is_write = 0;
+
+	if (!ret) {
+		kvm_mips_complete_mmio_load(vcpu, run);
+		vcpu->mmio_needed = 0;
+		return EMULATE_DONE;
+	}
 	return EMULATE_DO_MMIO;
 }
 
