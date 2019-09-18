@@ -156,6 +156,8 @@ struct mips_dsp_state {
 	{0,} \
 }
 
+#define ARCH_LOW_ADDRESS_LIMIT	0x0fffffffUL
+
 struct mips3264_watch_reg_state {
 	/* The width of watchlo is 32 in a 32 bit kernel and 64 in a
 	   64 bit kernel.  We use unsigned long as it has the same

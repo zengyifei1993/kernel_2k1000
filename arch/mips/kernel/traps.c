@@ -2040,12 +2040,7 @@ void  per_cpu_trap_init(bool is_boot_cpu)
 
 	if (cpu_has_veic || cpu_has_vint) {
 		unsigned long sr = set_c0_status(ST0_BEV);
-#ifdef CONFIG_CPU_LOONGSON2K
-		write_c0_ebase(0x800);
-		write_c0_ebase_64(ebase|0x800);
-#else
 		write_c0_ebase(ebase);
-#endif
 		write_c0_status(sr);
 		/* Setting vector spacing enables EI/VI mode  */
 		change_c0_intctl(0x3e0, VECTORSPACING);
@@ -2173,7 +2168,7 @@ void __init trap_init(void)
 	if (cpu_has_veic || cpu_has_vint) {
 		unsigned long size = 0x200 + VECTORSPACING*64;
 		ebase = (unsigned long)
-			__alloc_bootmem(size, 1 << fls(size), 0);
+			__alloc_bootmem_low(size, 1 << fls(size), 0);
 		pr_debug("ebase: %lx \n", ebase);
 	} else {
 #ifdef CONFIG_KVM_GUEST
