@@ -1185,19 +1185,6 @@ static void kvm_write_maari(struct kvm_vcpu *vcpu, unsigned long val)
 		kvm_write_sw_gc0_maari(cop0, val);
 }
 
-struct mailbox_val {
-	union {
-		struct {
-			u32 lo;
-			u32 hi;
-		};
-		u64 mailval;
-	};
-	u32 flags;
-};
-
-struct mailbox_val mval[NR_CPUS][4] = {};
-
 static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 					      u32 *opc, u32 cause,
 					      struct kvm_run *run,
@@ -1248,10 +1235,18 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 				vcpu->mmio_needed = 2;	/* signed */
 
 				/*then get guest phys*/
-				run->mmio.phys_addr = ((unsigned long)(vcpu->vcpu_id / 4) << NODE_ADDRSPACE_SHIFT) | LOONGSON3_REG_BASE |
+				run->mmio.phys_addr = ((unsigned long)(vcpu->vcpu_id / 4) << vcpu->kvm->arch.node_shift) | LOONGSON3_REG_BASE |
 							 ((vcpu->vcpu_id % 4) << 8) | vcpu->arch.gprs[rs];
-
-				er = EMULATE_DO_MMIO;
+				if(ls3a_ipi_in_kernel(vcpu->kvm)) {
+					ls3a_ipi_lock(vcpu->kvm->arch.v_gipi, &flags);
+					ls3a_gipi_readl(vcpu->kvm->arch.v_gipi,run->mmio.phys_addr,run->mmio.len,&vcpu->arch.gprs[rd]);
+					ls3a_ipi_unlock(vcpu->kvm->arch.v_gipi, &flags);
+					vcpu->arch.pc = vcpu->arch.io_pc;
+					vcpu->mmio_needed = 0;
+					er = EMULATE_DONE;
+				} else {
+					er = EMULATE_DO_MMIO;
+				}
 				run->mmio.is_write = 0;
 				vcpu->mmio_is_write = 0;
 			} else {
@@ -1268,26 +1263,42 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 			if((vcpu->arch.gprs[rs] == 0x1004) || (vcpu->arch.gprs[rs] == 0x100c)) {
 				/*write current vcpu ipi clear/enable */
 				/*get guest phys*/
-				run->mmio.phys_addr = ((unsigned long)(vcpu->vcpu_id / 4) << NODE_ADDRSPACE_SHIFT) | LOONGSON3_REG_BASE |
-							 (vcpu->vcpu_id << 8) | vcpu->arch.gprs[rs] | ((vcpu->vcpu_id % 4) << 8);
+				run->mmio.phys_addr = ((unsigned long)(vcpu->vcpu_id / 4) << vcpu->kvm->arch.node_shift) | LOONGSON3_REG_BASE |
+							 vcpu->arch.gprs[rs] | ((vcpu->vcpu_id % 4) << 8);
 //				kvm_info("----wrcsr phys_addr:%llx %lx--rs %lx cpu %d\n",run->mmio.phys_addr, curr_pc, vcpu->arch.gprs[rs], vcpu->vcpu_id);
-				er = EMULATE_DO_MMIO;
-				run->mmio.is_write = 1;
-				vcpu->mmio_needed = 1;
-				vcpu->mmio_is_write = 1;
+				if(ls3a_ipi_in_kernel(vcpu->kvm)) {
+					ls3a_ipi_lock(vcpu->kvm->arch.v_gipi, &flags);
+					ls3a_gipi_writel(vcpu->kvm->arch.v_gipi,run->mmio.phys_addr,run->mmio.len,data);
+					ls3a_ipi_unlock(vcpu->kvm->arch.v_gipi, &flags);
+					vcpu->mmio_needed = 0;
+					er = EMULATE_DONE;
+				} else {
+					er = EMULATE_DO_MMIO;
+					run->mmio.is_write = 1;
+					vcpu->mmio_needed = 1;
+					vcpu->mmio_is_write = 1;
+				}
 			} else if (vcpu->arch.gprs[rs] == 0x1040) {
 				/*write ipi send reg */
 				int cpu = ((vcpu->arch.gprs[rd] & 0xffffffff) >> 16) & 0x3ff;
 				int action = (vcpu->arch.gprs[rd] & 0xffff);
 				*(u32 *)data = (1 << action);
 				// set ipi_set_reg
-				run->mmio.phys_addr = ((unsigned long)(cpu / 4) << NODE_ADDRSPACE_SHIFT) | LOONGSON3_REG_BASE |
+				run->mmio.phys_addr = ((unsigned long)(cpu / 4) << vcpu->kvm->arch.node_shift) | LOONGSON3_REG_BASE |
 							 0x1000 | ((cpu % 4) << 8) | 0x8;
 //				kvm_info("--vcpu %d set cpu %d action %x\n", vcpu->vcpu_id, cpu, 1 << action);
-				er = EMULATE_DO_MMIO;
-				run->mmio.is_write = 1;
-				vcpu->mmio_needed = 1;
-				vcpu->mmio_is_write = 1;
+				if(ls3a_ipi_in_kernel(vcpu->kvm)) {
+					ls3a_ipi_lock(vcpu->kvm->arch.v_gipi, &flags);
+					ls3a_gipi_writel(vcpu->kvm->arch.v_gipi,run->mmio.phys_addr,run->mmio.len,data);
+					ls3a_ipi_unlock(vcpu->kvm->arch.v_gipi, &flags);
+					vcpu->mmio_needed = 0;
+					er = EMULATE_DONE;
+				} else {
+					er = EMULATE_DO_MMIO;
+					run->mmio.is_write = 1;
+					vcpu->mmio_needed = 1;
+					vcpu->mmio_is_write = 1;
+				}
 			} else {
 				kvm_info("Not implement--wrcsr @ %lx--rs %lx cpu %d\n", curr_pc, vcpu->arch.gprs[rs], vcpu->vcpu_id);
 			}
@@ -1307,7 +1318,7 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 				/*ext ioi mode for 7A */
 				vcpu->arch.gprs[rd] = dread_csr(LOONGSON_CPU_TEMPERATURE_OFFSET);
 			} else {
-				kvm_info("drdcsr rs %lx @ %lx\n",vcpu->arch.gprs[rs], curr_pc);
+				kvm_debug("drdcsr rs %lx @ %lx\n",vcpu->arch.gprs[rs], curr_pc);
 				vcpu->arch.io_pc = vcpu->arch.pc;
 				vcpu->arch.pc = curr_pc;
 
@@ -1316,19 +1327,20 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 				vcpu->arch.io_gpr = rd;
 				vcpu->mmio_needed = 2;	/* signed */
 				/*Then get guest phys*/
-				run->mmio.phys_addr = ((unsigned long)(vcpu->vcpu_id / 4) << NODE_ADDRSPACE_SHIFT) | LOONGSON3_REG_BASE |
-							 vcpu->arch.gprs[rs] | ((vcpu->vcpu_id % 4) << 8);
+				run->mmio.phys_addr = ((unsigned long)(vcpu->vcpu_id / 4) << vcpu->kvm->arch.node_shift) |
+							 LOONGSON3_REG_BASE | vcpu->arch.gprs[rs] | ((vcpu->vcpu_id % 4) << 8);
 				if(ls3a_ipi_in_kernel(vcpu->kvm)) {
 					ls3a_ipi_lock(vcpu->kvm->arch.v_gipi, &flags);
 					ls3a_gipi_readl(vcpu->kvm->arch.v_gipi,run->mmio.phys_addr,run->mmio.len,&vcpu->arch.gprs[rd]);
 					ls3a_ipi_unlock(vcpu->kvm->arch.v_gipi, &flags);
 					vcpu->arch.pc = vcpu->arch.io_pc;
 					vcpu->mmio_needed = 0;
+					er = EMULATE_DONE;
 				} else {
 					er = EMULATE_DO_MMIO;
-					run->mmio.is_write = 0;
-					vcpu->mmio_is_write = 0;
 				}
+				run->mmio.is_write = 0;
+				vcpu->mmio_is_write = 0;
 			}
 
 			break;
@@ -1341,12 +1353,20 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 			/*process mailbox buf write*/
 			if(vcpu->arch.gprs[rs] == 0x1020) {
 				/*then get guest phys*/
-				run->mmio.phys_addr = ((unsigned long)(vcpu->vcpu_id / 4) << NODE_ADDRSPACE_SHIFT) | LOONGSON3_REG_BASE |
-					vcpu->arch.gprs[rs] | ((vcpu->vcpu_id % 4) << 8);
-				er = EMULATE_DO_MMIO;
-				run->mmio.is_write = 1;
-				vcpu->mmio_needed = 1;
-				vcpu->mmio_is_write = 1;
+				run->mmio.phys_addr = ((unsigned long)(vcpu->vcpu_id / 4) << vcpu->kvm->arch.node_shift) |
+							 LOONGSON3_REG_BASE | vcpu->arch.gprs[rs] | ((vcpu->vcpu_id % 4) << 8);
+				if(ls3a_ipi_in_kernel(vcpu->kvm)) {
+					ls3a_ipi_lock(vcpu->kvm->arch.v_gipi, &flags);
+					ls3a_gipi_writel(vcpu->kvm->arch.v_gipi,run->mmio.phys_addr,run->mmio.len,data);
+					ls3a_ipi_unlock(vcpu->kvm->arch.v_gipi, &flags);
+					vcpu->mmio_needed = 0;
+					er = EMULATE_DONE;
+				} else {
+					er = EMULATE_DO_MMIO;
+					run->mmio.is_write = 1;
+					vcpu->mmio_needed = 1;
+					vcpu->mmio_is_write = 1;
+				}
 			} else if((vcpu->arch.gprs[rs] & 0x1f00) == 0x1800) {
 				/*ext ioi mode for 7A dwrite */
 				kvm_info("Not implement dwrcsr %lx @ %lx for now\n",vcpu->arch.gprs[rs], curr_pc);
@@ -1359,26 +1379,27 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 				int mailbox = ((vcpu->arch.gprs[rd] & 0xffffffff) >> 3) & 0xf;
 				int mail_hi = ((vcpu->arch.gprs[rd] & 0xffffffff) >> 2) & 0x1;
 
-				mval[cpu][mailbox].flags = vcpu->arch.gprs[rd] & 0xffffffff;
+				vcpu->kvm->arch.mval[cpu][mailbox].flags = vcpu->arch.gprs[rd] & 0xffffffff;
 				//check for high value
 				if(mail_hi) {
-					mval[cpu][mailbox].hi = vcpu->arch.gprs[rd] >> 32;
+					vcpu->kvm->arch.mval[cpu][mailbox].hi = vcpu->arch.gprs[rd] >> 32;
 					er = EMULATE_DONE;
 				} else {
-					mval[cpu][mailbox].lo = vcpu->arch.gprs[rd] >> 32;
-					*(u64 *)data = mval[cpu][mailbox].mailval;
-					kvm_info("---dwrcsr--cpu %d mailbox %d val %llx\n", cpu, mailbox, mval[cpu][mailbox].mailval);
+					vcpu->kvm->arch.mval[cpu][mailbox].lo = vcpu->arch.gprs[rd] >> 32;
+					*(u64 *)data = vcpu->kvm->arch.mval[cpu][mailbox].mailval;
+					kvm_debug("dwrcsr--cpu %d mailbox %d val %llx\n", cpu, mailbox, vcpu->kvm->arch.mval[cpu][mailbox].mailval);
 					//pass through the initialize period
-					if((mailbox == 0) && (mval[cpu][mailbox].mailval == 0)) {
+					if((mailbox == 0) && (vcpu->kvm->arch.mval[cpu][mailbox].mailval == 0)) {
 						er = EMULATE_DONE;
 					} else {
-						run->mmio.phys_addr = ((unsigned long)(cpu / 4) << NODE_ADDRSPACE_SHIFT) |
+						run->mmio.phys_addr = ((unsigned long)(cpu / 4) << vcpu->kvm->arch.node_shift) |
 							LOONGSON3_REG_BASE | 0x1000 |
 							((cpu % 4) << 8) | (0x20 + mailbox * 8);
 						if(ls3a_ipi_in_kernel(vcpu->kvm)) {
 							ls3a_ipi_lock(vcpu->kvm->arch.v_gipi, &flags);
 							ls3a_gipi_writel(vcpu->kvm->arch.v_gipi,run->mmio.phys_addr,run->mmio.len,data);
 							ls3a_ipi_unlock(vcpu->kvm->arch.v_gipi, &flags);
+							vcpu->mmio_needed = 0;
 							er = EMULATE_DONE;
 						} else {
 							er = EMULATE_DO_MMIO;
@@ -1406,7 +1427,7 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 			//			vcpu->arch.gprs[rs] = rdcsr();
 			break;
 		default:
-			kvm_info("lwc2 emulate not impl %d rs %lx @%lx\n",inst.loongson3_lscsr_format.fr, vcpu->arch.gprs[rs], curr_pc);
+			kvm_err("lwc2 emulate not impl %d rs %lx @%lx\n",inst.loongson3_lscsr_format.fr, vcpu->arch.gprs[rs], curr_pc);
 			er = EMULATE_FAIL;
 			break;
 	}

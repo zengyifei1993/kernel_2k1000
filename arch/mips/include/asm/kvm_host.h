@@ -246,6 +246,17 @@ struct kvm_vcpu_stat {
 struct kvm_arch_memory_slot {
 };
 
+struct mailbox_val {
+	union {
+		struct {
+			u32 lo;
+			u32 hi;
+		};
+		u64 mailval;
+	};
+	u32 flags;
+};
+
 struct kvm_arch {
 	/* Guest physical mm */
 	struct mm_struct gpa_mm;
@@ -262,6 +273,7 @@ struct kvm_arch {
 	u32 node_shift;
 	u32 use_stable_timer;
 	u32 cpucfg_lasx;
+	struct mailbox_val mval[NR_CPUS][4];
 	struct loongson_kvm_7a_ioapic *v_ioapic;
 	struct loongson_kvm_ls3a_ipi *v_gipi;
 	struct loongson_kvm_ls3a_htirq *v_htirq;
