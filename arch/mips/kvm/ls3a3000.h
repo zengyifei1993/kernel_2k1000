@@ -19,7 +19,7 @@
 #include "ls7a_irq.h"
 #include "ls3a3000_ht_irq.h"
 #include "ls3a3000_router_irq.h"
-
+#include "ls3a_ext_irq.h"
 
 
 void kvm_mips_tlbw(struct kvm_mips_tlb *ptlb);

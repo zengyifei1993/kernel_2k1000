@@ -43,6 +43,7 @@
 #define KVM_LOONGSON_IRQ_TYPE_HT		2
 #define KVM_LOONGSON_IRQ_TYPE_MSI		3
 #define KVM_LOONGSON_IRQ_TYPE_IOAPIC		4
+#define KVM_LOONGSON_IRQ_TYPE_ROUTE		5
 
 /* out-of-kernel GIC cpu interrupt injection irq_number field */
 #define KVM_LOONGSON_IRQ_CPU_IRQ		0

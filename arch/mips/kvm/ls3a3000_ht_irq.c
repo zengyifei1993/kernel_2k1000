@@ -13,6 +13,7 @@
 #include "ls3a3000_ht_irq.h"
 #include "ls3a3000_router_irq.h"
 #include "ls3a3000.h"
+#include "ls3a_ext_irq.h"
 #include <linux/random.h>
 
 
@@ -81,6 +82,18 @@ void ht_irq_handler(struct kvm *kvm,int irq,int level)
 		ht_lower_irq(kvm, reg_num, 1 << reg_bit);
 	}
 }
+
+void msi_irq_handler(struct kvm *kvm,int irq,int level)
+{
+	struct loongson_kvm_ls3a_extirq *s = ls3a_ext_irqchip(kvm);
+	struct kvm_ls3a_extirq_state *state = &(s->ls3a_ext_irq);
+	if((current_cpu_type() == CPU_LOONGSON3_COMP)&&((state->ext_en.reg_u64)&(0x1ULL << 48))){
+		ext_irq_handler(kvm,irq,level);
+	}else{
+		ht_irq_handler(kvm,irq,level);
+	}
+}
+
 
 uint64_t ls3a_ht_intctl_read(struct kvm *kvm, gpa_t addr, unsigned size,void* val)
 {

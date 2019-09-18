@@ -35,7 +35,9 @@
 
 #include "trace.h"
 #include "ls3a3000_ipi.h"
-
+#include "ls3a_ext_irq.h"
+#include "ls7a_irq.h"
+ 
 /* Pointers to last VCPU loaded on each physical CPU */
 static struct kvm_vcpu *last_vcpu[NR_CPUS];
 /* Pointers to last VCPU executed on each physical CPU */
@@ -1191,8 +1193,9 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 					      struct kvm_vcpu *vcpu)
 {
 	enum emulation_result er = EMULATE_DONE;
-	u32 rs, rd;
-	unsigned long curr_pc, flags;
+	u32 rs, rd,offset,cpu;
+	u64 tmp_data;
+	unsigned long curr_pc, flags, any_send_data,any_send_addr;
 	void *data = run->mmio.data;
 
 	++vcpu->stat.lsvz_gpsi_lwc2_exits;
@@ -1215,14 +1218,18 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 				++vcpu->stat.lsvz_rdcsr_cpu_feature_exits;
 				vcpu->arch.gprs[rd] = read_csr(LOONGSON_CPU_FEATURE_OFFSET);
 				/*Attention for not return some feature for guest,such as TEMPERATURE and EXT_IOI */
-				vcpu->arch.gprs[rd] &= ~(LOONGSON_CPU_FEATURE_TEMP | LOONGSON_CPU_FEATURE_EXT_IOI);
+//				vcpu->arch.gprs[rd] &= ~(LOONGSON_CPU_FEATURE_TEMP | LOONGSON_CPU_FEATURE_EXT_IOI);
+				vcpu->arch.gprs[rd] &= ~(LOONGSON_CPU_FEATURE_TEMP);
 //				vcpu->arch.gprs[rd] &= ~(LOONGSON_CPU_FEATURE_EXT_IOI);
 			} else if(vcpu->arch.gprs[rs] == 0x428) {
 				++vcpu->stat.lsvz_rdcsr_cpu_temperature_exits;
 				vcpu->arch.gprs[rd] = dread_csr(LOONGSON_CPU_TEMPERATURE_OFFSET);
 			} else if(vcpu->arch.gprs[rs] == 0x424) {
 				++vcpu->stat.lsvz_rdcsr_other_func_exits;
-				kvm_info("Not implement for now rdcsr %lx  @ %lxcpu %d\n",vcpu->arch.gprs[rs], curr_pc, vcpu->vcpu_id);
+				run->mmio.len = 4;
+				/*then get guest phys*/
+				run->mmio.phys_addr =LOONGSON_REG_BASE | vcpu->arch.gprs[rs];
+				vcpu->arch.gprs[rd] = read_csr(LS_ANYSEND_OTHER_FUNC_OFFSET)&(~LS_ANYSEND_OTHER_FUNC_EXT_IOI);
 			} else if(vcpu->arch.gprs[rs] == 0x1000){
 				/* read ipi status */
 				++vcpu->stat.lsvz_rdcsr_ipi_access_exits;
@@ -1316,7 +1323,11 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 				vcpu->arch.gprs[rd] = dread_csr(LOONGSON_CSR_NODE_CONTER);
 			} else if((vcpu->arch.gprs[rs] & 0x1f00) == 0x1800) {
 				/*ext ioi mode for 7A */
-				vcpu->arch.gprs[rd] = dread_csr(LOONGSON_CPU_TEMPERATURE_OFFSET);
+				offset = ((vcpu->arch.gprs[rs] & 0xffff) - 0x1800)/0x8;
+				ls7a_ioapic_lock(vcpu->kvm->arch.v_ioapic, &flags);
+				vcpu->arch.gprs[rd] = vcpu->kvm->vcpus[vcpu->vcpu_id]->arch.core_ext_ioisr[offset];
+				ls7a_ioapic_unlock(vcpu->kvm->arch.v_ioapic, &flags);
+				kvm_debug("vcpu id:%d,DRDCSR addr=0x%lx data = 0x%llx\n",vcpu->vcpu_id,vcpu->arch.gprs[rs] & 0xffff,vcpu->arch.core_ext_ioisr[offset]);
 			} else {
 				kvm_debug("drdcsr rs %lx @ %lx\n",vcpu->arch.gprs[rs], curr_pc);
 				vcpu->arch.io_pc = vcpu->arch.pc;
@@ -1369,10 +1380,36 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 				}
 			} else if((vcpu->arch.gprs[rs] & 0x1f00) == 0x1800) {
 				/*ext ioi mode for 7A dwrite */
-				kvm_info("Not implement dwrcsr %lx @ %lx for now\n",vcpu->arch.gprs[rs], curr_pc);
-			} else if(vcpu->arch.gprs[rs] == 0x1158) {
-				/*7A any send */
-				kvm_info("Not implement dwrcsr %lx @ %lx for now\n",vcpu->arch.gprs[rs], curr_pc);
+				offset = ((vcpu->arch.gprs[rs] & 0x1fff) -0x1800)/0x8;
+				kvm_debug("vcpu id:%d,DWRCSR addr=0x%lx data = 0x%lx\n",vcpu->vcpu_id,vcpu->arch.gprs[rs] & 0xffff,vcpu->arch.gprs[rd]);
+				if(ls3a_extirq_in_kernel(vcpu->kvm)) {
+					ls7a_ioapic_lock(vcpu->kvm->arch.v_ioapic, &flags);
+					tmp_data = vcpu->arch.core_ext_ioisr[offset];
+					vcpu->arch.core_ext_ioisr[offset] &= ~(*((u64 *)data));
+					vcpu->kvm->arch.v_extirq->ls3a_ext_irq.isr.reg_u64[offset]  &= ~(*((u64 *)data));
+					if(tmp_data != vcpu->arch.core_ext_ioisr[offset]){
+						ext_irq_update_core(vcpu->kvm,vcpu->vcpu_id,offset);
+					}
+					ls7a_ioapic_unlock(vcpu->kvm->arch.v_ioapic, &flags);
+					er = EMULATE_DONE;
+				}
+			}else if(vcpu->arch.gprs[rs] == 0x1158){
+				/*3A any send */
+				cpu = ((*((u64 *)data)) >> 16) & 0x3ff;
+				offset = (unsigned int)((*((u64 *)data)) & 0xffffUL);
+				any_send_data = ((*((u64 *)data)) >> 32) & 0xffffffffUL;
+				any_send_addr = ((unsigned long)(cpu/4) << NODE_ADDRSPACE_SHIFT) | LOONGSON_REG_BASE |
+								(*((u64 *)data) & 0xffffUL);
+				kvm_debug("any_send dwrcsr addr %x data %lx for now\n",offset,any_send_addr);
+				if((((offset & 0xff00) == 0x1600) || ((offset & 0xff00) == 0x1C00) ||(offset >= 0x0420 && offset < 0x0428)||(offset >= 0x14A0 && offset < 0x14C8))
+				&& (ls3a_extirq_in_kernel(vcpu->kvm))){
+					ls7a_ioapic_lock(vcpu->kvm->arch.v_ioapic, &flags);
+					ls3a_ext_intctl_write(vcpu->kvm,any_send_addr,4,any_send_data);
+					ls7a_ioapic_unlock(vcpu->kvm->arch.v_ioapic, &flags);
+				}else{
+					kvm_err("err anysent,addr = 0x%lx,data = 0x%lx\n",any_send_addr,any_send_data);
+				}
+				er = EMULATE_DONE;
 			} else if(vcpu->arch.gprs[rs] == 0x1048) {
 				/*process mailbox send write*/
 				int cpu = ((vcpu->arch.gprs[rd] & 0xffffffff) >> 16) & 0x3ff;

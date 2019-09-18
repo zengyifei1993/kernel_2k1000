@@ -130,6 +130,10 @@ struct kvm_stats_debugfs_item debugfs_entries[] = {
 	{ "lsvz_kvm_get_ls3a_ht_irq",  VM_STAT(lsvz_kvm_get_ls3a_ht_irq),  KVM_STAT_VM },
 	{ "lsvz_kvm_set_ls3a_router_irq",  VM_STAT(lsvz_kvm_set_ls3a_router_irq),  KVM_STAT_VM },
 	{ "lsvz_kvm_get_ls3a_router_irq",  VM_STAT(lsvz_kvm_get_ls3a_router_irq),  KVM_STAT_VM },
+	{ "lsvz_kvm_set_ls3a_ext_irq",  VM_STAT(lsvz_kvm_set_ls3a_ext_irq),  KVM_STAT_VM },
+	{ "lsvz_kvm_get_ls3a_ext_irq",  VM_STAT(lsvz_kvm_get_ls3a_ext_irq),  KVM_STAT_VM },
+	{ "lsvz_kvm_set_ls3a_ipmask",  VM_STAT(lsvz_kvm_set_ls3a_ipmask),  KVM_STAT_VM },
+	{ "lsvz_kvm_get_ls3a_ipmask",  VM_STAT(lsvz_kvm_get_ls3a_ipmask),  KVM_STAT_VM },
 
 	{NULL}
 };
@@ -1111,6 +1115,19 @@ int kvm_vm_ioctl_irq_line(struct kvm *kvm, struct kvm_irq_level *irq_level,
 		ret = kvm_ls7a_ioapic_set_irq(kvm,irq_num,level);
 		ls7a_ioapic_unlock(ls7a_ioapic_irqchip(kvm), &flags);
 		return ret;
+		break;
+	case KVM_LOONGSON_IRQ_TYPE_ROUTE:
+		if (!ls3a_router_in_kernel(kvm))
+			return -ENXIO;
+
+		if (vcpu_idx >= nrcpus)
+			return -EINVAL;
+
+		ls7a_ioapic_lock(ls7a_ioapic_irqchip(kvm), &flags);
+		route_update_reg(kvm,irq_num,level);
+		ls7a_ioapic_unlock(ls7a_ioapic_irqchip(kvm), &flags);
+		return 0;
+		break;
 	}
 	kvm->stat.lsvz_kvm_vm_ioctl_irq_line++;
 
@@ -1134,6 +1151,12 @@ static int kvm_vm_ioctl_get_irqchip(struct kvm *kvm, struct loongson_kvm_irqchip
 		break;
 	case KVM_IRQCHIP_LS3A_ROUTE:
 		r = kvm_get_ls3a_router_irq(kvm,chip->chip.ls3a_router_reg);
+		break;
+	case KVM_IRQCHIP_LS3A_EXTIRQ:
+		r = kvm_get_ls3a_extirq(kvm,&(chip->chip.ls3a_extirq));
+		break;
+	case KVM_IRQCHIP_LS3A_IPMASK:
+		r = kvm_get_ls3a_ipmask(kvm,(uint16_t *)chip->chip.core_ipmask);
 		break;
 	default:
 		r = -EINVAL;
@@ -1160,6 +1183,12 @@ static int kvm_vm_ioctl_set_irqchip(struct kvm *kvm, struct loongson_kvm_irqchip
 		break;
 	case KVM_IRQCHIP_LS3A_ROUTE:
 		r = kvm_set_ls3a_router_irq(kvm,chip->chip.ls3a_router_reg);
+		break;
+	case KVM_IRQCHIP_LS3A_EXTIRQ:
+		r = kvm_set_ls3a_extirq(kvm,&(chip->chip.ls3a_extirq));
+		break;
+	case KVM_IRQCHIP_LS3A_IPMASK:
+		r = kvm_set_ls3a_ipmask(kvm,(uint16_t *)chip->chip.core_ipmask);
 		break;
 	default:
 		r = -EINVAL;
@@ -1373,6 +1402,7 @@ long kvm_arch_vm_ioctl(struct file *filp, unsigned int ioctl, unsigned long arg)
 		struct loongson_kvm_ls3a_ipi *v_gipi;
 		struct loongson_kvm_ls3a_htirq *v_htirq;
 		struct loongson_kvm_ls3a_routerirq *v_routerirq;
+		struct loongson_kvm_ls3a_extirq *v_extirq;
 		mutex_lock(&kvm->lock);
 		r = -EEXIST;
 		if (kvm->arch.v_ioapic)
@@ -1406,6 +1436,7 @@ long kvm_arch_vm_ioctl(struct file *filp, unsigned int ioctl, unsigned long arg)
 			mutex_unlock(&kvm->slots_lock);
 			goto create_irqchip_unlock;
 		}
+		v_extirq = kvm_create_ls3a_ext_irq(kvm);
 		r = 0;
 		/* Write kvm->irq_routing before kvm->arch.vpic.  */
 		smp_wmb();
@@ -1413,6 +1444,7 @@ long kvm_arch_vm_ioctl(struct file *filp, unsigned int ioctl, unsigned long arg)
 		kvm->arch.v_gipi = v_gipi;
 		kvm->arch.v_htirq = v_htirq;
 		kvm->arch.v_routerirq = v_routerirq;
+		kvm->arch.v_extirq = v_extirq;
 	create_irqchip_unlock:
 		mutex_unlock(&kvm->lock);
 		break;
