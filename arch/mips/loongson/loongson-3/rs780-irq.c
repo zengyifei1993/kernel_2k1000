@@ -6,6 +6,7 @@
 #include <asm/irq_cpu.h>
 #include <asm/i8259.h>
 #include <asm/mipsregs.h>
+#include <asm/setup.h>
 
 extern int ls3a_msi_enabled;
 extern unsigned long long smp_group[4];
@@ -114,7 +115,7 @@ void ht0_irq_dispatch(void)
 
 }
 
-void rs780_irq_dispatch(void)
+asmlinkage void rs780_irq_dispatch(void)
 {
 	int cpu = smp_processor_id();
 	int rawcpu = cpu_logical_map(cpu);
@@ -125,7 +126,7 @@ void rs780_irq_dispatch(void)
 	dispatch_msi_irq(cpu, htid);
 }
 
-void rs780_irq_router_init(void)
+static void rs780_irq_router_init(void)
 {
 	int i, rawcpu;
 
@@ -172,6 +173,9 @@ void __init rs780_init_irq(void)
 	}
 	rs780_irq_router_init();
 	init_i8259_irqs();
+
+	if(cpu_has_vint)
+		set_vi_handler(3, rs780_irq_dispatch);
 }
 
 #ifdef CONFIG_PM

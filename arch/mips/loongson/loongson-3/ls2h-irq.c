@@ -118,7 +118,7 @@ void mask_ls2h_irq(struct irq_data *d)
 	spin_unlock_irqrestore(&pch_irq_lock, flags);
 }
 
-void mask_ack_ls2h_irq(struct irq_data *d)
+static void mask_ack_ls2h_irq(struct irq_data *d)
 {
 	int irq_nr;
 	unsigned long flags;
@@ -250,7 +250,7 @@ static void __ls2h_irq_dispatch(int n, int intstatus)
 }
 
 
-void ls2h_irq_dispatch(void)
+asmlinkage void ls2h_irq_dispatch(void)
 {
 	int i, intstatus, irqs, lpc_irq;
 
@@ -273,7 +273,7 @@ void ls2h_irq_dispatch(void)
 
 
 
-void ls2h_irq_router_init(void)
+static void ls2h_irq_router_init(void)
 {
 	/* Route INTn0 to Core0 INT1 */
 	LOONGSON_INT_ROUTER_ENTRY(0) = LOONGSON_INT_COREx_INTy(loongson_boot_cpu_id, 1);
@@ -332,6 +332,9 @@ void __init ls2h_init_irq(void)
 	/* added for KBC attached on LPC controler */
 	irq_set_chip_and_handler(1, &lpc_irq_chip, handle_level_irq);
 	irq_set_chip_and_handler(12, &lpc_irq_chip, handle_level_irq);
+
+	if(cpu_has_vint)
+		set_vi_handler(3, ls2h_irq_dispatch);
 }
 
 #ifdef CONFIG_PM

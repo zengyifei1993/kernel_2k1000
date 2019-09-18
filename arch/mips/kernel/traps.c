@@ -102,7 +102,7 @@ void (*board_bind_eic_interrupt)(int irq, int regset);
 void (*board_ebase_setup)(void);
 void (*board_cache_error_setup)(void);
 
-#if defined(CONFIG_CPU_LOONGSON2K)
+#if defined(CONFIG_CPU_LOONGSON2K) || defined(CONFIG_CPU_LOONGSON3)
 int mips_vint_enabled = 0;
 static int __init mips_vint(char *s)
 {
@@ -2155,7 +2155,7 @@ void __init trap_init(void)
 
 	check_wait();
 
-#if defined(CONFIG_CPU_LOONGSON2K)
+#if defined(CONFIG_CPU_LOONGSON2K) || defined(CONFIG_CPU_LOONGSON3)
 	if (!mips_vint_enabled)
 		cpu_data[0].options &= ~MIPS_CPU_VINT;
 #endif

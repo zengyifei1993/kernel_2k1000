@@ -1598,6 +1598,7 @@ config CPU_LOONGSON3
 	select MIPS_PGD_C0_CONTEXT if !KVM_GUEST_LS3A3000
 	select MIPS_ASID_BITS_VARIABLE
 	select ARCH_REQUIRE_GPIOLIB
+	select CPU_MIPSR2_IRQ_VI
 	select HAVE_KVM
 	help
 		The Loongson 3 processor implements the MIPS III instruction set
