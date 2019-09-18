@@ -18,6 +18,7 @@
 
 #include <asm/cpu-type.h>
 
+static int csr_temp_enable = 0;
 /* Allow other reference temperatures to fixup the original cpu temperature */
 int __weak fixup_cpu_temp(int cpu, int cputemp)
 {
@@ -36,9 +37,9 @@ int loongson_cpu_temp(int cpu)
 	u32 prid_rev;
 	u32 reg = 0;
 
+	reg = LOONGSON_CHIPTEMP(cpu);
 	switch(boot_cpu_type()){
 	case CPU_LOONGSON3:
-		reg = LOONGSON_CHIPTEMP(cpu);
 		prid_rev = read_c0_prid() & PRID_REV_MASK;
 		switch (prid_rev) {
 		case PRID_REV_LOONGSON3A_R1:
@@ -57,11 +58,14 @@ int loongson_cpu_temp(int cpu)
 		}
 		break;
 	case CPU_LOONGSON2K:
-		reg = (LOONGSON_CHIPTEMP(cpu) & 0xffff) - 100;
+		reg = (reg & 0xffff) - 100;
 		break;
 #ifdef CONFIG_CPU_LOONGSON3
 	case CPU_LOONGSON3_COMP:
-		reg = (read_csr(LOONGSON_CPU_TEMPERATURE_OFFSET) & 0xff);
+		if (csr_temp_enable)
+			reg = (read_csr(LOONGSON_CPU_TEMPERATURE_OFFSET) & 0xff);
+		else
+			reg = (reg & 0xffff)*731/0x4000 - 273;
 #endif
 	}
 	cputemp = (int)reg * 1000;
@@ -202,13 +206,6 @@ static int __init loongson_hwmon_init(void)
 
 	printk(KERN_INFO "Loongson Hwmon Enter...\n");
 
-#ifdef CONFIG_CPU_LOONGSON3
-	if ((boot_cpu_type() == CPU_LOONGSON3_COMP) && (!(read_csr(LOONGSON_CPU_FEATURE_OFFSET) & LOONGSON_CPU_FEATURE_TEMP))) {
-		printk(KERN_NOTICE "Notice: There isn't any Temperature!");
-		ret = -ENXIO;
-		goto fail_hwmon_device_register;
-	}
-#endif
 	cpu_hwmon_dev = hwmon_device_register(NULL);
 	if (IS_ERR(cpu_hwmon_dev)) {
 		ret = -ENOMEM;
@@ -322,13 +319,23 @@ static struct platform_driver ls_hwmon_driver = {
 
 static int __init ls_hwmon_init_driver(void)
 {
-	if (loongson_hwmon_init())
+#ifdef CONFIG_CPU_LOONGSON3
+	if(cpu_guestmode)
 		return 0;
+	if (boot_cpu_type() == CPU_LOONGSON3_COMP)
+		csr_temp_enable = read_csr(LOONGSON_CPU_FEATURE_OFFSET) & LOONGSON_CPU_FEATURE_TEMP;
+#endif
+	loongson_hwmon_init();
 	return platform_driver_register(&ls_hwmon_driver);
 }
 
 static void __exit ls_hwmon_exit_driver(void)
 {
+#ifdef CONFIG_CPU_LOONGSON3
+	if(cpu_guestmode)
+		return;
+	csr_temp_enable = 0;
+#endif
 	platform_driver_unregister(&ls_hwmon_driver);
 	loongson_hwmon_exit();
 }
