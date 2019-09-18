@@ -41,14 +41,14 @@ static int param_set_intparam(const char *val, struct kernel_param *kp)
 		ls64_conf_write32(int_bounce[i], (void *)(base + INT_BCE_OFF));
 	}
 
- return 0;
+	return 0;
 }
 
 
 int param_get_intparam(char *buffer, const struct kernel_param *kp)
 {
-	/* Y and N chosen as being relatively non-coder friendly */
-	return sprintf(buffer, "0x%x", *(unsigned int *)kp->arg);
+        /* Y and N chosen as being relatively non-coder friendly */
+        return sprintf(buffer, "0x%x", *(unsigned int *)kp->arg);
 }
 module_param_call(int_auto0, param_set_intparam, param_get_intparam, &int_auto[0], 0644);
 module_param_call(int_auto1, param_set_intparam, param_get_intparam, &int_auto[1], 0644);
@@ -105,7 +105,7 @@ int ls_set_affinity_icu_irq(struct irq_data *data, const struct cpumask *affinit
 {
 	cpumask_t tmask;
 	unsigned int cpu;
-        volatile unsigned char *entry;
+	volatile unsigned char *entry;
 	unsigned long *mask;
 	unsigned long base;
 	unsigned int index;
@@ -140,12 +140,12 @@ int ls_set_affinity_icu_irq(struct irq_data *data, const struct cpumask *affinit
 			int_auto[sel] &= ~(1 << off);
 			int_bounce[sel] &= ~(1 << off);
 			writeb((readb(entry) & 0xf0)|0x01, entry);
-		break;
+			break;
 		case 2:
 			int_auto[sel] &= ~(1 << off);
 			int_bounce[sel] &= ~(1 << off);
 			writeb((readb(entry) & 0xf0)|0x02, entry);
-		break;
+			break;
 		case 3:
 			if(irqbalance&1)
 				int_auto[sel] |= (1 << off);
@@ -161,7 +161,7 @@ int ls_set_affinity_icu_irq(struct irq_data *data, const struct cpumask *affinit
 				int_bounce[sel] |= (1 << off);
 
 			writeb((readb(entry) & 0xf0)|0x03, entry);
-		break;
+			break;
 	}
 
 	ls64_conf_write32(int_auto[sel], (void *)(base + INT_AUTO_OFF));
@@ -182,57 +182,84 @@ static struct irq_chip ls64_irq_chip = {
 };
 
 extern u64 ls_msi_irq_mask;
+
+asmlinkage void ip7_dispatch(void)
+{
+	do_IRQ(MIPS_CPU_IRQ_BASE + 7);
+}
+
+#ifdef CONFIG_SMP
+asmlinkage void ip6_dispatch(void)
+{
+	ls64_ipi_interrupt(NULL);
+}
+#endif
+
+asmlinkage void ip5_dispatch(void)
+{
+	unsigned long irq_status;
+	unsigned long hi, lo;
+	int i = (read_c0_ebase() & 0x3ff);
+	unsigned long addr = CKSEG1ADDR(CONF_BASE);
+
+
+	hi = ls64_conf_read32((void*)(addr + INTSR1_OFF + (i << 8)));
+	lo = ls64_conf_read32((void*)(addr + INTSR0_OFF + (i << 8)));
+	irq_status = ((hi << 32) | lo) & ls_msi_irq_mask;
+
+	if ((i = __fls(irq_status)) != -1)
+		do_IRQ(i + LS64_MSI_IRQ_BASE);
+	else
+		spurious_interrupt();
+
+}
+
+asmlinkage void ip4_dispatch(void)
+{
+	unsigned long irq_status, irq_masked;
+	unsigned long hi, lo;
+	int i = (read_c0_ebase() & 0x3ff);
+	unsigned long addr = CKSEG1ADDR(CONF_BASE);
+
+	hi = ls64_conf_read32((void*)(addr + INTSR1_OFF + (i << 8)));
+	lo = ls64_conf_read32((void*)(addr + INTSR0_OFF + (i << 8)));
+	irq_status = ((hi << 32) | lo);
+
+	hi = ls64_conf_read32((void*)(addr + INT_HI_OFF + INT_EN_OFF));
+	lo = ls64_conf_read32((void*)(addr + INT_LO_OFF + INT_EN_OFF));
+	irq_masked = ((hi << 32) | lo);
+
+	lo = (irq_status & irq_masked & ~ls_msi_irq_mask);
+
+	if ((i = __fls(lo)) != -1)
+		do_IRQ(i + LS2K_IRQ_BASE);
+	else
+		spurious_interrupt();
+}
+
 asmlinkage void plat_irq_dispatch(void)
 {
 	unsigned int cp0_cause;
 	unsigned int cp0_status;
 	unsigned int cp0_cause_saved;
-	unsigned long hi;
-	unsigned long lo;
-	unsigned long irq_status;
-	unsigned long irq_masked;
-
 	cp0_cause_saved = read_c0_cause() & ST0_IM ;
 	cp0_status = read_c0_status();
 	cp0_cause = cp0_cause_saved & cp0_status;
 
 
-	if (cp0_cause & STATUSF_IP7) {
-		do_IRQ(MIPS_CPU_IRQ_BASE+7);
-	}
+	if (cp0_cause & STATUSF_IP7)
+		ip7_dispatch();
+
 #ifdef CONFIG_SMP
-	else if (cp0_cause & STATUSF_IP6) {
-		ls64_ipi_interrupt(NULL);
-	}
+	else if (cp0_cause & STATUSF_IP6)
+		ip6_dispatch();
+
 #endif
-	else if (cp0_cause & (STATUSF_IP4 | STATUSF_IP5)) {
-	int i = (read_c0_ebase() & 0x3ff);
-	unsigned long addr = CKSEG1ADDR(CONF_BASE);
-	hi = ls64_conf_read32((void*)(addr + INTSR1_OFF + (i << 8)));
-	lo = ls64_conf_read32((void*)(addr + INTSR0_OFF + (i << 8)));
-	irq_status = ((hi << 32) | lo);
+	else if (cp0_cause & STATUSF_IP5)
+		ip5_dispatch();
+	else
+		ip4_dispatch();
 
-	if (cp0_cause & STATUSF_IP5) {
-		hi = (irq_status & ls_msi_irq_mask);
-		if ((i = __fls(hi)) != -1) {
-			do_IRQ(i + LS64_MSI_IRQ_BASE);
-			hi = (hi ^ (1UL << i));
-		}
-		else spurious_interrupt();
-	}
-	else if (cp0_cause & STATUSF_IP4) {
-		hi = ls64_conf_read32((void*)(addr + INT_HI_OFF + INT_EN_OFF));
-		lo = ls64_conf_read32((void*)(addr + INT_LO_OFF + INT_EN_OFF));
-		irq_masked = ((hi << 32) | lo);
-		lo = (irq_status & irq_masked & ~ls_msi_irq_mask);
-		if ((i = __fls(lo)) != -1) {
-			do_IRQ(i + LS2K_IRQ_BASE);
-			lo = (lo ^ (1UL << i));
-		}
-		else spurious_interrupt();
-
-	}
-	}
 }
 
 void set_irq_attr(int irq, unsigned int imask, unsigned int core_mask, int mode)
@@ -280,9 +307,23 @@ void __init setup_irq_default(void)
 	ls64_conf_write32((ls_msi_irq_mask >> 32)|(0x1f << 12), (void *)(CKSEG1ADDR(CONF_BASE) + INT_LO_OFF + INT_EDG_OFF + 0x40));
 }
 
+static void __init setup_irq_mode(void)
+{
+	if (cpu_has_vint) {
+		set_vi_handler(7, ip7_dispatch);
+#ifdef CONFIG_SMP
+		set_vi_handler(6, ip6_dispatch);
+#endif
+		set_vi_handler(5, ip5_dispatch);
+		set_vi_handler(4, ip4_dispatch);
+
+	}
+}
+
 void  __init arch_init_irq(void)
 {
 	mips_cpu_irq_init();
 	set_c0_status(STATUSF_IP4 | STATUSF_IP5 | STATUSF_IP6);
 	setup_irq_default();
+	setup_irq_mode();
 }

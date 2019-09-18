@@ -102,6 +102,17 @@ void (*board_bind_eic_interrupt)(int irq, int regset);
 void (*board_ebase_setup)(void);
 void (*board_cache_error_setup)(void);
 
+#if defined(CONFIG_CPU_LOONGSON2K)
+int mips_vint_enabled = 0;
+static int __init mips_vint(char *s)
+{
+	mips_vint_enabled = 1;
+	pr_info("MIPS VInt Enabled!\n");
+	return 1;
+}
+__setup("mips_vint", mips_vint);
+#endif
+
 static void show_raw_backtrace(unsigned long reg29)
 {
 	unsigned long *sp = (unsigned long *)(reg29 & ~3);
@@ -2029,7 +2040,12 @@ void  per_cpu_trap_init(bool is_boot_cpu)
 
 	if (cpu_has_veic || cpu_has_vint) {
 		unsigned long sr = set_c0_status(ST0_BEV);
+#ifdef CONFIG_CPU_LOONGSON2K
+		write_c0_ebase(0x800);
+		write_c0_ebase_64(ebase|0x800);
+#else
 		write_c0_ebase(ebase);
+#endif
 		write_c0_status(sr);
 		/* Setting vector spacing enables EI/VI mode  */
 		change_c0_intctl(0x3e0, VECTORSPACING);
@@ -2144,6 +2160,11 @@ void __init trap_init(void)
 
 	check_wait();
 
+#if defined(CONFIG_CPU_LOONGSON2K)
+	if (!mips_vint_enabled)
+		cpu_data[0].options &= ~MIPS_CPU_VINT;
+#endif
+
 #if defined(CONFIG_KGDB)
 	if (kgdb_early_setup)
 		return; /* Already done */
@@ -2153,6 +2174,7 @@ void __init trap_init(void)
 		unsigned long size = 0x200 + VECTORSPACING*64;
 		ebase = (unsigned long)
 			__alloc_bootmem(size, 1 << fls(size), 0);
+		pr_debug("ebase: %lx \n", ebase);
 	} else {
 #ifdef CONFIG_KVM_GUEST
 #define KVM_GUEST_KSEG0     0x40000000
