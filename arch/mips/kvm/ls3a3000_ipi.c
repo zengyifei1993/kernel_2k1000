@@ -13,21 +13,7 @@
 #include "ls3a3000_ipi.h"
 #include "ls3a3000.h"
 
-void ls3a_ipi_lock(struct loongson_kvm_ls3a_ipi *s, unsigned long *flags)
-{
-	unsigned long tmp;
-	spin_lock_irqsave(&s->lock, tmp);
-	*flags = tmp;
-}
-
-void ls3a_ipi_unlock(struct loongson_kvm_ls3a_ipi *s, unsigned long *flags)
-{
-	unsigned long tmp;
-	tmp = *flags;
-	spin_unlock_irqrestore(&s->lock, tmp);
-}
-
-int ls3a_gipi_writel(struct loongson_kvm_ls3a_ipi * ipi, gpa_t addr, int len,const void *val)
+static int ls3a_gipi_writel(struct loongson_kvm_ls3a_ipi * ipi, gpa_t addr, int len,const void *val)
 {
 	uint64_t data,offset;
 	struct kvm_mips_interrupt irq;
@@ -79,7 +65,7 @@ int ls3a_gipi_writel(struct loongson_kvm_ls3a_ipi * ipi, gpa_t addr, int len,con
 	return 0;
 }
 
-uint64_t ls3a_gipi_readl(struct loongson_kvm_ls3a_ipi * ipi, gpa_t addr, int len, void* val)
+static uint64_t ls3a_gipi_readl(struct loongson_kvm_ls3a_ipi * ipi, gpa_t addr, int len, void* val)
 {
 	uint64_t offset;
 	uint64_t ret = 0;
@@ -227,9 +213,9 @@ int kvm_get_ls3a_ipi(struct kvm *kvm, struct loongson_gipiState *state)
 	gipiState *ipi_state =  &(ipi->ls3a_gipistate);
 	unsigned long flags;
 
-	ls3a_ipi_lock(ipi, &flags);
+	spin_lock_irqsave(&ipi->lock, flags);
 	memcpy(state, ipi_state, sizeof(gipiState));
-	ls3a_ipi_unlock(ipi, &flags);
+	spin_unlock_irqrestore(&ipi->lock, flags);
 	return 0;
 }
 
@@ -242,8 +228,8 @@ int kvm_set_ls3a_ipi(struct kvm *kvm, struct loongson_gipiState *state)
 	if (!ipi)
 		return -EINVAL;
 
-	ls3a_ipi_lock(ipi, &flags);
+	spin_lock_irqsave(&ipi->lock, flags);
 	memcpy(ipi_state, state, sizeof(gipiState));
-	ls3a_ipi_unlock(ipi, &flags);
+	spin_unlock_irqrestore(&ipi->lock, flags);
 	return 0;
 }

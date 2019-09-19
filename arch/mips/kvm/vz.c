@@ -1193,6 +1193,7 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 	u64 tmp_data;
 	unsigned long curr_pc, flags, any_send_data,any_send_addr;
 	void *data = run->mmio.data;
+	int ret;
 
 	++vcpu->stat.lsvz_gpsi_lwc2_exits;
 	/*
@@ -1240,18 +1241,16 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 				/*then get guest phys*/
 				run->mmio.phys_addr = ((unsigned long)(vcpu->vcpu_id / 4) << vcpu->kvm->arch.node_shift) | LOONGSON3_REG_BASE |
 							 ((vcpu->vcpu_id % 4) << 8) | vcpu->arch.gprs[rs];
-				if(ls3a_ipi_in_kernel(vcpu->kvm)) {
-					ls3a_ipi_lock(vcpu->kvm->arch.v_gipi, &flags);
-					ls3a_gipi_readl(vcpu->kvm->arch.v_gipi,run->mmio.phys_addr,run->mmio.len,&vcpu->arch.gprs[rd]);
-					ls3a_ipi_unlock(vcpu->kvm->arch.v_gipi, &flags);
-					vcpu->arch.pc = vcpu->arch.io_pc;
+				ret = kvm_io_bus_read(vcpu->kvm, KVM_MMIO_BUS, run->mmio.phys_addr, run->mmio.len, run->mmio.data);
+				run->mmio.is_write = 0;
+				vcpu->mmio_is_write = 0;
+
+				if (!ret) {
+					kvm_mips_complete_mmio_load(vcpu, run);
 					vcpu->mmio_needed = 0;
-					er = EMULATE_DONE;
 				} else {
 					er = EMULATE_DO_MMIO;
 				}
-				run->mmio.is_write = 0;
-				vcpu->mmio_is_write = 0;
 			} else {
 				kvm_info("Not implement rdcsr %lx @ %lx cpu %d\n", vcpu->arch.gprs[rs], curr_pc, vcpu->vcpu_id);
 			}
@@ -1262,17 +1261,14 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 			++vcpu->stat.lsvz_wrcsr_exits;
 			run->mmio.len = 4;
 			/*Get data*/
-			*(u32 *)data = vcpu->arch.gprs[rd];
 			if((vcpu->arch.gprs[rs] == 0x1004) || (vcpu->arch.gprs[rs] == 0x100c)) {
+				*(u32 *)data = vcpu->arch.gprs[rd];
 				/*write current vcpu ipi clear/enable */
 				/*get guest phys*/
 				run->mmio.phys_addr = ((unsigned long)(vcpu->vcpu_id / 4) << vcpu->kvm->arch.node_shift) | LOONGSON3_REG_BASE |
 							 vcpu->arch.gprs[rs] | ((vcpu->vcpu_id % 4) << 8);
-//				kvm_info("----wrcsr phys_addr:%llx %lx--rs %lx cpu %d\n",run->mmio.phys_addr, curr_pc, vcpu->arch.gprs[rs], vcpu->vcpu_id);
-				if(ls3a_ipi_in_kernel(vcpu->kvm)) {
-					ls3a_ipi_lock(vcpu->kvm->arch.v_gipi, &flags);
-					ls3a_gipi_writel(vcpu->kvm->arch.v_gipi,run->mmio.phys_addr,run->mmio.len,data);
-					ls3a_ipi_unlock(vcpu->kvm->arch.v_gipi, &flags);
+				ret = kvm_io_bus_write(vcpu->kvm, KVM_MMIO_BUS, run->mmio.phys_addr, run->mmio.len, data);
+				if (!ret) {
 					vcpu->mmio_needed = 0;
 					er = EMULATE_DONE;
 				} else {
@@ -1289,11 +1285,9 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 				// set ipi_set_reg
 				run->mmio.phys_addr = ((unsigned long)(cpu / 4) << vcpu->kvm->arch.node_shift) | LOONGSON3_REG_BASE |
 							 0x1000 | ((cpu % 4) << 8) | 0x8;
-//				kvm_info("--vcpu %d set cpu %d action %x\n", vcpu->vcpu_id, cpu, 1 << action);
-				if(ls3a_ipi_in_kernel(vcpu->kvm)) {
-					ls3a_ipi_lock(vcpu->kvm->arch.v_gipi, &flags);
-					ls3a_gipi_writel(vcpu->kvm->arch.v_gipi,run->mmio.phys_addr,run->mmio.len,data);
-					ls3a_ipi_unlock(vcpu->kvm->arch.v_gipi, &flags);
+
+				ret = kvm_io_bus_write(vcpu->kvm, KVM_MMIO_BUS, run->mmio.phys_addr, run->mmio.len, data);
+				if (!ret) {
 					vcpu->mmio_needed = 0;
 					er = EMULATE_DONE;
 				} else {
@@ -1336,18 +1330,15 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 				/*Then get guest phys*/
 				run->mmio.phys_addr = ((unsigned long)(vcpu->vcpu_id / 4) << vcpu->kvm->arch.node_shift) |
 							 LOONGSON3_REG_BASE | vcpu->arch.gprs[rs] | ((vcpu->vcpu_id % 4) << 8);
-				if(ls3a_ipi_in_kernel(vcpu->kvm)) {
-					ls3a_ipi_lock(vcpu->kvm->arch.v_gipi, &flags);
-					ls3a_gipi_readl(vcpu->kvm->arch.v_gipi,run->mmio.phys_addr,run->mmio.len,&vcpu->arch.gprs[rd]);
-					ls3a_ipi_unlock(vcpu->kvm->arch.v_gipi, &flags);
-					vcpu->arch.pc = vcpu->arch.io_pc;
+				ret = kvm_io_bus_read(vcpu->kvm, KVM_MMIO_BUS, run->mmio.phys_addr, run->mmio.len, run->mmio.data);
+				run->mmio.is_write = 0;
+				vcpu->mmio_is_write = 0;
+				if (!ret) {
+					kvm_mips_complete_mmio_load(vcpu, run);
 					vcpu->mmio_needed = 0;
-					er = EMULATE_DONE;
 				} else {
 					er = EMULATE_DO_MMIO;
 				}
-				run->mmio.is_write = 0;
-				vcpu->mmio_is_write = 0;
 			}
 
 			break;
@@ -1362,10 +1353,9 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 				/*then get guest phys*/
 				run->mmio.phys_addr = ((unsigned long)(vcpu->vcpu_id / 4) << vcpu->kvm->arch.node_shift) |
 							 LOONGSON3_REG_BASE | vcpu->arch.gprs[rs] | ((vcpu->vcpu_id % 4) << 8);
-				if(ls3a_ipi_in_kernel(vcpu->kvm)) {
-					ls3a_ipi_lock(vcpu->kvm->arch.v_gipi, &flags);
-					ls3a_gipi_writel(vcpu->kvm->arch.v_gipi,run->mmio.phys_addr,run->mmio.len,data);
-					ls3a_ipi_unlock(vcpu->kvm->arch.v_gipi, &flags);
+
+				ret = kvm_io_bus_write(vcpu->kvm, KVM_MMIO_BUS, run->mmio.phys_addr, run->mmio.len, data);
+				if (!ret) {
 					vcpu->mmio_needed = 0;
 					er = EMULATE_DONE;
 				} else {
@@ -1428,10 +1418,8 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 						run->mmio.phys_addr = ((unsigned long)(cpu / 4) << vcpu->kvm->arch.node_shift) |
 							LOONGSON3_REG_BASE | 0x1000 |
 							((cpu % 4) << 8) | (0x20 + mailbox * 8);
-						if(ls3a_ipi_in_kernel(vcpu->kvm)) {
-							ls3a_ipi_lock(vcpu->kvm->arch.v_gipi, &flags);
-							ls3a_gipi_writel(vcpu->kvm->arch.v_gipi,run->mmio.phys_addr,run->mmio.len,data);
-							ls3a_ipi_unlock(vcpu->kvm->arch.v_gipi, &flags);
+						ret = kvm_io_bus_write(vcpu->kvm, KVM_MMIO_BUS, run->mmio.phys_addr, run->mmio.len, data);
+						if (!ret) {
 							vcpu->mmio_needed = 0;
 							er = EMULATE_DONE;
 						} else {
