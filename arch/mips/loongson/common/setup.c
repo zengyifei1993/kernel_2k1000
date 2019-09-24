@@ -53,16 +53,19 @@ void __init plat_mem_setup(void)
 	conswitchp = &dummy_con;
 #endif
 #endif
+#ifdef CONFIG_OF
 	if (loongson_fdt_blob)
 		__dt_setup_arch(loongson_fdt_blob);
+#endif
 }
 
 #define NR_CELLS 6
 
+#ifdef CONFIG_OF
 void __init device_tree_init(void)
 {
 	unsigned long base, size;
-    void *dt;
+	void *dt;
 
 	if (!initial_boot_params) {
 		pr_warn("No valid device tree found, continuing without\n");
@@ -72,12 +75,13 @@ void __init device_tree_init(void)
 	size = be32_to_cpu(initial_boot_params->totalsize);
 
 	/* Before we do anything, lets reserve the dt blob */
-    dt = memblock_virt_alloc(size,roundup_pow_of_two(FDT_V17_SIZE));
-    if (dt) {
-         memcpy(dt, initial_boot_params, size);
-         initial_boot_params = dt;
-    }
+	dt = memblock_virt_alloc(size,roundup_pow_of_two(FDT_V17_SIZE));
+	if (dt) {
+		memcpy(dt, initial_boot_params, size);
+		initial_boot_params = dt;
+	}
 
 	unflatten_device_tree();
 
 }
+#endif

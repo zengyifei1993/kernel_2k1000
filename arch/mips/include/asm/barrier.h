@@ -109,9 +109,8 @@
 #if defined(CONFIG_CPU_LOONGSON3)
 #define __LS3A_WAR_LLSC		"	.set mips64r2\nsynci 0\n.set mips0\n"
 #define __ls3a_war_llsc()		__asm__ __volatile__("synci 0" : : :"memory")
-#endif
 
-#if defined(CONFIG_MACH_LOONGSON2)
+#else
 #define __LS3A_WAR_LLSC
 #define __ls3a_war_llsc()
 #endif

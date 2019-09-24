@@ -114,8 +114,8 @@ void __init prom_init_env(void)
 {
 	/* pmon passes arguments in 32bit pointers */
 	unsigned int processor_id;
-        char *bios_info;
-        char *board_info;
+        char *bios_info __maybe_unused;
+        char *board_info __maybe_unused;
 
 #ifndef CONFIG_UEFI_FIRMWARE_INTERFACE
 	int *_prom_envp;
