@@ -390,7 +390,7 @@ void __init prom_init_env(void)
 		(PRID_IMP_LOONGSON2 | PRID_REV_LOONGSON3A_R2_0)) ||
 		((read_c0_prid() & 0xffff) == 0)));
 
-#ifdef CONFIG_VIRTUALIZATION
+#if defined( CONFIG_VIRTUALIZATION) || defined(CONFIG_KVM_GUEST_LS3A3000)
 	if ((read_c0_prid() & 0xffff) >= 0x6308) {
 		mips_vint_enabled = 0;
 		pr_info("In Guest mode, disable mips vint\n");

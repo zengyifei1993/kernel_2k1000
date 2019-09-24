@@ -25,7 +25,6 @@
 #define cpu_has_cache_cdex_s	0
 #define cpu_has_counter		1
 #define cpu_has_dc_aliases	(PAGE_SIZE < 0x4000)
-#define cpu_has_divec		1
 #define cpu_has_ejtag		0
 #define cpu_has_fpu		1
 #define cpu_has_inclusive_pcaches	1
@@ -56,5 +55,10 @@
 #define cpu_guest_has_htw 1
 #define cpu_guest_has_rw_llb 1
 
+#if defined( CONFIG_VIRTUALIZATION) || defined(CONFIG_KVM_GUEST_LS3A3000)
+#define cpu_has_divec		0
+#else
+#define cpu_has_divec		1
+#endif
 extern int loongson3_perf_irq_mask;
 #endif /* __ASM_MACH_LOONGSON_CPU_FEATURE_OVERRIDES_H */
