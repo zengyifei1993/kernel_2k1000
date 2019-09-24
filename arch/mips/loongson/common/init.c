@@ -15,6 +15,7 @@
 
 #include <loongson.h>
 #include <loongson-pch.h>
+#include <linux/dmi.h>
 
 extern struct plat_smp_ops loongson3_comp_smp_ops;
 extern struct plat_smp_ops loongson3_smp_ops;
@@ -59,6 +60,9 @@ void __init prom_init(void)
 #else
 	prom_init_memory();
 #endif
+	printk("loongson3 dmi_scan_machine \n");
+	dmi_scan_machine();
+	dmi_set_dump_stack_arch_desc();
 
 	/*init the uart base address */
 	prom_init_uart_base();

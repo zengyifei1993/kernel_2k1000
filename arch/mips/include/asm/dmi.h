@@ -10,7 +10,7 @@
 #define dmi_remap     dmi_ioremap
 #define dmi_unmap     dmi_iounmap
 
-#define dmi_alloc(l)    kzalloc(l, GFP_KERNEL)
+#define dmi_alloc(l)   	    __alloc_bootmem_low(l, l, 0) 
 
 
 void __init __iomem *early_ioremap(u64 phys_addr, unsigned long size)

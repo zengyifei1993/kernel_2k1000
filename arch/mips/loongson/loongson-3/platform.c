@@ -23,7 +23,6 @@
 #include <workarounds.h>
 #include <linux/of.h>
 #include <loongson.h>
-#include <linux/dmi.h>
 
 int hpet_enabled = 0;
 
@@ -210,10 +209,6 @@ static int __init loongson3_device_init(void)
 {
 	if (loongson_pch)
 		loongson_pch->pch_device_initcall();
-
-    printk("loongson3 dmi_scan_machine \n");
-    dmi_scan_machine();
-    dmi_set_dump_stack_arch_desc();
 
 	return 0;
 }
