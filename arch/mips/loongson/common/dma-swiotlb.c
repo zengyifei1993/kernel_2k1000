@@ -10,6 +10,7 @@
 #include <boot_param.h>
 #include <loongson-pch.h>
 #include <dma-coherence.h>
+#include <loongson.h>
 
 static inline void *dma_to_virt(struct device *dev, dma_addr_t dma_addr)
 {
@@ -246,6 +247,16 @@ static phys_addr_t loongson_ls7a_dma_to_phys(struct device *dev, dma_addr_t dadd
 	return daddr;
 }
 
+static dma_addr_t loongson_virt_phys_to_dma(struct device *dev, phys_addr_t paddr)
+{
+	return paddr;
+}
+
+static phys_addr_t loongson_virt_dma_to_phys(struct device *dev, dma_addr_t daddr)
+{
+	return daddr;
+}
+
 static dma_addr_t loongson_phys_to_dma(struct device *dev, phys_addr_t paddr)
 {
 	int i;
@@ -353,9 +364,9 @@ void __init plat_swiotlb_setup(void)
 			loongson_linear_dma_map_ops.dma_to_phys = loongson_ls7a_dma_to_phys;
 		}
 	}
-#ifdef CONFIG_KVM_GUEST_LS3A3000
-	loongson_linear_dma_map_ops.phys_to_dma = loongson_ls7a_phys_to_dma;
-	loongson_linear_dma_map_ops.dma_to_phys = loongson_ls7a_dma_to_phys;
-#endif
 
+	if (cpu_guestmode) {
+		loongson_linear_dma_map_ops.phys_to_dma = loongson_virt_phys_to_dma;
+		loongson_linear_dma_map_ops.dma_to_phys = loongson_virt_dma_to_phys;
+	}
 }
