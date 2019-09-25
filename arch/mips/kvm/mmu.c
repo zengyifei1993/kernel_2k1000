@@ -708,13 +708,17 @@ static int kvm_mips_map_page(struct kvm_vcpu *vcpu, unsigned long gpa,
 	bool writeable;
 	unsigned long prot_bits;
 	unsigned long mmu_seq;
+	u32 exccode = (vcpu->arch.host_cp0_cause >> CAUSEB_EXCCODE) & 0x1f;
+
 
 	/* Try the fast path to handle old / clean pages */
 	srcu_idx = srcu_read_lock(&kvm->srcu);
-	err = _kvm_mips_map_page_fast(vcpu, gpa, write_fault, out_entry,
-				      out_buddy);
-	if (!err)
-		goto out;
+	if((exccode != EXCCODE_TLBRI) && (exccode != EXCCODE_TLBXI)){
+		err = _kvm_mips_map_page_fast(vcpu, gpa, write_fault, out_entry,
+					      out_buddy);
+		if (!err)
+			goto out;
+	}
 
 	/* We need a minimum of cached pages ready for page table creation */
 	err = mmu_topup_memory_cache(memcache, KVM_MMU_CACHE_MIN_PAGES,
