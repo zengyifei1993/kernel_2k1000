@@ -2793,7 +2793,7 @@ static int kvm_vz_set_one_reg(struct kvm_vcpu *vcpu,
 		write_gc0_index(v);
 		break;
 	case KVM_REG_MIPS_CP0_RANDOM:
-		write_gc0_random(v);
+		ret = 0;
 		break;
 	case KVM_REG_MIPS_CP0_ENTRYLO0:
 		write_gc0_entrylo0(entrylo_user_to_kvm(v));
@@ -3299,7 +3299,6 @@ static int kvm_vz_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 		kvm_restore_gc0_config7(cop0);
 
 	kvm_restore_gc0_index(cop0);
-	kvm_restore_gc0_random(cop0);
 	kvm_restore_gc0_entrylo0(cop0);
 	kvm_restore_gc0_entrylo1(cop0);
 	kvm_restore_gc0_context(cop0);
@@ -3391,7 +3390,6 @@ static int kvm_vz_vcpu_put(struct kvm_vcpu *vcpu, int cpu)
 	kvm_lose_fpu(vcpu);
 
 	kvm_save_gc0_index(cop0);
-	kvm_save_gc0_random(cop0);
 	kvm_save_gc0_entrylo0(cop0);
 	kvm_save_gc0_entrylo1(cop0);
 	kvm_save_gc0_context(cop0);
