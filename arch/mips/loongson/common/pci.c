@@ -83,10 +83,12 @@ extern int loongson_acpi_init(void);
 
 static int __init pcibios_init(void)
 {
-	if (loongson_pch && loongson_pch->board_type == LS2H)
-		return 0;
-
 #ifdef CONFIG_CPU_LOONGSON3
+	if (loongson_pch && loongson_pch->board_type == LS2H) {
+		setup_pcimap();
+		return 0;
+	}
+
 	if (loongson_pch && loongson_pch->board_type == RS780E) {
 		setup_pcimap();
 		loongson_pci_controller.pci_ops = &loongson_780e_pci_ops;
@@ -94,6 +96,7 @@ static int __init pcibios_init(void)
 		loongson_pci_controller.pci_ops = &loongson_ls7a_pci_ops;
 	} 
 #else
+	setup_pcimap();
 	loongson_pci_controller.pci_ops = &loongson_pci_ops;
 #endif
 
