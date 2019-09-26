@@ -22,7 +22,7 @@ static ieee754sp _ieee754sp_maddf(ieee754sp z, ieee754sp x,
 {
 	int re;
 	int rs;
-#if defined (CONFIG_CPU_LOONGSON3) || defined (CONFIG_CPU_LOONGSON2K)
+#if defined (CONFIG_MACH_LOONGSON) || defined (CONFIG_MACH_LOONGSON2)
 	u64 rm64;
 	u64 zm64;
 	unsigned rm;
@@ -163,7 +163,7 @@ static ieee754sp _ieee754sp_maddf(ieee754sp z, ieee754sp x,
 	assert(ym & SP_HIDDEN_BIT);
 
 	re = xe + ye;
-#if defined (CONFIG_CPU_LOONGSON3) || defined (CONFIG_CPU_LOONGSON2K)
+#if defined (CONFIG_MACH_LOONGSON) || defined (CONFIG_MACH_LOONGSON2)
 	rs = xs ^ ys ^ (opt & 2);
 	zs = zs ^ (opt & 1) ^ (opt & 2);
 
