@@ -14,6 +14,7 @@
 #include <linux/err.h>
 #include <linux/kdebug.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/uaccess.h>
 #include <linux/vmalloc.h>
 #include <linux/fs.h>
@@ -26,6 +27,7 @@
 #include <asm/pgalloc.h>
 #include <asm/pgtable.h>
 #include <asm/uasm.h>
+#include <asm/cpufeature.h>
 
 #include <linux/kvm_host.h>
 
@@ -2348,5 +2350,11 @@ static void __exit kvm_mips_exit(void)
 
 module_init(kvm_mips_init);
 module_exit(kvm_mips_exit);
+
+static const struct cpu_device_id mips_kvm_device[] = {
+	{ .feature = cpu_feature(MIPS_VZ) },
+	{},
+};
+MODULE_DEVICE_TABLE(cpu, mips_kvm_device);
 
 EXPORT_TRACEPOINT_SYMBOL(kvm_exit);

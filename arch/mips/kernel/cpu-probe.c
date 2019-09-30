@@ -29,6 +29,10 @@
 #include <asm/spram.h>
 #include <asm/uaccess.h>
 
+/* Hardware capabilities */
+unsigned int elf_hwcap __read_mostly;
+EXPORT_SYMBOL_GPL(elf_hwcap);
+
 #ifdef CONFIG_CPU_LOONGSON3
 #include <loongson.h>
 static void decode_cfg(struct cpuinfo_mips *c)
@@ -1657,10 +1661,13 @@ const char *__elf_platform;
 		c->msa_id = cpu_get_msa_id();
 		WARN(c->msa_id & MSA_IR_WRPF,
 		     "Vector register partitioning unimplemented!");
+		elf_hwcap |= HWCAP_MIPS_MSA;
 	}
 
-	if (cpu_has_vz)
+	if (cpu_has_vz) {
 		cpu_probe_vz(c);
+		elf_hwcap |= HWCAP_MIPS_VZ;
+	}
 
 	cpu_probe_vmbits(c);
 
