@@ -129,34 +129,47 @@ asmlinkage void rs780_irq_dispatch(void)
 static void rs780_irq_router_init(void)
 {
 	int i, rawcpu;
+	unsigned int dummy;
 
 	*(volatile int *)(LOONGSON_HT1_CFG_BASE+0x58) &= ~0x700;
+
 	/* route LPC int to cpu core0 int 0 */
-	LOONGSON_INT_ROUTER_LPC = LOONGSON_INT_COREx_INTy(loongson_boot_cpu_id, 0);
+	dummy = LOONGSON_INT_COREx_INTy(loongson_boot_cpu_id, 0);
+	ls64_conf_write32(dummy, LS_IRC_ENT_LPC);
+
 	/* route HT1 int0 ~ int7 to cpu core0 INT1*/
-	LOONGSON_INT_ROUTER_HT1(0) = LOONGSON_INT_COREx_INTy(loongson_boot_cpu_id, 1);
+	dummy = LOONGSON_INT_COREx_INTy(loongson_boot_cpu_id, 1);
+	ls64_conf_write32(dummy, LS_IRC_ENT_HT1(0));
+
 	for (i = 1; i <= 3; i++)
 	{
-		rawcpu = (i == loongson_boot_cpu_id)?0:i; 
+		rawcpu = (i == loongson_boot_cpu_id) ? 0 : i;
 
-		if(cpu_number_map(rawcpu)<setup_max_cpus && cpu_number_map(rawcpu)<nr_cpu_ids)
-			LOONGSON_INT_ROUTER_HT1(i) = LOONGSON_INT_COREx_INTy(rawcpu, 1);
-		else
-		{
-			LOONGSON_INT_ROUTER_HT1(i) = LOONGSON_INT_COREx_INTy(loongson_boot_cpu_id, 1);
+		if(cpu_number_map(rawcpu)<setup_max_cpus && cpu_number_map(rawcpu)<nr_cpu_ids) {
+			dummy = LOONGSON_INT_COREx_INTy(rawcpu, 1);
+			ls64_conf_write32(dummy, LS_IRC_ENT_HT1(i));
+		} else {
+			dummy = LOONGSON_INT_COREx_INTy(loongson_boot_cpu_id, 1);
+			ls64_conf_write32(dummy, LS_IRC_ENT_HT1(i));
 			bootcore_int_mask2 |= 1<<i;
 		}
 	}
 
-	for (i = 4; i < 8; i++)
-		LOONGSON_INT_ROUTER_HT1(i) = LOONGSON_INT_COREx_INTy(loongson_boot_cpu_id, 1);
+	for (i = 4; i < 8; i++) {
+		dummy = LOONGSON_INT_COREx_INTy(loongson_boot_cpu_id, 1);
+		ls64_conf_write32(dummy, LS_IRC_ENT_HT1(i));
+	}
+
 	/* enable HT1 interrupt */
 	LOONGSON_HT1_INTN_EN(0) = 0xffffffff;
 	LOONGSON_HT1_INTN_EN(1) = 0xffffffff;
 	LOONGSON_HT1_INTN_EN(2) = 0x00000000;
 	LOONGSON_HT1_INTN_EN(3) = 0x00000000;
+
 	/* enable router interrupt intenset */
-	LOONGSON_INT_ROUTER_INTENSET = LOONGSON_INT_ROUTER_INTEN | (0xffff << 16) | 0x1 << 10;
+	dummy =  ls64_conf_read32(LS_IRC_EN);
+	dummy |= (0xffff << 16) | (1 << 10);
+	ls64_conf_write32(dummy, LS_IRC_ENSET);
 }
 
 void __init rs780_init_irq(void)

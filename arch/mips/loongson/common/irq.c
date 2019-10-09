@@ -20,14 +20,14 @@ void bonito_irqdispatch(void)
 	int i;
 
 	/* workaround the IO dma problem: let cpu looping to allow DMA finish */
-	int_status = LOONGSON_INTISR;
+	int_status = readl(LOONGSON_INTISR);
 	while (int_status & (1 << 10)) {
 		udelay(1);
-		int_status = LOONGSON_INTISR;
+		int_status = readl(LOONGSON_INTISR);
 	}
 
 	/* Get pending sources, masked by current enables */
-	int_status = LOONGSON_INTISR & LOONGSON_INTEN;
+	int_status = readl(LOONGSON_INTISR) & readl(LOONGSON_INTEN);
 
 	if (int_status) {
 		i = __ffs(int_status);
@@ -54,13 +54,13 @@ void __init arch_init_irq(void)
 	clear_c0_status(ST0_IM | ST0_BEV);
 
 	/* no steer */
-	LOONGSON_INTSTEER = 0;
+	writel(0, LOONGSON_INTSTEER);
 
 	/*
 	 * Mask out all interrupt by writing "1" to all bit position in
 	 * the interrupt reset reg.
 	 */
-	LOONGSON_INTENCLR = ~0;
+	writel(0xffffffff, LOONGSON_INTENCLR);
 
 	/* machine specific irq init */
 	mach_init_irq();

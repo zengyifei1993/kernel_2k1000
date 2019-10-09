@@ -68,7 +68,7 @@ extern int mach_i8259_irq(void);
 })
 
 #define LOONGSON_REG(x) \
-	(*(volatile u32 *)((char *)CKSEG1ADDR(LOONGSON_REG_BASE) + (x)))
+	(void*)(CKSEG1ADDR(LOONGSON_REG_BASE) + (x))
 
 #define LOONGSON3_REG8(base, x) \
 	(*(volatile u8 *)((char *)TO_UNCAC(base) + (x)))
@@ -352,6 +352,13 @@ extern int stable_timer_enabled;
 
 #endif
 
+#define LS_CFG_BASE	0x3ff00000
+#define LS_CFG_OFF(x) \
+	((void*)TO_UNCAC(LS_CFG_BASE) + (x))
+#define LS_L2_BAE	LS_CFG_OFF(0)
+#define LS_L2_MSK	LS_CFG_OFF(0x40)
+#define LS_L2_MMP	LS_CFG_OFF(0x80)
+
 /*
  * address windows configuration module
  *
@@ -363,9 +370,8 @@ extern int stable_timer_enabled;
 #define LOONGSON_ADDRWINCFG_BASE		0x3ff00000ul
 #define LOONGSON_ADDRWINCFG_SIZE		0x180
 
-extern unsigned long _loongson_addrwincfg_base;
 #define LOONGSON_ADDRWINCFG(offset) \
-	(*(volatile u64 *)(_loongson_addrwincfg_base + (offset)))
+	(void *)CKSEG1ADDR(LOONGSON_ADDRWINCFG_BASE + (offset))
 
 #define CPU_WIN0_BASE	LOONGSON_ADDRWINCFG(0x00)
 #define CPU_WIN1_BASE	LOONGSON_ADDRWINCFG(0x08)
@@ -387,7 +393,6 @@ extern unsigned long _loongson_addrwincfg_base;
 #define PCIDMA_WIN2_BASE	LOONGSON_ADDRWINCFG(0x70)
 #define PCIDMA_WIN3_BASE	LOONGSON_ADDRWINCFG(0x78)
 
-#define PCIDMA_WIN0_MASK	LOONGSON_ADDRWINCFG(0x80)
 #define PCIDMA_WIN1_MASK	LOONGSON_ADDRWINCFG(0x88)
 #define PCIDMA_WIN2_MASK	LOONGSON_ADDRWINCFG(0x90)
 #define PCIDMA_WIN3_MASK	LOONGSON_ADDRWINCFG(0x98)
@@ -415,9 +420,9 @@ extern unsigned long _loongson_addrwincfg_base;
  * size: ~mask + 1
  */
 #define LOONGSON_ADDRWIN_CFG(s, d, w, src, dst, size) do {\
-	s##_WIN##w##_BASE = (src); \
-	s##_WIN##w##_MMAP = (dst) | ADDRWIN_MAP_DST_##d; \
-	s##_WIN##w##_MASK = ~(size-1); \
+  writeq((src), s##_WIN##w##_BASE);\
+  writeq(((dst) | ADDRWIN_MAP_DST_##d), s##_WIN##w##_BASE);\
+  writeq((~(size-1)), s##_WIN##w##_MASK);\
 } while (0)
 
 #define LOONGSON_ADDRWIN_CPUTOPCI(win, src, dst, size) \
@@ -614,6 +619,7 @@ struct cpucfg_info{
 	int	reg[9];
 };
 
+#ifdef CONFIG_CPU_LOONGSON3
 void loongson_nodecounter_adjust(void);
 void loongson_stablecounter_adjust(void);
 static inline unsigned int calc_const_freq(void)
@@ -637,4 +643,5 @@ static inline unsigned int calc_const_freq(void)
 		return (base_freq * cfm / cfd);
 
 }
+#endif
 #endif /* __ASM_MACH_LOONGSON_LOONGSON_H */

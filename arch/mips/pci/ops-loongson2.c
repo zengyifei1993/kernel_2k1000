@@ -85,13 +85,15 @@ static int loongson_pcibios_config_access(unsigned char access_type,
 	}
 
 	/* Clear aborts */
-	LOONGSON_PCICMD |= LOONGSON_PCICMD_MABORT_CLR | \
+	dummy = readl(LOONGSON_PCICMD);
+	dummy |= LOONGSON_PCICMD_MABORT_CLR | \
 				LOONGSON_PCICMD_MTABORT_CLR;
 
-	LOONGSON_PCIMAP_CFG = (addr >> 16) | type;
+	writel(dummy, LOONGSON_PCICMD);
+	writel((addr >> 16) | type, LOONGSON_PCIMAP_CFG);
 
 	/* Flush Bonito register block */
-	dummy = LOONGSON_PCIMAP_CFG;
+	(void)readl(LOONGSON_PCIMAP_CFG);
 	mmiowb();
 
 	addrp = CFG_SPACE_REG(addr & 0xffff);
@@ -101,13 +103,16 @@ static int loongson_pcibios_config_access(unsigned char access_type,
 		*data = le32_to_cpu(readl(addrp));
 
 	/* Detect Master/Target abort */
-	if (LOONGSON_PCICMD & (LOONGSON_PCICMD_MABORT_CLR |
+	dummy = readl(LOONGSON_PCICMD);
+	if (dummy & (LOONGSON_PCICMD_MABORT_CLR |
 			     LOONGSON_PCICMD_MTABORT_CLR)) {
 		/* Error occurred */
 
 		/* Clear bits */
-		LOONGSON_PCICMD |= (LOONGSON_PCICMD_MABORT_CLR |
+		dummy = readl(LOONGSON_PCICMD);
+		dummy |= (LOONGSON_PCICMD_MABORT_CLR |
 				  LOONGSON_PCICMD_MTABORT_CLR);
+		writel(dummy, LOONGSON_PCICMD);
 
 		return -1;
 	}

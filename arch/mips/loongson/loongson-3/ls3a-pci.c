@@ -64,6 +64,7 @@ static struct pci_controller  loongson_pci_controller = {
 static void __init setup_pcimap(struct resource *res)
 {
 	int idx;
+	unsigned int dummy;
 	/*
 	 * local to PCI mapping for CPU accessing PCI space
 	 * CPU address space [256M,448M] is window for accessing pci space
@@ -72,35 +73,37 @@ static void __init setup_pcimap(struct resource *res)
 	 * pcimap: PCI_MAP2  PCI_Mem_Lo2 PCI_Mem_Lo1 PCI_Mem_Lo0
 	 * 	     [<2G]   [384M,448M] [320M,384M] [0M,64M]
 	 */
-	LOONGSON_PCICMD = PCI_COMMAND_IO|PCI_COMMAND_MEMORY|PCI_COMMAND_MASTER;
-	LOONGSON_PCIMAP = LOONGSON_PCIMAP_PCIMAP_2 |
+	writel(PCI_COMMAND_IO|PCI_COMMAND_MEMORY|PCI_COMMAND_MASTER, LOONGSON_PCICMD);
+	dummy = LOONGSON_PCIMAP_PCIMAP_2 |
 		LOONGSON_PCIMAP_WIN(2, LOONGSON_PCILO2_BASE) |
 		LOONGSON_PCIMAP_WIN(1, LOONGSON_PCILO1_BASE) |
 		LOONGSON_PCIMAP_WIN(0, 0);
+	writel(dummy, LOONGSON_PCIMAP);
 
 	/*
 	 * PCI-DMA to local mapping: [2G,2G+256M] -> [0M,256M]
 	 */
-	LOONGSON_PCIBASE0 = 0x80000000ul;   /* base: 2G -> mmap: 0M */
+	writel(0x80000000, LOONGSON_PCIBASE0); /* base: 2G -> mmap: 0M */
 	/* size: 256M, burst transmission, pre-fetch enable, 64bit */
-	LOONGSON_PCI_HIT0_SEL_L = 0x8000000cul;
-	LOONGSON_PCI_HIT0_SEL_H = 0xfffffffful;
-	LOONGSON_PCI_HIT1_SEL_L = 0x00000006ul; /* set this BAR as invalid */
-	LOONGSON_PCI_HIT1_SEL_H = 0x00000000ul;
-	LOONGSON_PCI_HIT2_SEL_L = 0x00000006ul; /* set this BAR as invalid */
-	LOONGSON_PCI_HIT2_SEL_H = 0x00000000ul;
+	writel(0x8000000c, LOONGSON_PCI_HIT0_SEL_L);
+	writel(0xffffffff, LOONGSON_PCI_HIT0_SEL_H);
+	writel(0x00000006, LOONGSON_PCI_HIT1_SEL_L); /* set this BAR as invalid */
+	writel(0x00000000, LOONGSON_PCI_HIT1_SEL_H);
+	writel(0x00000006, LOONGSON_PCI_HIT2_SEL_L); /* set this BAR as invalid */
+	writel(0x00000000, LOONGSON_PCI_HIT2_SEL_H);
 
 	/* avoid deadlock of PCI reading/writing lock operation */
-	LOONGSON_PCI_ISR4C = 0xd2000001ul;
+	writel(0xd2000001, LOONGSON_PCI_ISR4C);
 
 	/* can not change gnt to break pci transfer when device's gnt not
 	deassert for some broken device */
 	//LOONGSON_PXARB_CFG = 0x00fe0105ul;
 
 	idx = res->name[0] - '0';
-	*(volatile long *)(0x900000003ff00000 + idx*8) = res->start;;
-	*(volatile long *)(0x900000003ff00040 + idx*8) = ~(long long)(res->end - res->start);
-	*(volatile long *)(0x900000003ff00080 + idx*8) = res->start|0x82;
+
+	writeq(res->start, (LS_L2_BAE + idx * 8));
+	writeq(~(long)(res->end - res->start), (LS_L2_MSK + idx * 8));
+	writeq((res->start | 0x82), (LS_L2_MMP + idx * 8));
 
 }
 

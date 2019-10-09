@@ -14,8 +14,15 @@
 
 void mach_prepare_reboot(void)
 {
-	LOONGSON_GENCFG &= ~(1 << 2);
-	LOONGSON_GENCFG |= (1 << 2);
+	unsigned int dummy;
+
+	dummy = readl(LOONGSON_GENCFG);
+	dummy &= ~(1 << 2);
+	writel(dummy, LOONGSON_GENCFG);
+
+	dummy |= (1 << 2);
+	writel(dummy, LOONGSON_GENCFG);
+
 }
 
 void mach_prepare_shutdown(void)

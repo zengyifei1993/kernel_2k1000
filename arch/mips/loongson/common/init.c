@@ -40,11 +40,6 @@ static void __init mips_nmi_setup(void)
 
 void __init prom_init(void)
 {
-#ifdef CONFIG_CPU_SUPPORTS_ADDRWINCFG
-	_loongson_addrwincfg_base = (unsigned long)
-		ioremap(LOONGSON_ADDRWINCFG_BASE, LOONGSON_ADDRWINCFG_SIZE);
-#endif
-
 	prom_init_cmdline();
 	prom_init_env();
 
