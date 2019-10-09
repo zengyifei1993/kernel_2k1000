@@ -100,16 +100,7 @@ static inline int ls3a_ipi_in_kernel(struct kvm *kvm)
 
 
 struct loongson_kvm_ls3a_ipi * kvm_create_ls3a_ipi(struct kvm *kvm);
-
-int ls3a_gipi_writel(struct loongson_kvm_ls3a_ipi * ipi, gpa_t addr, int len,const void *val);
-uint64_t ls3a_gipi_readl(struct loongson_kvm_ls3a_ipi * ipi, gpa_t addr, int len, void* val);
-
-void ls3a_ipi_lock(struct loongson_kvm_ls3a_ipi *s, unsigned long *flags);
-void ls3a_ipi_unlock(struct loongson_kvm_ls3a_ipi *s, unsigned long *flags);
-
-
 int kvm_set_ls3a_ipi(struct kvm *kvm, struct loongson_gipiState *state);
 int kvm_get_ls3a_ipi(struct kvm *kvm, struct loongson_gipiState *state);
-
 void kvm_destroy_ls3a_ipi(struct loongson_kvm_ls3a_ipi *vipi);
 #endif
