@@ -225,6 +225,35 @@ static int stable_enable(void)
 	return 0;
 }
 
+extern void update_clocksource_for_loongson(struct clocksource *cs);
+extern unsigned long loops_per_jiffy;
+
+//used for adjust clocksource and clockevent for guest when migrate to a diffrent cpu freq
+void loongson_stablecounter_adjust(void)
+{
+	unsigned int cpu;
+	struct clock_event_device *cd;
+	struct clocksource *cs = &csrc_stable_counter;
+	u32 new_stable_freq;
+
+	new_stable_freq = LOONGSON_FREQCTRL(0);
+
+	printk("======src_freq 0x%x,new_freq 0x%x\n",ls_stable_freq,new_stable_freq);
+
+	for_each_online_cpu(cpu){
+		cd = &per_cpu(stable_clockevent_device, cpu);
+		clockevents_update_freq(cd, new_stable_freq);
+		cpu_data[cpu].udelay_val = cpufreq_scale(loops_per_jiffy, ls_stable_freq / 1000, new_stable_freq / 1000);
+	}
+
+	loops_per_jiffy = cpu_data[0].udelay_val;
+	ls_stable_freq = new_stable_freq;
+	mips_hpt_frequency = new_stable_freq / 2;
+	__clocksource_updatefreq_scale(cs, 1, new_stable_freq);
+	update_clocksource_for_loongson(cs);
+}
+
+
 int __init init_stable_clocksource(void)
 {
 	struct cpuinfo_mips *c = &current_cpu_data;

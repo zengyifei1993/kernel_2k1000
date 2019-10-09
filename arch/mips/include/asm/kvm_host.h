@@ -272,8 +272,8 @@ struct kvm_arch {
 	unsigned char is_migrate;
 	s64 nodecounter_offset;
 	u64 nodecounter_value;
-	s64 stablecounter_offset;
-	u64 stablecounter_value;
+	s64 stablecounter_gftoffset;
+	s64 stablecounter_offset_old;
 	u32 node_shift;
 	u32 use_stable_timer;
 	u32 cpucfg_lasx;
@@ -1273,6 +1273,7 @@ void kvm_mips_count_enable_cause(struct kvm_vcpu *vcpu);
 void kvm_mips_count_disable_cause(struct kvm_vcpu *vcpu);
 enum hrtimer_restart kvm_mips_count_timeout(struct kvm_vcpu *vcpu);
 
+u32 kvm_loongson_read_stable_timer(struct kvm_vcpu *vcpu);
 void kvm_loongson_init_stable_timer(struct kvm_vcpu *vcpu, unsigned long stable_timer_hz);
 int kvm_loongson_set_stable_timer_ctl(struct kvm_vcpu *vcpu, s64 stable_timer_ctl);
 int kvm_loongson_set_stable_timer_resume(struct kvm_vcpu *vcpu, s64 stable_timer_resume);

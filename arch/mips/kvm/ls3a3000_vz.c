@@ -1194,16 +1194,12 @@ static void kvm_vz_queue_irq(struct kvm_vcpu *vcpu, unsigned int priority)
 {
 	set_bit(priority, &vcpu->arch.pending_exceptions);
 	clear_bit(priority, &vcpu->arch.pending_exceptions_clr);
-	vcpu->arch.pending_exceptions_save = vcpu->arch.pending_exceptions;
-	vcpu->arch.pending_exceptions_clr_save = vcpu->arch.pending_exceptions_clr;
 }
 
 static void kvm_vz_dequeue_irq(struct kvm_vcpu *vcpu, unsigned int priority)
 {
 	clear_bit(priority, &vcpu->arch.pending_exceptions);
 	set_bit(priority, &vcpu->arch.pending_exceptions_clr);
-	vcpu->arch.pending_exceptions_save = vcpu->arch.pending_exceptions;
-	vcpu->arch.pending_exceptions_clr_save = vcpu->arch.pending_exceptions_clr;
 }
 
 static void kvm_vz_queue_timer_int_cb(struct kvm_vcpu *vcpu)
@@ -1846,12 +1842,18 @@ static int kvm_vz_get_one_reg(struct kvm_vcpu *vcpu,
 	case KVM_REG_MIPS_COUNT_HZ:
 		*v = vcpu->arch.count_hz;
 		break;
+	case KVM_REG_MIPS_OFFSET:
+		break;
+	case KVM_REG_MIPS_COUNTER:
+		*v = vcpu->kvm->arch.nodecounter_value;
+		break;
 	default:
 		return -EINVAL;
 	}
 	return ret;
 }
 
+extern cycle_t node_counter_read_for_guest(void);
 static int kvm_vz_set_one_reg(struct kvm_vcpu *vcpu,
 			      const struct kvm_one_reg *reg,
 			      s64 v)
@@ -2067,6 +2069,13 @@ static int kvm_vz_set_one_reg(struct kvm_vcpu *vcpu,
 		break;
 	case KVM_REG_MIPS_COUNT_HZ:
 		ret = kvm_mips_set_count_hz(vcpu, v);
+		break;
+	case KVM_REG_MIPS_OFFSET:
+		break;
+	case KVM_REG_MIPS_COUNTER:
+		vcpu->kvm->arch.nodecounter_value = v;
+		if(v)
+			vcpu->kvm->arch.nodecounter_offset = v - node_counter_read_for_guest();
 		break;
 	default:
 		return -EINVAL;

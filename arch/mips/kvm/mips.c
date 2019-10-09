@@ -402,6 +402,8 @@ struct kvm_vcpu *kvm_arch_vcpu_create(struct kvm *kvm, unsigned int id)
 
 	kvm_info("kvm @ %p: create cpu %d at %p arch @ %lx\n", kvm, id, vcpu, (unsigned long)&vcpu->arch);
 
+	kvm->arch.online_vcpus = id + 1;
+
 	/*
 	 * Allocate space for host mode exception handlers that handle
 	 * guest mode exits
@@ -1269,24 +1271,22 @@ long kvm_arch_vcpu_ioctl(struct file *filp, unsigned int ioctl,
 
 	case KVM_MIPS_GET_VCPU_STATE:
 	{
+		int i;
 		struct  kvm_mips_vcpu_state vcpu_state;
 		r = -EFAULT;
 
 		vcpu_state.online_vcpus = vcpu->kvm->arch.online_vcpus;
 		vcpu_state.is_migrate = 1;
-		vcpu_state.nodecounter_value =  vcpu->kvm->arch.nodecounter_value;
-		if(current_cpu_type() == CPU_LOONGSON3_COMP) {
-			vcpu_state.stablecounter_value =  drdtime();
-			vcpu_state.stablecounter_offset =  (signed long)dread_csr(0xfffffff8);
-			kvm_info("---stable value %lx offset %lx total %lx\n", (unsigned long)vcpu_state.stablecounter_value,
-						 (signed long)vcpu_state.stablecounter_offset,
-						(unsigned long)(vcpu_state.stablecounter_offset + vcpu_state.stablecounter_value));
-			kvm_info("---stable read total %lx\n", (unsigned long)(drdtime()+dread_csr(0xfffffff8)));
-		}
+		for(i=0;i<4;i++)
+			vcpu_state.core_ext_ioisr[i] = vcpu->arch.core_ext_ioisr[i];
 
-		vcpu_state.pending_exceptions =  vcpu->arch.pending_exceptions_save;
-		vcpu_state.pending_exceptions_clr =  vcpu->arch.pending_exceptions_clr_save;
-		vcpu_state.cpu_freq =  vcpu->arch.count_hz;
+		vcpu_state.pending_exceptions =  vcpu->arch.pending_exceptions;
+		vcpu_state.pending_exceptions_clr =  vcpu->arch.pending_exceptions_clr;
+		if(vcpu->kvm->arch.use_stable_timer)
+			vcpu_state.cpu_freq =  vcpu->arch.stable_timer_hz;
+		else
+			vcpu_state.cpu_freq =  vcpu->arch.count_hz;
+
 		vcpu_state.count_ctl =  vcpu->arch.count_ctl;
 
 		if (copy_to_user(argp, &vcpu_state, sizeof(struct kvm_mips_vcpu_state)))
@@ -1297,6 +1297,7 @@ long kvm_arch_vcpu_ioctl(struct file *filp, unsigned int ioctl,
 
 	case KVM_MIPS_SET_VCPU_STATE:
 	{
+		int i;
 		struct  kvm_mips_vcpu_state vcpu_state;
 		r = -EFAULT;
 
@@ -1305,26 +1306,29 @@ long kvm_arch_vcpu_ioctl(struct file *filp, unsigned int ioctl,
 
 		vcpu->kvm->arch.online_vcpus = vcpu_state.online_vcpus;
 		vcpu->kvm->arch.is_migrate = vcpu_state.is_migrate;
-		vcpu->kvm->arch.nodecounter_value = vcpu_state.nodecounter_value;
-		if(current_cpu_type() == CPU_LOONGSON3_COMP) {
-			vcpu->kvm->arch.stablecounter_value = vcpu_state.stablecounter_value;
-			vcpu->kvm->arch.stablecounter_offset = vcpu_state.stablecounter_offset +
-				(vcpu->kvm->arch.stablecounter_value - drdtime());
-			dwrite_csr(0xfffffff8, (unsigned long)vcpu->kvm->arch.stablecounter_offset);
-			kvm_info("---set old stable value %lx offset %lx \n", (unsigned long)vcpu_state.stablecounter_value,
-					(signed long)vcpu_state.stablecounter_offset);
-			kvm_info("---set stable value %lx offset %lx total %lx\n", (unsigned long)drdtime(), (signed long)dread_csr(0xfffffff8),
-					(unsigned long)(drdtime()+dread_csr(0xfffffff8)));
-		}
+		for(i=0;i<4;i++)
+			 vcpu->arch.core_ext_ioisr[i] = vcpu_state.core_ext_ioisr[i];
 
 		vcpu->arch.pending_exceptions = vcpu_state.pending_exceptions;
 		vcpu->arch.pending_exceptions_clr = vcpu_state.pending_exceptions_clr;
 		vcpu->arch.count_ctl = vcpu_state.count_ctl;
 
-		if((vcpu_state.cpu_freq != vcpu->arch.count_hz) && (vcpu->vcpu_id == 0)){
-			struct kvm_mips_interrupt irq = {0};
-			irq.irq = 5;
-			kvm_mips_callbacks->queue_io_int(vcpu, &irq);
+		if(vcpu->kvm->arch.use_stable_timer){
+			if((vcpu_state.cpu_freq != vcpu->arch.stable_timer_hz) && (vcpu->vcpu_id == 0)){
+				struct kvm_mips_interrupt irq = {0};
+				irq.irq = 5;
+				kvm_info("==migrate between two different freq machine,src_freq 0x%x,dest_freq 0x%llx\n",
+					vcpu_state.cpu_freq,vcpu->arch.stable_timer_hz);
+				kvm_mips_callbacks->queue_io_int(vcpu, &irq);
+			}
+		} else {
+			if((vcpu_state.cpu_freq != vcpu->arch.count_hz) && (vcpu->vcpu_id == 0)){
+				struct kvm_mips_interrupt irq = {0};
+				irq.irq = 5;
+				kvm_info("==migrate between two different freq machine,src_freq 0x%x,dest_freq 0x%x\n",
+					vcpu_state.cpu_freq,vcpu->arch.count_hz);
+				kvm_mips_callbacks->queue_io_int(vcpu, &irq);
+			}
 		}
 
 		r = 0;
