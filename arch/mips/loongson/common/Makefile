@@ -30,3 +30,5 @@ obj-$(CONFIG_SUSPEND) += pm.o
 # Big Memory (SWIOTLB) Support
 #
 obj-$(CONFIG_SWIOTLB) += dma-swiotlb.o
+
+obj-$(CONFIG_ARCH_HAS_CPU_AUTOPROBE) +=match.o

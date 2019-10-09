@@ -226,4 +226,7 @@ config HAVE_SETUP_PER_CPU_AREA
 
 config NEED_PER_CPU_EMBED_FIRST_CHUNK
 	def_bool y
+
+config ARCH_HAS_CPU_AUTOPROBE
+	def_bool y
 endif # MACH_LOONGSON
