@@ -183,7 +183,7 @@ static ieee754dp _ieee754dp_maddf(ieee754dp z, ieee754dp x,
 	assert(ym & DP_HIDDEN_BIT);
 
 	re = xe + ye;
-#if defined (CONFIG_CPU_LOONGSON3) || defined (CONFIG_CPU_LOONGSON2K)
+#if defined (CONFIG_MACH_LOONGSON) || defined (CONFIG_MACH_LOONGSON2)
 	rs = xs ^ ys ^ (opt & 2);
 	zs = zs ^ (opt & 1) ^ (opt & 2);
 	xm <<= 64 - (DP_FBITS + 2);
@@ -225,7 +225,7 @@ static ieee754dp _ieee754dp_maddf(ieee754dp z, ieee754dp x,
 	lrm = at;
 
 	hrm = hrm + (t >> 32);
-#if defined (CONFIG_CPU_LOONGSON3) || defined (CONFIG_CPU_LOONGSON2K)
+#if defined (CONFIG_MACH_LOONGSON) || defined (CONFIG_MACH_LOONGSON2)
 	/* here we need to normalize hrm|rm */
 	if (hrm < UINT64_C( 0x2000000000000000)) {
 		hrm = (hrm << 1) | ((lrm & 0x8000000000000000) != 0);
