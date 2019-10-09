@@ -77,6 +77,9 @@ static int stmmac_probe_config_dt(struct platform_device *pdev,
 				if (pdev->dev.dma_mask)
 						*(pdev->dev.dma_mask) = pdev->dev.coherent_dma_mask;
 		}
+		/*ls2h,ls2k,ls7a mcast filter register is 256bit.*/
+		if (of_property_read_u32(np, "mcast_bits_log2", &plat->mcast_bits_log2))
+			plat->mcast_bits_log2 = 8;
 	}
 	return 0;
 }

@@ -30,6 +30,7 @@
 #include <linux/slab.h>
 #include <linux/ethtool.h>
 #include <asm/io.h>
+#include  "stmmac.h"
 #include "dwmac1000.h"
 
 static void dwmac1000_core_init(void __iomem *ioaddr)
@@ -85,44 +86,79 @@ static void dwmac1000_get_umac_addr(void __iomem *ioaddr, unsigned char *addr,
 			    GMAC_ADDR_LOW(reg_n));
 }
 
+static void dwmac1000_set_mchash(void __iomem *ioaddr, u32 *mcfilterbits,
+				 int mcbitslog2)
+{
+	int numhashregs, regs;
+
+	switch (mcbitslog2) {
+	case 6:
+		writel(mcfilterbits[0], ioaddr + GMAC_HASH_LOW);
+		writel(mcfilterbits[1], ioaddr + GMAC_HASH_HIGH);
+		return;
+		break;
+	case 7:
+		numhashregs = 4;
+		break;
+	case 8:
+		numhashregs = 8;
+		break;
+	default:
+		pr_debug("STMMAC: err in setting multicast filter\n");
+		return;
+		break;
+	}
+	for (regs = 0; regs < numhashregs; regs++)
+		writel(mcfilterbits[regs],
+		       ioaddr + GMAC_EXTHASH_BASE + regs * 4);
+}
+
 static void dwmac1000_set_filter(struct net_device *dev, int id)
 {
 	void __iomem *ioaddr = (void __iomem *)dev->base_addr;
 	unsigned int value = 0;
 	unsigned int perfect_addr_number;
+	u32 mc_filter[8];
+	struct stmmac_priv *priv = netdev_priv(dev);
+	struct plat_stmmacenet_data *plat_dat = priv->plat;
+
+	int mcbitslog2 = plat_dat->mcast_bits_log2;
+	if (!mcbitslog2)
+	   mcbitslog2 = 6;
 
 	CHIP_DBG(KERN_INFO "%s: # mcasts %d, # unicast %d\n",
 		 __func__, netdev_mc_count(dev), netdev_uc_count(dev));
 
+	memset(mc_filter, 0, sizeof(mc_filter));
+
 	if (dev->flags & IFF_PROMISC)
 		value = GMAC_FRAME_FILTER_PR;
-	else if ((netdev_mc_count(dev) > HASH_TABLE_SIZE)
-		 || (dev->flags & IFF_ALLMULTI)) {
+	else if (dev->flags & IFF_ALLMULTI) {
 		value = GMAC_FRAME_FILTER_PM;	/* pass all multi */
-		writel(0xffffffff, ioaddr + GMAC_HASH_HIGH);
-		writel(0xffffffff, ioaddr + GMAC_HASH_LOW);
 	} else if (!netdev_mc_empty(dev)) {
-		u32 mc_filter[2];
 		struct netdev_hw_addr *ha;
 
 		/* Hash filter for multicast */
 		value = GMAC_FRAME_FILTER_HMC;
 
-		memset(mc_filter, 0, sizeof(mc_filter));
 		netdev_for_each_mc_addr(ha, dev) {
-			/* The upper 6 bits of the calculated CRC are used to
-			 * index the contens of the hash table
+			/* The upper n bits of the calculated CRC are used to
+			 * index the contents of the hash table. The number of
+			 * bits used depends on the hardware configuration
+			 * selected at core configuration time.
 			 */
-			int bit_nr = bitrev32(~crc32_le(~0, ha->addr, 6)) >> 26;
+			int bit_nr = bitrev32(~crc32_le(~0, ha->addr,
+					      ETH_ALEN)) >>
+					      (32 - mcbitslog2);
 			/* The most significant bit determines the register to
 			 * use (H/L) while the other 5 bits determine the bit
 			 * within the register.
 			 */
 			mc_filter[bit_nr >> 5] |= 1 << (bit_nr & 31);
 		}
-		writel(mc_filter[0], ioaddr + GMAC_HASH_LOW);
-		writel(mc_filter[1], ioaddr + GMAC_HASH_HIGH);
 	}
+
+	dwmac1000_set_mchash(ioaddr, mc_filter, mcbitslog2);
 
 	/* Extra 16 regs are available in cores newer than the 3.40. */
 	if (id > DWMAC_CORE_3_40)

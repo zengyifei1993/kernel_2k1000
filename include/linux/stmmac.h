@@ -116,5 +116,6 @@ struct plat_stmmacenet_data {
 	void *custom_cfg;
 	void *custom_data;
 	void *bsp_priv;
+	int mcast_bits_log2;
 };
 #endif

@@ -51,6 +51,8 @@ static int bus_id = 1;
 	dma_cfg->pbl = 32;
 	dma_cfg->burst_len = DMA_AXI_WR_OSR_LMT | DMA_AXI_RD_OSR_LMT | DMA_AXI_BLEN_256;
 	plat_dat->dma_cfg = dma_cfg;
+	/*ls2h,ls2k,ls7a mcast filter register is 256bit.*/
+	plat_dat->mcast_bits_log2 = 8;
 	return plat_dat;
 }
 
