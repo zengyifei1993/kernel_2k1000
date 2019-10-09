@@ -12,6 +12,9 @@
 #define _ASM_MACH_MMZONE_H
 
 #include <boot_param.h>
+
+#ifdef CONFIG_NEED_MULTIPLE_NODES
+
 #ifdef CONFIG_KVM_GUEST_LS3A3000
 #define NODE_ADDRSPACE_SHIFT 36
 #else
@@ -29,5 +32,7 @@ struct node_data {
 extern struct node_data *__node_data[];
 
 #define NODE_DATA(n)		(&__node_data[(n)]->pglist)
+
+#endif
 
 #endif /* _ASM_MACH_MMZONE_H */

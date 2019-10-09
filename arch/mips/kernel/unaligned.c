@@ -426,14 +426,15 @@ static void emulate_load_store_insn(struct pt_regs *regs,
 {
 	union mips_instruction insn;
 	unsigned long value;
-	unsigned long value1;
 	unsigned int res;
 	unsigned long origpc;
 	unsigned long orig31;
 	void __user *fault_addr = NULL;
 	union fpureg *fpr;
 	enum msa_2b_fmt df;
-	unsigned int wd, i;
+	unsigned int wd;
+	unsigned int i __maybe_unused;
+	unsigned long value1 __maybe_unused;
 
 	origpc = (unsigned long)pc;
 	orig31 = regs->regs[31];
