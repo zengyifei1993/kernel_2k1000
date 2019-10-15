@@ -1932,7 +1932,7 @@ out_fail:
 #define LS3A4000_NODE_ID_OFFSET_ADDR 0x90000E001001041CULL
 #define TEMP_ADDR 0x1fe0019c
 
-cycle_t node_counter_read_for_guest(void)
+cycle_t node_counter_read(void)
 {
 	cycle_t count;
 	unsigned long mask, delta, tmp;
@@ -2006,12 +2006,7 @@ enum emulation_result kvm_mips_emulate_load(union mips_instruction inst,
 
 	/* Emulate nodecounter read */
 	if((vcpu->arch.gprs[rs] + offset) == NODE_COUNTER_ADDR) {
-		vcpu->arch.gprs[rt] = node_counter_read_for_guest();
-		
-		if(vcpu->kvm->arch.nodecounter_offset)
-			vcpu->arch.gprs[rt] += vcpu->kvm->arch.nodecounter_offset;
-
-		vcpu->kvm->arch.nodecounter_value = vcpu->arch.gprs[rt];
+		vcpu->arch.gprs[rt] = node_counter_read() +  vcpu->kvm->arch.nodecounter_offset;
 
 		++vcpu->stat.lsvz_nc_exits;
 
