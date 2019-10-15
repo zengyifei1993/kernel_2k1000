@@ -323,6 +323,13 @@ static const struct serial8250_config uart_config[] = {
 		.fcr		= UART_FCR_ENABLE_FIFO | UART_FCR_R_TRIG_10,
 		.flags		= UART_CAP_FIFO | UART_CAP_AFE,
 	},
+	[PORT_LOONGSON] = {
+		.name		= "Loongson 16550",
+		.fifo_size	= 16,
+		.tx_loadsz	= 16,
+		.fcr		= UART_FCR_ENABLE_FIFO | UART_FCR_R_TRIG_10,
+		.flags		= UART_CAP_FIFO,
+	},
 };
 
 /* Uart divisor latch read */
@@ -398,14 +405,41 @@ static void hub6_serial_out(struct uart_port *p, int offset, int value)
 	outb(value, p->iobase + 1);
 }
 
+static unsigned int serial_in_fixup(struct uart_port *p, unsigned int offset, unsigned int val)
+{
+	if (offset == UART_MCR){
+		val ^= (UART_MCR_RTS|UART_MCR_DTR);
+	}
+	if (offset == UART_MSR)
+	{
+		val ^= (UART_MSR_DSR|UART_MSR_CTS);
+
+	}
+	return val;
+}
+
+static unsigned int serial_out_fixup(struct uart_port *p, unsigned int offset, unsigned int val)
+{
+	if (offset == UART_MCR) {
+		val ^= (UART_MCR_RTS|UART_MCR_DTR);
+	}
+	return val;
+}
+
 static unsigned int mem_serial_in(struct uart_port *p, int offset)
 {
+	unsigned int val, offset0 = offset;
 	offset = offset << p->regshift;
-	return readb(p->membase + offset);
+	val = readb(p->membase + offset);
+	if (p->type == PORT_LOONGSON)
+		val = serial_in_fixup(p, offset0, val);
+	return val;
 }
 
 static void mem_serial_out(struct uart_port *p, int offset, int value)
 {
+	if (p->type == PORT_LOONGSON)
+		value = serial_out_fixup(p, offset, value);
 	offset = offset << p->regshift;
 	writeb(value, p->membase + offset);
 }
@@ -2448,6 +2482,8 @@ serial8250_do_set_termios(struct uart_port *port, struct ktermios *termios,
 			serial_port_out(port, UART_FCR, UART_FCR_ENABLE_FIFO);
 		serial_port_out(port, UART_FCR, fcr);		/* set fcr */
 	}
+	if (port->type == PORT_LOONGSON)
+		serial_out(up, UART_IER, up->ier);
 	serial8250_set_mctrl(port, port->mctrl);
 	spin_unlock_irqrestore(&port->lock, flags);
 	/* Don't rewrite B0 */
