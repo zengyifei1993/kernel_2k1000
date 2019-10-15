@@ -38,6 +38,14 @@ u32 node_id_offset;
 #else
 #define NODE_ID_OFFSET_ADDR	0x90000E001001041CULL
 #endif
+
+#ifndef loongson_ls7a_decode_year
+#define loongson_ls7a_decode_year(year) ((year) + 1900)
+#endif
+
+#define RTC_TOYREAD0    0x2C
+#define RTC_YEAR        0x30
+
 static void ls7a_early_config(void)
 {
 	node_id_offset = (*(volatile u32 *)NODE_ID_OFFSET_ADDR >> 8) & 0x1F;
@@ -79,5 +87,24 @@ int __init ls7a_publish_devices(void)
 {
        return of_platform_populate(NULL, ls7a_ids, NULL, NULL);
 }
+
+unsigned long loongson_ls7a_get_rtc_time(void)
+{
+	unsigned int year, mon, day, hour, min, sec;
+	unsigned int value;
+
+	value = ls7a_readl(LS7A_RTC_REG_BASE + RTC_TOYREAD0);
+	sec = (value >> 4) & 0x3f;
+	min = (value >> 10) & 0x3f;
+	hour = (value >> 16) & 0x1f;
+	day = (value >> 21) & 0x1f;
+	mon = (value >> 26) & 0x3f;
+	year = ls7a_readl(LS7A_RTC_REG_BASE + RTC_YEAR);
+
+	year = loongson_ls7a_decode_year(year);
+
+	return mktime(year, mon, day, hour, min, sec);
+}
+
 
 device_initcall(ls7a_publish_devices);

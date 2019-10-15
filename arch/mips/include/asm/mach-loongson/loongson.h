@@ -44,6 +44,7 @@ extern unsigned long _loongson_uart_base[], loongson_uart_base[];
 extern void prom_init_loongson_uart_base(void);
 #endif
 extern unsigned long loongson_efi_facility;
+extern unsigned long loongson_ls7a_get_rtc_time(void);
 
 static inline void prom_init_uart_base(void)
 {
