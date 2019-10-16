@@ -22,7 +22,8 @@
 #include <asm/cevt-r4k.h>
 #include <linux/clocksource.h>
 
-#include <asm/mach-loongson/loongson.h>
+#include <loongson.h>
+#include "loongson_boost.h"
 
 static uint nowait = 1;
 static spinlock_t cpufreq_reg_lock[MAX_PACKAGES];
@@ -61,29 +62,6 @@ int ls_clock_scale = 0;
 
 static int scale_resolution = 8;
 static int shift = 1;
-
-/* 3a4000 frequency */
-enum freq {
-	FREQ_LEV0,
-	FREQ_LEV1,
-	FREQ_LEV2,
-	FREQ_LEV3,
-
-	FREQ_LEV4,
-	FREQ_LEV5,
-	FREQ_LEV6,
-	FREQ_LEV7,
-
-	FREQ_LEV8,
-	FREQ_LEV9,
-	FREQ_LEV10,
-	FREQ_LEV11,
-
-	FREQ_LEV12,
-	FREQ_LEV13,
-	FREQ_LEV14,
-	FREQ_LEV15,
-};
 
 struct cpufreq_frequency_table *ls3a4000_freq_table;
 EXPORT_SYMBOL_GPL(ls3a4000_freq_table);
@@ -260,6 +238,7 @@ enum freq freq_to_freq_level(uint32_t freq)
 
 	return i;
 }
+EXPORT_SYMBOL_GPL(freq_to_freq_level);
 
 void loongson3a4000_set_freq(struct cpufreq_policy* policy, uint32_t freq)
 {
@@ -287,22 +266,16 @@ void loongson3a4000_set_freq(struct cpufreq_policy* policy, uint32_t freq)
 /*
  * normal mode to boost mode: core_id: boost core id, freq_level: upper limit of other core
  * boost mode to normal mode: core_id and freq_level not use */
-int ls3a4000_set_boost(int mode, struct cpufreq_policy *policy, int index)
+int ls3a4000_set_boost(int mode, int freq_level)
 {
 	struct timespec64 prev_ts;
 	struct timespec64 curr_ts;
 	uint64_t timeout = 300000000;
 	uint32_t val;
-	int node_id;
-	int core_id;
 	int ret = 0;
 	uint32_t message;
-        ktime_t delay = ktime_set(0, 100);
 
-	int cpu = policy->cpu;
-
-	core_id = cpu_data[cpu].core;
-	node_id = cpu_data[cpu].package;
+	ktime_t delay = ktime_set(0, 100);
 
 	ktime_get_ts64(&prev_ts);
 	ktime_get_ts64(&curr_ts);
@@ -320,9 +293,7 @@ int ls3a4000_set_boost(int mode, struct cpufreq_policy *policy, int index)
 		}
 	}
 
-	message = mode | (VOLTAGE_COMMAND << 24)
-			| (index << 4)
-			| (core_id & CPU_ID_FIELD);
+	message = mode | (VOLTAGE_COMMAND << 24) | freq_level;
 
 	write_csr(0x51c, message);
 

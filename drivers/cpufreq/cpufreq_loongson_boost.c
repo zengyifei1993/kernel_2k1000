@@ -52,11 +52,12 @@ struct boost_dbs_tuners {
 #define MAX_FREQUENCY_UP_THRESHOLD		(100)
 
 #define RECORD_LENGTH				(32)
+#define BOOST_DELTA				(0xe6666665)
 
-/* factor ** 32 = 0.5 */
-#define FACTOR					(0xfa83b2da)
-#define MAX_LOAD				(4621)
-#define BOOST_THRESHOLD 			(4400)
+/* factor ** 8 = 0.5 */
+#define FACTOR					(0xeac0c6e8)
+#define MAX_LOAD				(1193)
+#define BOOST_THRESHOLD 		(900)
 
 #define GOV_BOOST                   (2)
 
@@ -72,9 +73,14 @@ static unsigned int default_powersave_bias;
 
 static struct mutex boost_mutex[MAX_PACKAGES];
 
-static u64 load_record[NR_CPUS] = {0, };
+static u64 load_record[MAX_PACKAGES][NR_CPUS/MAX_PACKAGES] = {{0,}, };
 static int prev_boost[MAX_PACKAGES] = {0,};
-static int prev_boost_core[MAX_PACKAGES] = {0xffff,};
+
+static int curr_boost_core_num[MAX_PACKAGES] = {0, };
+static int real_boosted_core_num[MAX_PACKAGES] = {0, };
+
+static int prev_boosted_cores[MAX_PACKAGES][NR_CPUS/MAX_PACKAGES] = {{0, }, };
+static int real_boosted_cores[MAX_PACKAGES][NR_CPUS/MAX_PACKAGES] = {{0, }, };
 
 extern struct clocksource csrc_hpet;
 /*
@@ -88,7 +94,25 @@ extern struct clocksource csrc_hpet;
  */
 static int should_io_be_busy(void)
 {
-	return 0;
+	return 1;
+}
+
+unsigned int find_freq_index(struct cpufreq_frequency_table *freq_table, unsigned int target_freq)
+{
+	struct cpufreq_frequency_table *pos;
+	unsigned int freq;
+	unsigned int index = ls_upper_index;
+
+	cpufreq_for_each_valid_entry(pos, freq_table) {
+		freq = pos->frequency;
+		index = pos - freq_table;
+
+		if (freq == target_freq) {
+			break;
+		}
+	}
+
+	return index;
 }
 
 int freq_to_index(struct cpufreq_policy *policy, unsigned int target_freq, unsigned int relation, int *index)
@@ -119,148 +143,39 @@ out:
 	return retval;
 }
 
-static int __boost_target_index_begin(struct cpufreq_policy *policy,
-			  struct cpufreq_frequency_table *freq_table, int index)
-{
-	struct cpufreq_freqs freqs = {.old = policy->cur, .flags = 0};
-
-	freqs.new = freq_table[index].frequency;
-	pr_debug("%s: cpu: %d, oldfreq: %u, new freq: %u\n",
-		 __func__, policy->cpu, freqs.old, freqs.new);
-
-	cpufreq_freq_transition_begin(policy, &freqs);
-
-	return 0;
-}
-
-static int __boost_target_index_end(struct cpufreq_policy *policy,
-			  struct cpufreq_frequency_table *freq_table, int index, int retval)
-{
-	struct cpufreq_freqs freqs = {.old = policy->cur, .flags = 0};
-
-	freqs.new = freq_table[index].frequency;
-
-	if (retval)
-		pr_err("%s: Failed to change cpu frequency: %d\n", __func__,
-		       retval);
-
-	cpufreq_freq_transition_end(policy, &freqs, retval);
-
-	return retval;
-}
-
-int __boost_cpufreq_driver_target_begin(struct cpufreq_policy *policy,
-		    unsigned int target_freq,
-		    unsigned int relation)
-{
-	unsigned int old_target_freq = target_freq;
-	int retval = -EINVAL;
-	struct cpufreq_frequency_table *freq_table;
-	int index;
-
-	/* Make sure that target_freq is within supported range */
-	if (target_freq > policy->max)
-		target_freq = policy->max;
-	if (target_freq < policy->min)
-		target_freq = policy->min;
-
-	pr_debug("target for CPU %u: %u kHz, relation %u, requested %u kHz\n",
-		 policy->cpu, target_freq, relation, old_target_freq);
-
-	/*
-	* This might look like a redundant call as we are checking it again
-	* after finding index. But it is left intentionally for cases where
-	* exactly same freq is called again and so we can save on few function
-	* calls.
-	*/
-	if (target_freq == policy->cur)
-		return 0;
-
-	/* Save last value to restore later on errors */
-	policy->restore_freq = policy->cur;
-
-	freq_table = cpufreq_frequency_get_table(policy->cpu);
-	if (unlikely(!freq_table)) {
-		pr_err("%s: Unable to find freq_table\n", __func__);
-		goto out;
-	}
-
-	retval = cpufreq_frequency_table_target(policy, freq_table,
-			target_freq, relation, &index);
-	if (unlikely(retval)) {
-		pr_err("%s: Unable to find matching freq\n", __func__);
-		goto out;
-	}
-
-	if (freq_table[index].frequency == policy->cur) {
-		retval = 0;
-		goto out;
-	}
-
-	__boost_target_index_begin(policy, freq_table, index);
-
-out:
-	return retval;
-}
-
-int __boost_cpufreq_driver_target_end(struct cpufreq_policy *policy,
-		    unsigned int target_freq,
-		    unsigned int relation, int retval)
-{
-	struct cpufreq_frequency_table *freq_table;
-	unsigned int old_target_freq = target_freq;
-	int index;
-
-	/* Make sure that target_freq is within supported range */
-	if (target_freq > policy->max)
-		target_freq = policy->max;
-	if (target_freq < policy->min)
-		target_freq = policy->min;
-
-	pr_debug("target for CPU %u: %u kHz, relation %u, requested %u kHz\n",
-		 policy->cpu, target_freq, relation, old_target_freq);
-
-	/*
-	* This might look like a redundant call as we are checking it again
-	* after finding index. But it is left intentionally for cases where
-	* exactly same freq is called again and so we can save on few function
-	* calls.
-	*/
-	if (target_freq == policy->cur)
-		return 0;
-
-	/* Save last value to restore later on errors */
-	policy->restore_freq = policy->cur;
-
-	freq_table = cpufreq_frequency_get_table(policy->cpu);
-	if (unlikely(!freq_table)) {
-		pr_err("%s: Unable to find freq_table\n", __func__);
-		goto out;
-	}
-
-	retval = cpufreq_frequency_table_target(policy, freq_table,
-			target_freq, relation, &index);
-	if (unlikely(retval)) {
-		pr_err("%s: Unable to find matching freq\n", __func__);
-		goto out;
-	}
-
-	if (freq_table[index].frequency == policy->cur) {
-		retval = 0;
-		goto out;
-	}
-
-	__boost_target_index_end(policy, freq_table, index, retval);
-out:
-	return retval;
-}
-
 /*
  * normal mode: loads of all cores great than upper threshold
  * boost mode: load of one core great than upper threshold and loads
  * of others cores less than lower
  * boost == 0, normal mode, boost == 1, boost mode
  */
+
+static int boost_mode(int package_id, int cpu, int *boosted_core_num, int *high_load_cores, int load)
+{
+	int i;
+	int curr_boost = 0;
+	int core_id = cpu_logical_map(cpu) % cores_per_package;
+
+	if (ls_boost_supported) {
+		load_record[package_id][core_id] = (u64) load + ((load_record[package_id][core_id] * FACTOR) >> 32);
+
+		for (i = 0; i < cores_per_package; i++) {
+			if (load_record[package_id][i] > BOOST_THRESHOLD) {
+				high_load_cores[i] = 1;
+				(*boosted_core_num)++;
+			} else {
+				high_load_cores[i] = 0;
+			}
+		}
+
+		/* boost mode */
+		if (*boosted_core_num > 0 && *boosted_core_num <= ls_boost_cores) {
+			curr_boost = 1;
+		}
+	}
+
+	return curr_boost;
+}
 
 /*
  * Every sampling_rate, we check, if current idle time is less than 20%
@@ -277,55 +192,30 @@ static void boost_check_cpu(int cpu, unsigned int load)
 	/* for boost mode */
 
 	int curr_boost = 0;
-	int curr_boost_core = 0xffff;
+	int boosted_core_num = 0;
 
 	unsigned int freq_next, min_f, max_f;
 
 	int i;
-	int high_load_cores[NR_CPUS] = {0,};
-	int full_load_count = 0;
+	int high_load_cores[NR_CPUS/MAX_PACKAGES] = {0, };
 	int retval = -EINVAL;
 
-	//int core_id = cpu_data[cpu].core;
-	int node_id = cpu_data[cpu].package;
+	int package_id = cpu_data[cpu].package;
 	int index;
 	struct cpufreq_freqs freqs;
+	unsigned int freq_level = 0;
+	unsigned int boost_level = 0;
+	unsigned int cpu_offset = cpu % cores_per_package;
 
-	if (ls_boost_supported) {
-		load_record[cpu] = (u64) load + ((load_record[cpu] * FACTOR) >> 32);
+	mutex_lock(&boost_mutex[package_id]);
 
-		for (i = node_id * cores_per_node; i < (node_id + 1) * cores_per_node; i++) {
-			if (load_record[i] > BOOST_THRESHOLD) {
-				high_load_cores[i] = 1;
-				full_load_count++;
-			} else {
-				high_load_cores[i] = 0;
-			}
-		}
-
-		/* boost mode */
-		if (full_load_count == 1) {
-			for (i = node_id * cores_per_node; i < (node_id + 1) * cores_per_node; i++) {
-				if (high_load_cores[i] == 1) {
-					curr_boost_core = i;
-					break;
-				}
-			}
-			curr_boost = 1;
-		} else {
-			curr_boost = 0;
-		}
-	} else {
-		curr_boost = 0;
-	}
-
-	mutex_lock(&boost_mutex[node_id]);
+	curr_boost = boost_mode(package_id, cpu, &boosted_core_num, high_load_cores, load);
 
 	if (curr_boost == 1) {
 		ls3a4000_freq_table_switch(ls3a4000_boost_table);
 
-		for (i = node_id * cores_per_node;
-				i < (node_id + 1) * cores_per_node; i++) {
+		for (i = package_id * cores_per_package;
+				i < (package_id + 1) * cores_per_package; i++) {
 			policy = cpufreq_cpu_get(i);
 			if (policy) {
 				cpufreq_table_validate_and_show(policy, &ls3a4000_boost_table[0]);
@@ -335,8 +225,8 @@ static void boost_check_cpu(int cpu, unsigned int load)
 	} else {
 		ls3a4000_freq_table_switch(ls3a4000_normal_table);
 
-		for (i = node_id * cores_per_node;
-				i < (node_id + 1) * cores_per_node; i++) {
+		for (i = package_id * cores_per_package;
+				i < (package_id + 1) * cores_per_package; i++) {
 
 			policy = cpufreq_cpu_get(i);
 			if (policy) {
@@ -347,81 +237,77 @@ static void boost_check_cpu(int cpu, unsigned int load)
 	}
 
 	/* boost to normal */
-	if (prev_boost[node_id] == 1 && curr_boost == 0) {
+	if (prev_boost[package_id] == 1 && curr_boost == 0) {
 
 		/* notification begin*/
-		for (i = node_id * cores_per_node;
-			i < (node_id + 1) * cores_per_node; i++) {
+		for (i = package_id * cores_per_package;
+			i < (package_id + 1) * cores_per_package; i++) {
 
 			dbs_info = &per_cpu(boost_cpu_dbs_info, i);
 			dbs_info->freq_lo = 0;
 			policy = dbs_info->cdbs.cur_policy;
 
-			min_f = policy->cpuinfo.min_freq;
-			max_f = policy->cpuinfo.max_freq;
-
 			freqs.old = policy->cur;
 			freqs.flags = 0;
 
-			if (i == prev_boost_core[node_id]) {
-				freqs.new = max_f;
-			} else {
-				freqs.new = max_f * (ls_upper_index - RESERVED_FREQ) / 8;
-			}
+			index = find_freq_index(ls3a4000_boost_table, policy->cur);
+
+			freqs.new = ls3a4000_normal_table[index].frequency;
 
 			cpufreq_freq_transition_begin(policy, &freqs);
 		}
 
-		dbs_info = &per_cpu(boost_cpu_dbs_info, prev_boost_core[node_id]);
-		dbs_info->freq_lo = 0;
-		policy = dbs_info->cdbs.cur_policy;
-		min_f = policy->cpuinfo.min_freq;
-		max_f = policy->cpuinfo.max_freq;
+		retval = ls3a4000_set_boost(NORMAL_MODE, 0);
 
-		freq_to_index(policy, max_f, CPUFREQ_RELATION_C, &index);
-		retval = ls3a4000_set_boost(NORMAL_MODE, policy, index);
-
-		for (i = node_id * cores_per_node;
-			i < (node_id + 1) * cores_per_node; i++) {
+		for (i = package_id * cores_per_package;
+			i < (package_id + 1) * cores_per_package; i++) {
 			dbs_info = &per_cpu(boost_cpu_dbs_info, i);
 			dbs_info->freq_lo = 0;
 			policy = dbs_info->cdbs.cur_policy;
 
-			min_f = policy->cpuinfo.min_freq;
-			max_f = policy->cpuinfo.max_freq;
-
 			freqs.old = policy->cur;
 			freqs.flags = 0;
-			if (i == prev_boost_core[node_id]) {
-				freqs.new = max_f;
-			} else {
-				freqs.new = max_f * (ls_upper_index - RESERVED_FREQ) / 8;
-			}
+
+			index = find_freq_index(ls3a4000_boost_table, policy->cur);
+
+			freqs.new = ls3a4000_normal_table[index].frequency;
 
 			cpufreq_freq_transition_end(policy, &freqs, retval);
 		}
 
-		prev_boost_core[node_id] = 0xffff;
+		real_boosted_core_num[package_id] = 0;
+		for (i = 0; i < cores_per_package; i++) {
+			real_boosted_cores[package_id][i] = 0;
+			prev_boosted_cores[package_id][i] = 0;
+		}
 	}
 
 	/* normal to boost */
-	if (prev_boost[node_id] == 0 && curr_boost == 1) {
-		for (i = node_id * cores_per_node;
-				i < (node_id + 1) * cores_per_node; i++) {
+	if (prev_boost[package_id] == 0 && curr_boost == 1) {
+		for (i = package_id * cores_per_package;
+				i < (package_id + 1) * cores_per_package; i++) {
 			dbs_info = &per_cpu(boost_cpu_dbs_info, i);
 			dbs_info->freq_lo = 0;
 			policy = dbs_info->cdbs.cur_policy;
 
-			min_f = policy->cpuinfo.min_freq;
+			min_f = policy->cpuinfo.max_freq / FREQ_DIV;
 			max_f = policy->cpuinfo.max_freq;
 
 			freqs.old = policy->cur;
 			freqs.flags = 0;
 
-			if (high_load_cores[i]) {
+			boost_level = (unsigned int) (freq_to_freq_level(max_f) & 0xf);
+
+			/* boost the last core first */
+			if (high_load_cores[i % cores_per_package]) {
 				freqs.new = max_f;
+				real_boosted_cores[package_id][i]  = 1;
+				real_boosted_core_num[package_id]++;
+
+				freq_level = freq_level | (boost_level << ((i % cores_per_package) * 4));
 			} else {
-				freqs.new = max_f * (ls_upper_index - RESERVED_FREQ) / 8;
+				freqs.new = max_f * (ls_upper_index - RESERVED_FREQ) / FREQ_DIV;
+				freq_level = freq_level | (ls_upper_index << ((i % cores_per_package) * 4));
 			}
 
 			pr_debug("%s: cpu: %d, oldfreq: %u, new freq: %u\n",
@@ -429,29 +315,24 @@ static void boost_check_cpu(int cpu, unsigned int load)
 			cpufreq_freq_transition_begin(policy, &freqs);
 		}
 
-		/* boost the full load core */
-		dbs_info = &per_cpu(boost_cpu_dbs_info, curr_boost_core);
-		dbs_info->freq_lo = 0;
-		policy = dbs_info->cdbs.cur_policy;
+		retval = ls3a4000_set_boost(BOOST_MODE, freq_level);
 
-		retval = ls3a4000_set_boost(BOOST_MODE, policy, ls_upper_index);
-
-		for (i = node_id * cores_per_node;
-				i < (node_id + 1) * cores_per_node; i++) {
+		for (i = package_id * cores_per_package;
+				i < (package_id + 1) * cores_per_package; i++) {
 			dbs_info = &per_cpu(boost_cpu_dbs_info, i);
 			dbs_info->freq_lo = 0;
 			policy = dbs_info->cdbs.cur_policy;
 
-			min_f = policy->cpuinfo.min_freq;
+			min_f = policy->cpuinfo.max_freq / FREQ_DIV;
 			max_f = policy->cpuinfo.max_freq;
 
 			freqs.old = policy->cur;
 			freqs.flags = 0;
 
-			if (high_load_cores[i]) {
+			if (high_load_cores[i % cores_per_package]) {
 				freqs.new = max_f;
 			} else {
-				freqs.new = max_f * (ls_upper_index - RESERVED_FREQ) / 8;
+				freqs.new = max_f * (ls_upper_index - RESERVED_FREQ) / FREQ_DIV;
 			}
 
 			pr_debug("%s: cpu: %d, oldfreq: %u, new freq: %u\n",
@@ -459,18 +340,20 @@ static void boost_check_cpu(int cpu, unsigned int load)
 			cpufreq_freq_transition_end(policy, &freqs, retval);
 		}
 
-		prev_boost_core[node_id] = curr_boost_core;
+		for (i = 0; i < cores_per_package; i++) {
+			prev_boosted_cores[package_id][i] = real_boosted_cores[package_id][i];
+		}
 	}
 
 	/* normal mode */
-	if (prev_boost[node_id] == 0 && curr_boost == 0) {
+	if (prev_boost[package_id] == 0 && curr_boost == 0) {
 		dbs_info = &per_cpu(boost_cpu_dbs_info, cpu);
 		dbs_info->freq_lo = 0;
 		policy = dbs_info->cdbs.cur_policy;
 		dbs_data = policy->governor_data;
 		cdbs = dbs_data->cdata->get_cpu_cdbs(cpu);
 
-		min_f = policy->cpuinfo.min_freq;
+		min_f = policy->cpuinfo.max_freq / FREQ_DIV;
 		max_f = policy->cpuinfo.max_freq;
 
 		freq_next = min_f + load * (max_f - min_f) / 100;
@@ -478,132 +361,80 @@ static void boost_check_cpu(int cpu, unsigned int load)
 	}
 
 	/* boost mode */
-	if (prev_boost[node_id] == 1 && curr_boost == 1) {
-		if (prev_boost_core[node_id] == curr_boost_core && curr_boost_core != cpu) {
-			dbs_info = &per_cpu(boost_cpu_dbs_info, cpu);
-			dbs_info->freq_lo = 0;
-			policy = dbs_info->cdbs.cur_policy;
+	if (prev_boost[package_id] == 1 && curr_boost == 1) {
+		dbs_info = &per_cpu(boost_cpu_dbs_info, cpu);
+		dbs_info->freq_lo = 0;
+		policy = dbs_info->cdbs.cur_policy;
+		dbs_data = policy->governor_data;
+		cdbs = dbs_data->cdata->get_cpu_cdbs(cpu);
 
-			min_f = policy->cpuinfo.min_freq;
-			max_f = policy->cpuinfo.max_freq;
+		min_f = policy->cpuinfo.max_freq / FREQ_DIV;
+		max_f = policy->cpuinfo.max_freq;
 
+		if (real_boosted_core_num[package_id] < boosted_core_num) {
+			if (prev_boosted_cores[package_id][cpu_offset] == 0
+					&& high_load_cores[cpu_offset] == 1) {
 
-			freq_next = min_f + load * (max_f - min_f) / 100;
-			freq_next = (freq_next > max_f * (ls_upper_index - RESERVED_FREQ) / 8)
-					? max_f * (ls_upper_index - RESERVED_FREQ) / 8 : freq_next;
+				__cpufreq_driver_target(policy, max_f, CPUFREQ_RELATION_C);
+				real_boosted_cores[package_id][cpu_offset] = 1;
+				real_boosted_core_num[package_id]++;
 
-			freqs.old = policy->cur;
-			freqs.flags = 0;
-			freqs.new = freq_next;
+			}
 
-			cpufreq_freq_transition_begin(policy, &freqs);
-			retval = ls3a4000_freq_scale(policy, freq_next);
-			cpufreq_freq_transition_end(policy, &freqs, retval);
+			if (prev_boosted_cores[package_id][cpu_offset] == 1
+					&& high_load_cores[cpu_offset] == 0) {
+				freq_next = min_f + load * (max_f - min_f) / 100;
+				freq_next = (freq_next > max_f * (ls_upper_index - RESERVED_FREQ) / FREQ_DIV)
+						? max_f * (ls_upper_index - RESERVED_FREQ) / FREQ_DIV : freq_next;
+				__cpufreq_driver_target(policy, freq_next, CPUFREQ_RELATION_C);
+
+				real_boosted_cores[package_id][cpu_offset] = 0;
+				real_boosted_core_num[package_id]--;
+			}
+
+			if (prev_boosted_cores[package_id][cpu_offset] == 0
+					&& high_load_cores[cpu_offset] == 0) {
+				freq_next = min_f + load * (max_f - min_f) / 100;
+				freq_next = (freq_next > max_f * (ls_upper_index - RESERVED_FREQ) / FREQ_DIV)
+						? max_f * (ls_upper_index - RESERVED_FREQ) / FREQ_DIV : freq_next;
+				__cpufreq_driver_target(policy, freq_next, CPUFREQ_RELATION_C);
+			}
+		} else {
+			if (prev_boosted_cores[package_id][cpu_offset] == 1
+					&& high_load_cores[cpu_offset] == 0) {
+				freq_next = min_f + load * (max_f - min_f) / 100;
+				freq_next = (freq_next > max_f * (ls_upper_index - RESERVED_FREQ) / FREQ_DIV)
+						? max_f * (ls_upper_index - RESERVED_FREQ) / FREQ_DIV : freq_next;
+				__cpufreq_driver_target(policy, freq_next, CPUFREQ_RELATION_C);
+
+				real_boosted_cores[package_id][cpu_offset] = 0;
+				real_boosted_core_num[package_id]--;
+			}
+
+			if (prev_boosted_cores[package_id][cpu_offset] == 0
+					&& high_load_cores[cpu_offset] == 0) {
+				freq_next = min_f + load * (max_f - min_f) / 100;
+				freq_next = (freq_next > max_f * (ls_upper_index - RESERVED_FREQ) / FREQ_DIV)
+						? max_f * (ls_upper_index - RESERVED_FREQ) / FREQ_DIV : freq_next;
+				__cpufreq_driver_target(policy, freq_next, CPUFREQ_RELATION_C);
+			}
+
+			if (prev_boosted_cores[package_id][cpu_offset] == 0
+					&& high_load_cores[cpu_offset] == 1) {
+				freq_next = min_f + load * (max_f - min_f) / 100;
+				freq_next = (freq_next > max_f * (ls_upper_index - RESERVED_FREQ) / FREQ_DIV)
+						? max_f * (ls_upper_index - RESERVED_FREQ) / FREQ_DIV : freq_next;
+				__cpufreq_driver_target(policy, freq_next, CPUFREQ_RELATION_C);
+			}
 		}
 
-		if (prev_boost_core[node_id] != curr_boost_core && curr_boost_core != cpu) {
-			dbs_info = &per_cpu(boost_cpu_dbs_info, prev_boost_core[node_id]);
-			dbs_info->freq_lo = 0;
-			policy = dbs_info->cdbs.cur_policy;
-			dbs_data = policy->governor_data;
-			cdbs = dbs_data->cdata->get_cpu_cdbs(prev_boost_core[node_id]);
-
-			min_f = policy->cpuinfo.min_freq;
-			max_f = policy->cpuinfo.max_freq;
-
-			freq_next = min_f + cdbs->prev_load * (max_f - min_f) / 100;
-			freq_next = (freq_next > max_f * (ls_upper_index - RESERVED_FREQ) / 8)
-					? max_f * (ls_upper_index - RESERVED_FREQ) / 8 : freq_next;
-
-			freqs.old = policy->cur;
-			freqs.flags = 0;
-			freqs.new = freq_next;
-
-			cpufreq_freq_transition_begin(policy, &freqs);
-			retval = ls3a4000_freq_scale(policy, freq_next);
-			cpufreq_freq_transition_end(policy, &freqs, retval);
-
-
-			dbs_info = &per_cpu(boost_cpu_dbs_info, curr_boost_core);
-			dbs_info->freq_lo = 0;
-			policy = dbs_info->cdbs.cur_policy;
-
-			min_f = policy->cpuinfo.min_freq;
-			max_f = policy->cpuinfo.max_freq;
-
-			freqs.old = policy->cur;
-			freqs.flags = 0;
-			freqs.new = max_f;
-
-			cpufreq_freq_transition_begin(policy, &freqs);
-			retval = ls3a4000_freq_scale(policy, max_f);
-			cpufreq_freq_transition_end(policy, &freqs, retval);
-
-
-			dbs_info = &per_cpu(boost_cpu_dbs_info, cpu);
-			dbs_info->freq_lo = 0;
-			policy = dbs_info->cdbs.cur_policy;
-
-			min_f = policy->cpuinfo.min_freq;
-			max_f = policy->cpuinfo.max_freq;
-
-			freq_next = min_f + load * (max_f - min_f) / 100;
-			freq_next = (freq_next > max_f * (ls_upper_index - RESERVED_FREQ) / 8)
-					? max_f * (ls_upper_index - RESERVED_FREQ) / 8 : freq_next;
-
-			freqs.old = policy->cur;
-			freqs.flags = 0;
-			freqs.new = freq_next;
-
-			cpufreq_freq_transition_begin(policy, &freqs);
-			retval = ls3a4000_freq_scale(policy, freq_next);
-			cpufreq_freq_transition_end(policy, &freqs, retval);
+		for (i = 0; i < cores_per_package; i++) {
+			prev_boosted_cores[package_id][i] = real_boosted_cores[package_id][i];
 		}
-
-		if (prev_boost_core[node_id] != curr_boost_core && curr_boost_core == cpu) {
-			dbs_info = &per_cpu(boost_cpu_dbs_info, prev_boost_core[node_id]);
-			dbs_info->freq_lo = 0;
-			policy = dbs_info->cdbs.cur_policy;
-			dbs_data = policy->governor_data;
-			cdbs = dbs_data->cdata->get_cpu_cdbs(prev_boost_core[node_id]);
-
-			min_f = policy->cpuinfo.min_freq;
-			max_f = policy->cpuinfo.max_freq;
-
-			freq_next = min_f + cdbs->prev_load * (max_f - min_f) / 100;
-			freq_next = (freq_next > max_f * (ls_upper_index - RESERVED_FREQ) / 8)
-					? max_f * (ls_upper_index - RESERVED_FREQ) / 8 : freq_next;
-
-			freqs.old = policy->cur;
-			freqs.flags = 0;
-			freqs.new = freq_next;
-
-			cpufreq_freq_transition_begin(policy, &freqs);
-			retval = ls3a4000_freq_scale(policy, freq_next);
-			cpufreq_freq_transition_end(policy, &freqs, retval);
-
-
-			dbs_info = &per_cpu(boost_cpu_dbs_info, cpu);
-			dbs_info->freq_lo = 0;
-			policy = dbs_info->cdbs.cur_policy;
-
-			min_f = policy->cpuinfo.min_freq;
-			max_f = policy->cpuinfo.max_freq;
-
-			freqs.old = policy->cur;
-			freqs.flags = 0;
-			freqs.new = max_f;
-
-			cpufreq_freq_transition_begin(policy, &freqs);
-			retval = ls3a4000_freq_scale(policy, max_f);
-			cpufreq_freq_transition_end(policy, &freqs, retval);
-		}
-
-		prev_boost_core[node_id] = curr_boost_core;
 	}
 
-	prev_boost[node_id] = curr_boost;
-	mutex_unlock(&boost_mutex[node_id]);
+	prev_boost[package_id] = curr_boost;
+	mutex_unlock(&boost_mutex[package_id]);
 }
 
 static void check_cpu(struct dbs_data *dbs_data, int cpu)
@@ -1029,21 +860,26 @@ static int boost_init(struct dbs_data *dbs_data)
 
 static void boost_exit(struct dbs_data *dbs_data)
 {
-	struct cpufreq_policy* policy;
+	struct od_cpu_dbs_info_s *dbs_info;
+	struct cpufreq_policy *policy;
 	int i;
-	int node_id;
 
 	ls3a4000_freq_table_switch(ls3a4000_normal_table);
 
 	for (i = 0; i < nr_cpu_ids; i++) {
-		policy = cpufreq_cpu_get(i);
-		if (policy && strcmp(policy->governor->name, "loongson_boost") == 0) {
-			node_id = cpu_data[i].package;
-			cpufreq_table_validate_and_show(policy, &ls3a4000_normal_table[0]);
-			prev_boost[node_id] = 0;
-			prev_boost_core[node_id] = 0xffff;
-		}
-		cpufreq_cpu_put(policy);
+		dbs_info = &per_cpu(boost_cpu_dbs_info, i);
+		policy = dbs_info->cdbs.cur_policy;
+
+		cpufreq_table_validate_and_show(policy, &ls3a4000_normal_table[0]);
+		load_record[i / MAX_PACKAGES][i % MAX_PACKAGES] = 0;
+		prev_boosted_cores[i / MAX_PACKAGES][i % MAX_PACKAGES] = 0;
+		real_boosted_cores[i / MAX_PACKAGES][i % MAX_PACKAGES] = 0;
+	}
+
+
+	for (i = 0; i < MAX_PACKAGES; i++) {
+		curr_boost_core_num[i] = 0;
+		real_boosted_core_num[i] = 0;
 	}
 
 	kfree(dbs_data->tuners);
@@ -1300,7 +1136,6 @@ static int __init cpufreq_gov_dbs_init(void)
 
 static void __exit cpufreq_gov_dbs_exit(void)
 {
-
 	struct od_cpu_dbs_info_s *dbs_info;
 	struct cpufreq_policy *policy;
 	int i;
@@ -1312,12 +1147,14 @@ static void __exit cpufreq_gov_dbs_exit(void)
 		policy = dbs_info->cdbs.cur_policy;
 
 		cpufreq_table_validate_and_show(policy, ls3a4000_normal_table);
-		load_record[i] = 0;
+		load_record[i / MAX_PACKAGES][i % MAX_PACKAGES] = 0;
+		prev_boosted_cores[i / MAX_PACKAGES][i % MAX_PACKAGES] = 0;
+		real_boosted_cores[i / MAX_PACKAGES][i % MAX_PACKAGES] = 0;
 	}
 
 	for (i = 0; i < MAX_PACKAGES; i++) {
-		prev_boost[i] = 0;
-		prev_boost_core[i] = 0xffff;
+		curr_boost_core_num[i] = 0;
+		real_boosted_core_num[i] = 0;
 	}
 
 	cpufreq_unregister_governor(&cpufreq_gov_loongson_boost);
