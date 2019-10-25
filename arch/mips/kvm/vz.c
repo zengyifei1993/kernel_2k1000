@@ -1640,40 +1640,11 @@ static enum emulation_result kvm_vz_gpsi_cop0(union mips_instruction inst,
 				}
 				if (val & 0x1000) {
 					/* flush VTLB */
-					uint32_t gIndex = read_gc0_index();
-					unsigned int guestctl1;
-
-					guestctl1 = read_c0_guestctl1();
-					guestctl1 = (guestctl1 & ~MIPS_GCTL1_RID) |
-						((guestctl1 & MIPS_GCTL1_ID) >> MIPS_GCTL1_ID_SHIFT)
-									     << MIPS_GCTL1_RID_SHIFT;
-					write_c0_guestctl1(guestctl1);
-					write_gc0_index(0);
-					guest_tlbinvf();
-					write_gc0_index(gIndex);
-					clear_c0_guestctl1(MIPS_GCTL1_RID);
-					change_c0_diag(LOONGSON_DIAG_ITLB, LOONGSON_DIAG_ITLB);
+					kvm_loongson_clear_guest_vtlb();
 				}
 				if (val & 0x2000) {
 					/* flush FTLB */
-					uint32_t gIndex = read_gc0_index();
-					uint32_t i;
-					unsigned int guestctl1;
-					guestctl1 = read_c0_guestctl1();
-					guestctl1 = (guestctl1 & ~MIPS_GCTL1_RID) |
-						((guestctl1 & MIPS_GCTL1_ID) >> MIPS_GCTL1_ID_SHIFT)
-									     << MIPS_GCTL1_RID_SHIFT;
-					write_c0_guestctl1(guestctl1);
-					for (i=current_cpu_data.tlbsizevtlb;
-					     i < (current_cpu_data.tlbsizevtlb +
-						     current_cpu_data.tlbsizeftlbsets);
-					     i++) {
-						write_gc0_index(i);
-						guest_tlbinvf();
-					}
-					write_gc0_index(gIndex);
-					clear_c0_guestctl1(MIPS_GCTL1_RID);
-					change_c0_diag(LOONGSON_DIAG_ITLB, LOONGSON_DIAG_ITLB);
+					kvm_loongson_clear_guest_ftlb();
 				}
 				local_irq_restore(flags);
 			} else {

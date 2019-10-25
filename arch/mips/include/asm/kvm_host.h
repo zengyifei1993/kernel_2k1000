@@ -1096,6 +1096,8 @@ void kvm_vz_save_guesttlb(struct kvm_mips_tlb *buf, unsigned int index,
 			  unsigned int count);
 void kvm_vz_load_guesttlb(const struct kvm_mips_tlb *buf, unsigned int index,
 			  unsigned int count);
+void kvm_loongson_clear_guest_ftlb(void);
+void kvm_loongson_clear_guest_vtlb(void);
 #endif
 
 void kvm_mips_suspend_mm(int cpu);
