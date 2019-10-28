@@ -16,6 +16,7 @@
 
 #include <loongson.h>
 #include <cs5536/cs5536_mfgpt.h>
+#include <loongson-pch.h>
 
 
 #if defined(CONFIG_LOONGSON3_ENHANCEMENT) && !defined(CONFIG_KVM_GUEST_LS3A3000)
@@ -104,6 +105,9 @@ void __init plat_time_init(void)
 
 void read_persistent_clock(struct timespec *ts)
 {
-	ts->tv_sec = mc146818_get_cmos_time();
+	if (loongson_pch->board_type == LS7A)
+		ts->tv_sec = loongson_ls7a_get_rtc_time();
+	else if (loongson_pch->board_type == RS780E)
+		ts->tv_sec = mc146818_get_cmos_time();
 	ts->tv_nsec = 0;
 }
