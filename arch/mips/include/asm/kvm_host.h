@@ -271,9 +271,7 @@ struct kvm_arch {
 	unsigned char online_vcpus;
 	unsigned char is_migrate;
 	s64 nodecounter_offset;
-	u64 nodecounter_value;
 	s64 stablecounter_gftoffset;
-	s64 stablecounter_offset_old;
 	u32 node_shift;
 	u32 use_stable_timer;
 	u32 cpucfg_lasx;

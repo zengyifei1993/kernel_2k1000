@@ -1310,9 +1310,7 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 			} else if(vcpu->arch.gprs[rs] == 0x408) {
 				/* dread node counter */
 				++vcpu->stat.lsvz_rdcsr_node_counter_exits;
-				vcpu->arch.gprs[rd] = dread_csr(LOONGSON_CSR_NODE_CONTER);
-				if(vcpu->kvm->arch.nodecounter_offset)
- 					vcpu->arch.gprs[rd] += vcpu->kvm->arch.nodecounter_offset;
+				vcpu->arch.gprs[rd] = dread_csr(LOONGSON_CSR_NODE_CONTER) + vcpu->kvm->arch.nodecounter_offset;
 			} else if((vcpu->arch.gprs[rs] & 0x1f00) == 0x1800) {
 				/*ext ioi mode for 7A */
 				offset = ((vcpu->arch.gprs[rs] & 0xffff) - 0x1800)/0x8;
@@ -2766,15 +2764,11 @@ static int kvm_vz_get_one_reg(struct kvm_vcpu *vcpu,
 		else
 			*v = vcpu->arch.count_hz;
 		break;
-	case KVM_REG_MIPS_OFFSET:
-		if(vcpu->kvm->arch.use_stable_timer)
-			*v = (signed long)dread_csr(0xfffffff8);
-		break;
 	case KVM_REG_MIPS_COUNTER:
 		if(vcpu->kvm->arch.use_stable_timer){
-			*v = drdtime();
+			*v = drdtime() + (signed long)dread_csr(0xfffffff8);
 		}else
-			*v = dread_csr(LOONGSON_CSR_NODE_CONTER);
+			*v = dread_csr(LOONGSON_CSR_NODE_CONTER) + vcpu->kvm->arch.nodecounter_offset;
 		break;
 	default:
 		return -EINVAL;
@@ -3080,14 +3074,11 @@ static int kvm_vz_set_one_reg(struct kvm_vcpu *vcpu,
 		else
 			ret = kvm_mips_set_count_hz(vcpu, v);
 		break;
-	case KVM_REG_MIPS_OFFSET:
-		vcpu->kvm->arch.stablecounter_offset_old = v;
-		break;
 	case KVM_REG_MIPS_COUNTER:
 		if(v){
 			if(vcpu->kvm->arch.use_stable_timer){
 				local_irq_save(flags);
-				vcpu->kvm->arch.stablecounter_gftoffset = (signed long)(vcpu->kvm->arch.stablecounter_offset_old + (v - drdtime()));
+				vcpu->kvm->arch.stablecounter_gftoffset = (signed long)(v - drdtime());
 				dwrite_csr(0xfffffff8, (unsigned long)vcpu->kvm->arch.stablecounter_gftoffset);
 				local_irq_restore(flags);
 			} else

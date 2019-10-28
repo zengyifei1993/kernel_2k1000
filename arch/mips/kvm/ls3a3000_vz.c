@@ -1675,6 +1675,7 @@ static inline unsigned long entrylo_user_to_kvm(s64 v)
 }
 #endif
 
+extern cycle_t node_counter_read(void);
 static int kvm_vz_get_one_reg(struct kvm_vcpu *vcpu,
 			      const struct kvm_one_reg *reg,
 			      s64 *v)
@@ -1843,10 +1844,8 @@ static int kvm_vz_get_one_reg(struct kvm_vcpu *vcpu,
 	case KVM_REG_MIPS_COUNT_HZ:
 		*v = vcpu->arch.count_hz;
 		break;
-	case KVM_REG_MIPS_OFFSET:
-		break;
 	case KVM_REG_MIPS_COUNTER:
-		*v = vcpu->kvm->arch.nodecounter_value;
+		*v = node_counter_read() +  vcpu->kvm->arch.nodecounter_offset;
 		break;
 	default:
 		return -EINVAL;
@@ -1854,7 +1853,6 @@ static int kvm_vz_get_one_reg(struct kvm_vcpu *vcpu,
 	return ret;
 }
 
-extern cycle_t node_counter_read_for_guest(void);
 static int kvm_vz_set_one_reg(struct kvm_vcpu *vcpu,
 			      const struct kvm_one_reg *reg,
 			      s64 v)
@@ -2071,12 +2069,9 @@ static int kvm_vz_set_one_reg(struct kvm_vcpu *vcpu,
 	case KVM_REG_MIPS_COUNT_HZ:
 		ret = kvm_mips_set_count_hz(vcpu, v);
 		break;
-	case KVM_REG_MIPS_OFFSET:
-		break;
 	case KVM_REG_MIPS_COUNTER:
-		vcpu->kvm->arch.nodecounter_value = v;
 		if(v)
-			vcpu->kvm->arch.nodecounter_offset = v - node_counter_read_for_guest();
+			vcpu->kvm->arch.nodecounter_offset = v - node_counter_read();
 		break;
 	default:
 		return -EINVAL;
