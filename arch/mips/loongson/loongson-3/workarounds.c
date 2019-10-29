@@ -259,10 +259,20 @@ void loongson3_arch_func_optimize(unsigned int cpu_type)
  * for 3A1000 synci will lead to crash, so use the sync intead of synci
  * in the vmlinux range
  */
+extern void *ls_memcpy_pt;
+struct instr_patch {
+	unsigned long instrp;
+	int offset;
+	unsigned int reserved;
+};
+
 asmlinkage void loongson3_inst_fixup(void)
 {
-	unsigned int cpu_type = read_c0_prid() & 0xF;
+	unsigned int cpu_type, prid;
+	unsigned int val;
 
+	prid = read_c0_prid();
+	cpu_type = prid & 0xF;
 	/* GS464 do not support synci, and sync is just enough for GS464. */
 	if (cpu_type == PRID_REV_LOONGSON3A_R1) {
 		unsigned int *inst_ptr = (unsigned int *)&_text;
@@ -283,4 +293,23 @@ asmlinkage void loongson3_inst_fixup(void)
 #ifndef CONFIG_KVM_GUEST_LS3A3000
 	loongson3_arch_func_optimize(cpu_type);
 #endif
+	if ((prid & PRID_COMP_MASK) != PRID_COMP_LOONGSON)
+		return;
+
+	if (((prid & PRID_IMP_MASK) == PRID_IMP_LOONGSON2) ||
+		 ((prid & PRID_IMP_MASK) == PRID_IMP_LOONGSON2K))
+		return;
+
+	/* for 3A4000 and later system */
+	val = read_cfg(LOONGSON_CPUCFG_CONFIG_FIELD1);
+	if ((val & MIPS_LSE_MUALP) && (val & MIPS_LSE_KMUALEN)) {
+		struct instr_patch *patch;
+		unsigned int *instr;
+
+		patch = (struct instr_patch *)&ls_memcpy_pt;
+		instr =  (unsigned int *)patch->instrp;
+		*instr = *instr +  (patch->offset >> 2);
+	}
+
+	asm volatile ("\tsynci 0($0)\n"::);
 }
