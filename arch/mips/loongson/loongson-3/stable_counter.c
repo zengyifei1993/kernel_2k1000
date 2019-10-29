@@ -75,8 +75,7 @@ static void stable_set_mode(enum clock_event_mode mode,
 		printk(KERN_INFO "set stable clock event to periodic mode!\n");
 		cfg = dread_csr(STABLE_TIMER_CFG);
 		cfg |= (STABLE_TIMER_PERIODIC_EN | STABLE_TIMER_EN);
-		period_init = calc_const_freq();
-		period_init = (period_init * 1000) / HZ;
+		period_init = calc_const_freq() / HZ;
 		dwrite_csr(STABLE_TIMER_CFG, cfg | period_init);
 		break;
 	case CLOCK_EVT_MODE_ONESHOT:
