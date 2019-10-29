@@ -73,3 +73,9 @@ EXPORT_SYMBOL(__kvm_restore_lasx_upper);
 extern void __kvm_restore_lasx_uppest(struct kvm_vcpu_arch *vcpu);
 EXPORT_SYMBOL(__kvm_restore_lasx_uppest);
 #endif
+#ifdef CONFIG_MIPS_HUGE_TLB_SUPPORT
+extern int pmd_huge(pmd_t pmd);
+EXPORT_SYMBOL(pmd_huge);
+extern int pud_huge(pud_t pud);
+EXPORT_SYMBOL(pud_huge);
+#endif

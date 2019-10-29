@@ -240,6 +240,11 @@ struct kvm_vcpu_stat {
 	u64 lsvz_dwrcsr_exits;
 	u64 lsvz_cpucfg_exits;
 	u64 lsvz_stable_counter_exits;
+	u64 lsvz_huge_dec_exits;
+	u64 lsvz_huge_thp_exits;
+	u64 lsvz_huge_adjust_exits;
+	u64 lsvz_huge_set_exits;
+	u64 lsvz_huge_merge_exits;
 #endif
 	u64 halt_successful_poll;
 	u64 halt_attempted_poll;

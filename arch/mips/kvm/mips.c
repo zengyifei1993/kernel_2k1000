@@ -114,6 +114,11 @@ struct kvm_stats_debugfs_item debugfs_entries[] = {
 	{ "lsvz_dwrcsr",  VCPU_STAT(lsvz_dwrcsr_exits),  KVM_STAT_VCPU },
 	{ "lsvz_cpucfg",  VCPU_STAT(lsvz_cpucfg_exits),  KVM_STAT_VCPU },
 	{ "lsvz_stable_counter",  VCPU_STAT(lsvz_stable_counter_exits),  KVM_STAT_VCPU },
+	{ "lsvz_huge_dec",  VCPU_STAT(lsvz_huge_dec_exits),  KVM_STAT_VCPU },
+	{ "lsvz_huge_thp",  VCPU_STAT(lsvz_huge_thp_exits),  KVM_STAT_VCPU },
+	{ "lsvz_huge_adj",  VCPU_STAT(lsvz_huge_adjust_exits),  KVM_STAT_VCPU },
+	{ "lsvz_huge_set",  VCPU_STAT(lsvz_huge_set_exits),  KVM_STAT_VCPU },
+	{ "lsvz_huge_merg",  VCPU_STAT(lsvz_huge_merge_exits),  KVM_STAT_VCPU },
 #endif
 	{ "halt_successful_poll", VCPU_STAT(halt_successful_poll), KVM_STAT_VCPU },
 	{ "halt_attempted_poll", VCPU_STAT(halt_attempted_poll), KVM_STAT_VCPU },
