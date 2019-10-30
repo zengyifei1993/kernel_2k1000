@@ -344,9 +344,7 @@ static void ack_lpc_irq(struct irq_data *d)
 	unsigned long flags;
 
 	spin_lock_irqsave(&lpc_irq_lock, flags);
-
-	ls2h_writel(0x1 << (d->irq), LS_LPC_INT_CLR);
-
+	*(volatile unsigned int *)TO_UNCAC(LS_LPC_INT_CLR) = (0x1 << (d->irq));
 	spin_unlock_irqrestore(&lpc_irq_lock, flags);
 }
 
@@ -355,9 +353,7 @@ static void mask_lpc_irq(struct irq_data *d)
 	unsigned long flags;
 
 	spin_lock_irqsave(&lpc_irq_lock, flags);
-
-	ls2h_writel(ls2h_readl(LS_LPC_INT_ENA) & ~(0x1 << (d->irq)), LS_LPC_INT_ENA);
-
+	*(volatile unsigned int *)TO_UNCAC(LS_LPC_INT_ENA) &= (~(0x1 << (d->irq)));
 	spin_unlock_irqrestore(&lpc_irq_lock, flags);
 }
 
@@ -370,9 +366,7 @@ static void unmask_lpc_irq(struct irq_data *d)
 	unsigned long flags;
 
 	spin_lock_irqsave(&lpc_irq_lock, flags);
-
-	ls2h_writel(ls2h_readl(LS_LPC_INT_ENA) | (0x1 << (d->irq)), LS_LPC_INT_ENA);
-
+	*(volatile unsigned int *)TO_UNCAC(LS_LPC_INT_ENA) |= (0x1 << (d->irq));
 	spin_unlock_irqrestore(&lpc_irq_lock, flags);
 }
 
@@ -392,7 +386,8 @@ static irqreturn_t lpc_irq_handler(int irq, void *data)
 	int irqs;
 	int lpc_irq;
 
-	irqs = ls2h_readl(LS_LPC_INT_ENA) & ls2h_readl(LS_LPC_INT_STS);
+	irqs = *(volatile unsigned int *)TO_UNCAC(LS_LPC_INT_ENA);
+	irqs &= *(volatile unsigned int *)TO_UNCAC(LS_LPC_INT_STS);
 	if (irqs)
 		while ((lpc_irq = ffs(irqs))) {
 			do_IRQ(lpc_irq - 1);
@@ -407,48 +402,50 @@ static struct irqaction lpc_irq = {
 	.name = "lpc",
 };
 
-static int find_lpc(void)
+extern struct system_loongson *esys;
+static void register_lpc_irqs(void)
 {
-	static int has_lpc = -1;
-	struct device_node *np;
-	if(has_lpc == -1)
-	{
-		has_lpc = 0;
-		np = of_find_compatible_node(NULL, NULL, "simple-bus");
-		if (np) {
-
-			if (of_property_read_bool(np, "enable-lpc-irq")) {
-				has_lpc = 1;
-			}
-
-			of_node_put(np);
-		}
-	}
-	return has_lpc;
-}
-
-static int ls7a_lpc_init(void)
-{
-	int i;
-
-	if(!find_lpc())
-		return 0;
-
+	int i = 0;
 	setup_irq(LS7A_IOAPIC_LPC_IRQ, &lpc_irq);
 	/* added for KBC attached on LPC controler */
 	for(i = 0; i < 16; i++)
 		irq_set_chip_and_handler(i, &lpc_irq_chip, handle_level_irq);
+
 	/* Enable the LPC interrupt, bit31: en  bit30: edge */
-	ls2h_writel(0x80000000, LS_LPC_INT_CTL);
+	*(volatile unsigned int *)TO_UNCAC(LS_LPC_INT_CTL) = 0x80000000;
 
-	/*lpc pole high*/
-	ls2h_writel(-1, LS_LPC_INT_POL);
-
-	ls2h_writel(0, LS_LPC_INT_ENA);
+	*(volatile unsigned int *)TO_UNCAC(LS_LPC_INT_ENA) = 0;
 
 	/* clear all 18-bit interrpt bit */
-	ls2h_writel(0x3ffff, LS_LPC_INT_CLR);
-	return 0;
+	*(volatile unsigned int *)TO_UNCAC(LS_LPC_INT_CLR) = 0x3ffff;
+}
+
+static bool fw_support_fdt(void)
+{
+	return !!(esys && esys->vers >= 2 && esys->of_dtb_addr);
+}
+
+static void ls7a_lpc_init(void)
+{
+	struct device_node *np;
+
+	if (fw_support_fdt()) {
+		np = of_find_compatible_node(NULL, NULL, "simple-bus");
+		if (np) {
+			if (of_property_read_bool(np, "enable-lpc-irq")) {
+				if (of_property_read_bool(np, "lpc-irq-low")) {
+					*(volatile unsigned int *)TO_UNCAC(LS_LPC_INT_POL) = 0;
+				} else {
+					*(volatile unsigned int *)TO_UNCAC(LS_LPC_INT_POL) = -1;
+				}
+
+				register_lpc_irqs();
+			}
+		}
+		
+	} else {
+		register_lpc_irqs();
+	}
 }
 
 void __init ls7a_init_irq(void)
@@ -599,22 +596,22 @@ static void loongson3_comp_iopic_resume(void)
 
 static int loongson3_lpc_suspend(void)
 {
-	lpc_saved_reg.ctl_reg0 = *(volatile unsigned int *)TO_UNCAC(LS_LPC_CFG0_REG);
-	lpc_saved_reg.ctl_reg1 =  *(volatile unsigned int *)TO_UNCAC(LS_LPC_CFG1_REG);
-	lpc_saved_reg.inter_sts = *(volatile unsigned int *)TO_UNCAC(LS_LPC_CFG2_REG);
-	lpc_saved_reg.inter_clr = *(volatile unsigned int *)TO_UNCAC(LS_LPC_CFG3_REG);
-	lpc_saved_reg.inter_pol = *(volatile unsigned int *)TO_UNCAC(LS_LPC_CFG4_REG);
+	lpc_saved_reg.ctl_reg0 = *(volatile unsigned int *)TO_UNCAC(LS_LPC_INT_CTL);
+	lpc_saved_reg.ctl_reg1 =  *(volatile unsigned int *)TO_UNCAC(LS_LPC_INT_ENA);
+	lpc_saved_reg.inter_sts = *(volatile unsigned int *)TO_UNCAC(LS_LPC_INT_STS);
+	lpc_saved_reg.inter_clr = *(volatile unsigned int *)TO_UNCAC(LS_LPC_INT_CLR);
+	lpc_saved_reg.inter_pol = *(volatile unsigned int *)TO_UNCAC(LS_LPC_INT_POL);
 
 	return 0;
 }
 
 static void loongson3_lpc_resume(void)
 {
-	 *(volatile unsigned int *)TO_UNCAC(LS_LPC_CFG0_REG) = lpc_saved_reg.ctl_reg0;
-	 *(volatile unsigned int *)TO_UNCAC(LS_LPC_CFG1_REG) = lpc_saved_reg.ctl_reg1;
-	 *(volatile unsigned int *)TO_UNCAC(LS_LPC_CFG2_REG) = lpc_saved_reg.inter_sts;
-	 *(volatile unsigned int *)TO_UNCAC(LS_LPC_CFG3_REG) = lpc_saved_reg.inter_clr;
-	 *(volatile unsigned int *)TO_UNCAC(LS_LPC_CFG4_REG) = lpc_saved_reg.inter_pol;
+	 *(volatile unsigned int *)TO_UNCAC(LS_LPC_INT_CTL) = lpc_saved_reg.ctl_reg0;
+	 *(volatile unsigned int *)TO_UNCAC(LS_LPC_INT_ENA) = lpc_saved_reg.ctl_reg1;
+	 *(volatile unsigned int *)TO_UNCAC(LS_LPC_INT_STS) = lpc_saved_reg.inter_sts;
+	 *(volatile unsigned int *)TO_UNCAC(LS_LPC_INT_CLR) = lpc_saved_reg.inter_clr;
+	 *(volatile unsigned int *)TO_UNCAC(LS_LPC_INT_POL) = lpc_saved_reg.inter_pol;
 }
 
 static struct syscore_ops ls7a_comp_syscore_ops = {
