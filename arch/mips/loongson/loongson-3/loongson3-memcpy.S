@@ -152,7 +152,9 @@ EXC(	sd	t3, -8(dst),		.Ls_exc_p8)
 1:	andi	t7, src, 0x7
 	beq	t0, t1, .L_memcpy_16_16
 	 nop
+.L_memcpy_instr_patch:
 	bnez	t7, .L_memcpy_16_4_2_1
+	// bnez	t7, .L_memcpy_16_4_2_1_patch
 
 .L_memcpy_16_8:
 	 SRL	t0, len, 6	# 64B per iteration
@@ -261,6 +263,55 @@ EXC(	SDREST	t1, -1(dst),		.Ls_exc)
 .Ldone:
 	jr	ra
 	 move	len, zero
+
+.L_memcpy_16_4_2_1_patch:
+        SRL     t0, len, 6      # 64B per iteration
+        beqz    t0, .L_memcpy_32
+        and    rem, len, 0x3f
+        .align  4
+1:
+EXCQ(   gslq, t7, t4, (16 * 0)(src),    .Ll_exc)
+EXCQ(   gslq, t3, t2, (16 * 1)(src),    .Ll_exc_copy)
+EXCQ(   gslq, t1, t0, (16 * 2)(src),    .Ll_exc_copy)
+        ADDI    len, -16 * 4
+EXCQ(   gssq, t7, t4, (16 * 0)(dst),    .Ls_exc_p64)
+EXCQ(   gslq, t7, t4, (16 * 3)(src),    .Ll_exc_copy)
+        ADDU    src, 16 * 4
+        ADDU    dst, 16 * 4
+EXCQ(   gssq, t3, t2, (-16 * 3)(dst),   .Ls_exc_p48)
+EXCQ(   gssq, t1, t0, (-16 * 2)(dst),   .Ls_exc_p32)
+EXCQ(   gssq, t7, t4, (-16 * 1)(dst),   .Ls_exc_p16)
+        bne     len, rem, 1b
+        nop
+        beqz    len, .Ldone
+	nop
+
+.L_memcpy_32:
+        SRL     t0, len, 5      # 32B per iteration
+        beqz    t0, 2f
+        and    rem, len, 0x1f
+1:
+EXCQ(   gslq, t7, t4, 0(src), 		.Ll_exc)
+EXCQ(   gslq, t3, t2, 16(src),		.Ll_exc_copy)
+        ADDI    len, -16 * 2
+        ADDU    src, 16 * 2
+EXCQ(   gssq, t7, t4, (16 * 0)(dst),    .Ls_exc_p32)
+EXCQ(   gssq, t3, t2, (16 * 1)(dst),    .Ls_exc_p16)
+        bne     len, rem, 1b
+        ADDU   dst, 16 * 2
+        beqz    len, .Ldone
+2:      and    rem, len, 0xf
+        beq     rem, len, .L_memcpy_less
+         nop
+
+EXCQ(   gslq,  t1, t0, 0(src), 		.Ll_exc)
+        ADDI    len, -16
+        ADDU    src, 16
+EXCQ(   gssq, t1, t0, 0(dst),           .Ls_exc_p16)
+        beqz    len, .Ldone
+        ADDU    dst, 16
+        b .L_memcpy_less
+        nop
 
 .L_memcpy_16_4_2_1:
 	SRL	t0, len, 5	# 32B per iteration
@@ -525,4 +576,12 @@ LEAF(__rmemcpy)					/* a0=dst a1=src a2=len */
 	jr	ra
 	 move	a2, zero
 	END(__rmemcpy)
+
+.data
+.globl ls_memcpy_pt
+.align  4
+ls_memcpy_pt:
+        .dword .L_memcpy_instr_patch
+        .word .L_memcpy_16_4_2_1_patch - .L_memcpy_16_4_2_1
+        .word 0
 #endif

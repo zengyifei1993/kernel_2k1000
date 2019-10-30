@@ -184,6 +184,7 @@ static inline void do_perfcnt_IRQ(void)
 #define LOONGSON_CPU_FREQ_SCALE         (_ULCAST_(1) <<  6)
 #define LOONGSON_CPU_DVFS_V1            (_ULCAST_(1) <<  7)
 
+#define LOONGSON_CPUCFG_CONFIG_FIELD1	0x1
 #define LOONGSON_CPUCFG_CONFIG_FIELD2    0x2
 #define LOONGSON_CPUCFG_CONFIG_FIELD4    0x4
 #define LOONGSON_CPUCFG_CONFIG_FIELD5    0x5
