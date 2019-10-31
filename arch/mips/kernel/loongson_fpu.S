@@ -443,13 +443,44 @@ LEAF(_init_fpu)
 END(_init_fpu)
 
 #ifdef CONFIG_CPU_HAS_MSA
-
-	.macro cfmsa1
-	.word	CFC_MSA_INSN | (1 << 11)
+	.macro	cfmsa1
+	.word	0x787e0059 | (1 << 11)
 	.endm
 
-	.macro ctmsa1
-	.word	CTC_MSA_INSN | (1 << 6)
+	.macro	ctmsa1
+	.word	0x783e0819 | (1 << 6)
+	.endm
+
+	.macro	st_b_off	wd, off
+	.set	push
+	.set	noat
+	.word	0x78000824 | (\wd << 6) | (\off << 16)
+	.set	pop
+	.endm
+
+	.macro	ld_b_off	wd, off
+	.set	push
+	.set	noat
+	.word	0x78000820 | (\wd << 6) | (\off << 16)
+	.set	pop
+	.endm
+
+	.macro	vld_b	wd, off, base
+	.set	push
+	.set	noat
+	SET_HARDFLOAT
+	PTR_ADDU $1, \base, \off
+	.word	0x78000820 | (\wd << 6)
+	.set	pop
+	.endm
+
+	.macro	vst_b	wd, off, base
+	.set	push
+	.set	noat
+	SET_HARDFLOAT
+	PTR_ADDU $1, \base, \off
+	.word	0x78000824 | (\wd << 6)
+	.set	pop
 	.endm
 
 	.macro	vsel_d		patt, ws, wd
@@ -460,19 +491,6 @@ END(_init_fpu)
 	.set	pop
 	.endm
 
-	.macro	st_b_off	wd, off
-	.set	push
-	.set	noat
-	.word	STB_MSA_INSN | (\wd << 6) | (\off << 16)
-	.set	pop
-	.endm
-
-	.macro	ld_b_off	wd, off
-	.set	push
-	.set	noat
-	.word	LDB_MSA_INSN | (\wd << 6) | (\off << 16)
-	.set	pop
-	.endm
 
 	.macro	op_one_wr	op, idx, base
 	.align	4
@@ -549,7 +567,7 @@ LEAF(_save_msa)
 	 * let a0 point to the middle of fpu_union
 	 */
 #ifdef CONFIG_CPU_HAS_LASX
-	st_b	16, THREAD_FPR16, a0
+	vst_b	16, THREAD_FPR16, a0
 	st_b_off	17, (THREAD_FPR1-THREAD_FPR0)
 	st_b_off	18, (THREAD_FPR2-THREAD_FPR0)
 	st_b_off	19, (THREAD_FPR3-THREAD_FPR0)
@@ -633,7 +651,7 @@ LEAF(_restore_msa)
 	lw	$1, THREAD_MSA_CSR(a0)
 	ctmsa1
 #ifdef CONFIG_CPU_HAS_LASX
-	ld_b	16, THREAD_FPR16, a0
+	vld_b	16, THREAD_FPR16, a0
 	ld_b_off	17, (THREAD_FPR1-THREAD_FPR0)
 	ld_b_off	18, (THREAD_FPR2-THREAD_FPR0)
 	ld_b_off	19, (THREAD_FPR3-THREAD_FPR0)
@@ -745,9 +763,6 @@ LEAF(_init_msa_upper)
 	.set	pop
 END(_init_msa_upper)
 
-#endif /* CONFIG_CPU_HAS_MSA */
-
-#ifdef CONFIG_CPU_HAS_LASX
 	.macro	lasx_init_upper	wd
 	.set	push
 	.set	noat
