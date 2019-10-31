@@ -3458,27 +3458,37 @@ static int pidlist_array_load(struct cgroup *cgrp, enum cgroup_filetype type,
 			      struct cgroup_pidlist **lp)
 {
 	pid_t *array;
-	int length;
+	int length = 0;
 	int pid, n = 0; /* used for populating the array */
 	struct cgroup_iter it;
 	struct task_struct *tsk;
 	struct cgroup_pidlist *l;
+	struct cg_cgroup_link *link;
 
 	/*
-	 * If cgroup gets more users after we read count, we won't have
-	 * enough space - tough.  This race is indistinguishable to the
-	 * caller from the case that the additional cgroup users didn't
-	 * show up until sometime later on.
+	 * The first time anyone tries to iterate across a cgroup,
+	 * we need to enable the list linking each css_set to its
+	 * tasks, and fix up all existing tasks.
 	 */
-	length = cgroup_task_count(cgrp);
+	if (!use_task_css_set_links)
+		cgroup_enable_task_cg_lists();
+
+	read_lock(&css_set_lock);
+	list_for_each_entry(link, &cgrp->css_sets, cgrp_link_list) {
+		length += atomic_read(&link->cg->refcount);
+	}
 	array = pidlist_allocate(length);
-	if (!array)
+	if (!array) {
+		read_unlock(&css_set_lock);
 		return -ENOMEM;
-	/* now, populate the array */
-	cgroup_iter_start(cgrp, &it);
+	}
+	it.cg_link = &cgrp->css_sets;
+	cgroup_advance_iter(cgrp, &it);
 	while ((tsk = cgroup_iter_next(cgrp, &it))) {
-		if (unlikely(n == length))
+		if (unlikely(n == length)) {
+			pr_warning("cgroup: sane behavior: cgroup task number is overflow.\n");
 			break;
+		}
 		/* get tgid or pid for procs or tasks file respectively */
 		if (type == CGROUP_FILE_PROCS)
 			pid = task_tgid_vnr(tsk);
