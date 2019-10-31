@@ -29,6 +29,10 @@
 
 #define assert(expr) ((void)0)
 
+/* 64 bit right shift with rounding */
+#define XSPSRS64(v, rs)						\
+	(((rs) >= 64) ? ((v) != 0) : ((v) >> (rs)) | ((v) << (64-(rs)) != 0))
+
 /* 3bit extended single precision sticky right shift */
 #define SPXSRSXn(rs) \
   (xe += rs, \
@@ -36,6 +40,9 @@
 
 #define SPXSRSX1() \
   (xe++, (xm = (xm >> 1) | (xm & 1)))
+
+#define XSPSRS1(m) \
+	((m >> 1) | (m & 1))
 
 #define SPXSRSYn(rs) \
    (ye+=rs, \

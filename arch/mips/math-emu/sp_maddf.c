@@ -1,7 +1,7 @@
 /*
  * IEEE754 floating point arithmetic
  * single precision: MADDF.f (Fused Multiply Add)
- * MADDF.fmt: FPR[fd] = FPR[fd] + (FPR[fs] x FPR[ft])
+ * MADDF.fmt: FPR[fd] = FPR[fr] + (FPR[fs] x FPR[ft])
  *
  * MIPS floating point support
  * Copyright (C) 2015 Imagination Technologies, Ltd.
@@ -167,74 +167,93 @@ static ieee754sp _ieee754sp_maddf(ieee754sp z, ieee754sp x,
 	rs = xs ^ ys ^ (opt & 2);
 	zs = zs ^ (opt & 1) ^ (opt & 2);
 
-	xm <<= 32 - (SP_FBITS + 2);
-	ym <<= 32 - (SP_FBITS + 2);
+	re = xe + ye;
 
+	/* Multiple 24 bit xm and ym to give 48 bit results */
 	rm64 = (uint64_t)xm * ym;
-	if (rm64 < UINT64_C(0x2000000000000000))
-		rm64 <<= 1;
-	else
-		++re;
 
-	rm = (rm64 >> 32) | (rm64<<32 != 0);
-	if (zc == IEEE754_CLASS_ZERO)
-		goto done;
+	/* Shunt to top of word */
+	rm64 = rm64 << 16;
 
-	zm = zm << 6;
-	zm64 = ((uint64_t)zm << 32);
-
-	s = re - ze;
-	if (rs == zs) {
-		if (s <= 0) {
-			re = ze;
-			rm64 = (32 - s) < 63 ? rm64 >> (32 - s) |
-				((uint64_t) (rm64 << ((-(32 - s)) & 63)) != 0) : (rm64 != 0);
-			rm = rm64 + zm;
-		} else {
-			zm64 = s < 63 ? zm64 >> s |
-				((uint64_t) (zm64 << (-s & 63))) : (zm64 != 0);
-			rm64 = zm64 + rm64;
-			rm = rm64 >> 32 | ((rm64 & (((uint64_t) 1 << 32) - 1)) != 0);
-		}
-		if (rm < 0x40000000)
-			rm <<= 1;
-		else
-			++re;
-
-	} else {
-		if (s < 0) {
-			rs = zs;
-			re = ze;
-			rm64 = (-s) < 63 ? rm64 >> (-s) |
-				((uint64_t) (rm64 << (s & 63))) : (rm64 != 0);
-			rm64 = zm64 - rm64;
-		} else if(!s) {
-			rm64 = rm64 - zm64;
-			if (!rm64)
-				return ieee754sp_zero(ieee754_csr.rm == FPU_CSR_RD);
-			if (rm64 & UINT64_C(0x8000000000000000)) {
-				rs = !rs;
-				rm64 = -rm64;
-			}
-		} else {
-			zm64 = s < 63 ? zm64 >> s |
-				((uint64_t) (zm64 << (-s & 63))) : (zm64 != 0);
-			rm64 = rm64 - zm64;
-		}
-		s = dclz(rm64) - 1;
-		re -= (s-1);
-
-		s -= 32;
-
-		if (s < 0)
-			rm = rm64 >> (-s) | ((rm64 & (((uint64_t) 1 << (-s)) - 1)) != 0);
-		else
-			rm = (uint32_t) rm64 << s;
+	/* Put explicit bit at bit 62 if necessary */
+	if ((int64_t) rm64 < 0) {
+		rm64 = rm64 >> 1;
+		re++;
 	}
-done:
-	rm = (rm >> 4) | ((rm & 0xf) != 0);
-	return ieee754sp_format(rs, re, rm);
 
+	assert(rm64 & (1 << 62));
+
+	if (zc == IEEE754_CLASS_ZERO) {
+		/*
+		 * Move explicit bit from bit 62 to bit 26 since the
+		 * ieee754sp_format code expects the mantissa to be
+		 * 27 bits wide (24 + 3 rounding bits).
+		 */
+		rm = XSPSRS64(rm64, (62 - 26));
+		return ieee754sp_format(rs, re, rm);
+	}
+
+	/* Move explicit bit from bit 23 to bit 62 */
+	zm64 = (uint64_t)zm << (62 - 23);
+	assert(zm64 & (1 << 62));
+
+	/* Make the exponents the same */
+	if (ze > re) {
+		/*
+		 * Have to shift r fraction right to align.
+		 */
+		s = ze - re;
+		rm64 = XSPSRS64(rm64, s);
+		re += s;
+	} else if (re > ze) {
+		/*
+		 * Have to shift z fraction right to align.
+		 */
+		s = re - ze;
+		zm64 = XSPSRS64(zm64, s);
+		ze += s;
+	}
+	assert(ze == re);
+	assert(ze <= SP_EMAX);
+
+	/* Do the addition */
+	if (zs == rs) {
+		/*
+		 * Generate 64 bit result by adding two 63 bit numbers
+		 * leaving result in zm64, zs and ze.
+		 */
+		zm64 = zm64 + rm64;
+		if ((int64_t)zm64 < 0) {	/* carry out */
+			zm64 = XSPSRS1(zm64);
+			ze++;
+		}
+	} else {
+		if (zm64 >= rm64) {
+			zm64 = zm64 - rm64;
+		} else {
+			zm64 = rm64 - zm64;
+			zs = rs;
+		}
+		if (zm64 == 0)
+			return ieee754sp_zero(ieee754_csr.rm == FPU_CSR_RD);
+
+		/*
+		 * Put explicit bit at bit 62 if necessary.
+		 */
+		while ((zm64 >> 62) == 0) {
+			zm64 <<= 1;
+			ze--;
+		}
+	}
+
+	/*
+	 * Move explicit bit from bit 62 to bit 26 since the
+	 * ieee754sp_format code expects the mantissa to be
+	 * 27 bits wide (24 + 3 rounding bits).
+	 */
+	zm = XSPSRS64(zm64, (62 - 26));
+
+	return ieee754sp_format(zs, ze, zm);
 #else
 	rs = xs ^ ys;
 
