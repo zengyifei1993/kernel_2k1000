@@ -222,6 +222,7 @@ enum rx_frame_status {
 	discard_frame = 1,
 	csum_none = 2,
 	llc_snap = 4,
+	oversize_frame = 5,
 };
 
 enum dma_irq_status {

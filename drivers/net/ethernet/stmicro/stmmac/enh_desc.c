@@ -207,6 +207,10 @@ static int enh_desc_get_rx_status(void *data, struct stmmac_extra_stats *x,
 	int ret = good_frame;
 	struct net_device_stats *stats = (struct net_device_stats *)data;
 
+	if (unlikely(p->des01.erx.last_descriptor == 0)) {
+		return oversize_frame;
+	}
+
 	if (unlikely(p->des01.erx.error_summary)) {
 		CHIP_DBG(KERN_ERR "GMAC RX Error Summary 0x%08x\n",
 				  p->des01.erx);

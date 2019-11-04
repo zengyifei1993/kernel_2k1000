@@ -1051,7 +1051,9 @@ static int stmmac_init_rx_buffers(struct stmmac_priv *priv, struct dma_desc *p,
 		pr_err("%s: Rx init fails; skb is NULL\n", __func__);
 		return -ENOMEM;
 	}
+#ifndef CONFIG_STMMAC_OVERSIZE_SUPPORT
 	skb_reserve(skb, NET_IP_ALIGN);
+#endif
 	priv->rx_skbuff[i] = skb;
 	priv->rx_skbuff_dma[i] = dma_map_single(priv->device, skb->data,
 						priv->dma_buf_sz,
@@ -2376,6 +2378,83 @@ static int stmmac_rx(struct stmmac_priv *priv, int limit)
 						 priv->dma_buf_sz,
 						 DMA_FROM_DEVICE);
 			}
+		} else if (unlikely(status == oversize_frame))
+		{
+			struct sk_buff *skb, *newskb;
+			int frame_len, last_len, once_len;
+			int entry0;
+			int i;
+
+			for(entry0 = entry;;)
+			{
+				/* read the status of the incoming frame */
+				status = (priv->hw->desc->rx_status(&priv->dev->stats,
+							&priv->xstats, p));
+				if(status != oversize_frame)
+					break;
+
+				entry = next_entry;
+				next_entry = (++priv->cur_rx) % rxsize;
+
+				if (priv->extend_desc || priv->extend_desc64)
+					p = (struct dma_desc *)(priv->dma_erx + entry);
+				else
+					p = priv->dma_rx + entry;
+
+				while(priv->hw->desc->get_rx_owner(p));
+			}
+
+			if(status == discard_frame)
+			{
+				priv->dev->stats.rx_errors++;
+			}
+			else
+			{
+#ifdef CONFIG_STMMAC_OVERSIZE_SUPPORT
+
+				frame_len = priv->hw->desc->get_rx_frame_len(p, coe);
+				newskb = netdev_alloc_skb(priv->dev, frame_len + NET_IP_ALIGN);
+				for(last_len = 0,i = entry0;;)
+				{
+					if (priv->extend_desc || priv->extend_desc64)
+						p = (struct dma_desc *)(priv->dma_erx + i);
+					else
+						p = priv->dma_rx + i;
+					frame_len = priv->hw->desc->get_rx_frame_len(p, coe);
+					once_len = frame_len - last_len;
+					skb = priv->rx_skbuff[i];
+					dma_unmap_single(priv->device,
+							priv->rx_skbuff_dma[i],
+							once_len, DMA_FROM_DEVICE);
+
+					skb_copy_to_linear_data_offset(newskb, last_len, skb->data, once_len);
+					last_len = frame_len;
+					if(i == entry) break;
+					i = (i+1) % rxsize;
+				}
+
+				if (unlikely(status != llc_snap))
+					frame_len -= ETH_FCS_LEN;
+				skb_put(newskb, frame_len);
+
+				skb = newskb;
+
+				skb->protocol = eth_type_trans(skb, priv->dev);
+
+				if (unlikely(!coe))
+					skb_checksum_none_assert(skb);
+				else
+					skb->ip_summed = CHECKSUM_UNNECESSARY;
+
+				napi_gro_receive(&priv->napi, skb);
+				priv->dev->stats.rx_packets++;
+				priv->dev->stats.rx_bytes += frame_len;
+#else
+				priv->dev->stats.rx_errors++;
+#endif
+			}
+
+
 		} else {
 			struct sk_buff *skb;
 			int frame_len;
