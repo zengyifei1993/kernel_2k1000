@@ -143,7 +143,7 @@ uint64_t ls3a_ext_intctl_read(struct kvm *kvm, gpa_t addr, unsigned size,void *v
 			reg_count = (offset-0x1680)/8;
 			*(uint64_t *)val = state->bounce.reg_u64[reg_count];
 		}else if(size == 4){
-			reg_count = (offset-0x1600)/4;
+			reg_count = (offset-0x1680)/4;
 			*(uint32_t *)val = state->bounce.reg_u32[reg_count];
 		}
 	}else if(offset >= 0x1700 && offset < 0x1720){
