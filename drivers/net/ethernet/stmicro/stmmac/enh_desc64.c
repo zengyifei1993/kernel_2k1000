@@ -25,6 +25,7 @@
 #include <linux/stmmac.h>
 #include "common.h"
 #include "descs_com.h"
+#include "stmmac.h"
 
 static int enh_desc_get_tx_status(void *data, struct stmmac_extra_stats *x,
 				  struct dma_desc *p, void __iomem *ioaddr)
@@ -281,15 +282,15 @@ static int enh_desc_get_rx_status(void *data, struct stmmac_extra_stats *x,
 }
 
 static void enh_desc_init_rx_desc(struct dma_desc *p, int disable_rx_ic,
-				  int mode, int end)
+				  int mode, int end, struct stmmac_priv *priv)
 {
 	p->des01.erx64.own = 1;
-	p->des01.erx64.buffer1_size = BUF_SIZE_8KiB - 1;
+	p->des01.erx64.buffer1_size = priv->dma_buf_sz;
 
 	if (mode == STMMAC_CHAIN_MODE)
 		ehn_desc_rx_set_on_chain(p, end);
 	else
-		ehn_desc_rx_set_on_ring(p, end);
+		ehn_desc_rx64_set_on_ring(p, end);
 
 	if (disable_rx_ic)
 		p->des01.erx64.disable_ic = 1;

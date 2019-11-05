@@ -281,7 +281,7 @@ static int enh_desc_get_rx_status(void *data, struct stmmac_extra_stats *x,
 }
 
 static void enh_desc_init_rx_desc(struct dma_desc *p, int disable_rx_ic,
-				  int mode, int end)
+				  int mode, int end, struct stmmac_priv *priv)
 {
 	p->des01.erx.own = 1;
 	p->des01.erx.buffer1_size = BUF_SIZE_8KiB - 1;

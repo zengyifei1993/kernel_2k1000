@@ -32,6 +32,13 @@
 
 /* Specific functions used for Ring mode */
 
+static inline void ehn_desc_rx64_set_on_ring(struct dma_desc *p, int end)
+{
+	p->des01.erx.buffer2_size = 0;
+	if (end)
+		p->des01.erx.end_ring = 1;
+}
+
 /* Enhanced descriptors */
 static inline void ehn_desc_rx_set_on_ring(struct dma_desc *p, int end)
 {
@@ -62,9 +69,9 @@ static inline void enh_set_tx_desc_len_on_ring(struct dma_desc *p, int len)
 
 static inline void enh_set_tx64_desc_len_on_ring(struct dma_desc *p, int len)
 {
-	if (unlikely(len > BUF_SIZE_4KiB)) {
-		p->des01.etx64.buffer1_size = BUF_SIZE_4KiB;
-		p->des01.etx64.buffer2_size = len - BUF_SIZE_4KiB;
+	if (unlikely(len >= BUF_SIZE_16KiB)) {
+		p->des01.etx64.buffer1_size = BUF_SIZE_8KiB - 1;
+		p->des01.etx64.buffer2_size = len - BUF_SIZE_8KiB + 1;
 	} else
 		p->des01.etx64.buffer1_size = len;
 }

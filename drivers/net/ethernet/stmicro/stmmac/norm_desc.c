@@ -123,7 +123,7 @@ static int ndesc_get_rx_status(void *data, struct stmmac_extra_stats *x,
 }
 
 static void ndesc_init_rx_desc(struct dma_desc *p, int disable_rx_ic, int mode,
-			       int end)
+			       int end, struct stmmac_priv *priv)
 {
 	p->des01.rx.own = 1;
 	p->des01.rx.buffer1_size = BUF_SIZE_2KiB - 1;

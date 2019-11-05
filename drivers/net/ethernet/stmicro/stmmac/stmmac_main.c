@@ -1024,11 +1024,11 @@ static void stmmac_clear_descriptors(struct stmmac_priv *priv)
 		if (priv->extend_desc || priv->extend_desc64)
 			priv->hw->desc->init_rx_desc(&priv->dma_erx[i].basic,
 						     priv->use_riwt, priv->mode,
-						     (i == rxsize - 1));
+						     (i == rxsize - 1), priv);
 		else
 			priv->hw->desc->init_rx_desc(&priv->dma_rx[i],
 						     priv->use_riwt, priv->mode,
-						     (i == rxsize - 1));
+						     (i == rxsize - 1), priv);
 	for (i = 0; i < txsize; i++)
 		if (priv->extend_desc || priv->extend_desc64)
 			priv->hw->desc->init_tx_desc(&priv->dma_etx[i].basic,
@@ -1106,7 +1106,7 @@ static int init_dma_desc_rings(struct net_device *dev)
 	if (priv->mode == STMMAC_RING_MODE)
 		bfsize = priv->hw->ring->set_16kib_bfsize(dev->mtu);
 
-	if (bfsize < BUF_SIZE_16KiB)
+	if (!bfsize)
 		bfsize = stmmac_set_bfsize(dev->mtu, priv->dma_buf_sz);
 
 	DBG(probe, INFO, "stmmac: txsize %d, rxsize %d, bfsize %d\n",
@@ -2150,13 +2150,13 @@ static netdev_tx_t stmmac_xmit(struct sk_buff *skb, struct net_device *dev)
 	/* To program the descriptors according to the size of the frame */
 	if (priv->mode == STMMAC_RING_MODE) {
 		is_jumbo = priv->hw->ring->is_jumbo_frm(skb->len,
-							priv->plat->enh_desc);
+							priv->plat->enh_desc | (priv->extend_desc64<<1));
 		if (unlikely(is_jumbo))
 			entry = priv->hw->ring->jumbo_frm(priv, skb,
 							  csum_insertion);
 	} else {
 		is_jumbo = priv->hw->chain->is_jumbo_frm(skb->len,
-							 priv->plat->enh_desc);
+							 priv->plat->enh_desc | (priv->extend_desc64<<1));
 		if (unlikely(is_jumbo))
 			entry = priv->hw->chain->jumbo_frm(priv, skb,
 							   csum_insertion);
@@ -2540,7 +2540,9 @@ static int stmmac_change_mtu(struct net_device *dev, int new_mtu)
 		return -EBUSY;
 	}
 
-	if (priv->plat->enh_desc)
+	if (priv->extend_desc64)
+		max_mtu = BUF_SIZE_16KiB - 1 - ETH_HLEN - 4 - NET_IP_ALIGN - AXIWIDTH;
+	else if (priv->plat->enh_desc)
 		max_mtu = JUMBO_LEN;
 	else
 		max_mtu = SKB_MAX_HEAD(NET_SKB_PAD + NET_IP_ALIGN);
@@ -2925,11 +2927,11 @@ static int stmmac_hw_init(struct stmmac_priv *priv)
 
 	/* To use the chained or ring mode */
 	if (chain_mode) {
-		priv->hw->chain = priv->extend_desc?&chain_mode64_ops:&chain_mode_ops;
+		priv->hw->chain = priv->extend_desc64?&chain_mode64_ops:&chain_mode_ops;
 		pr_info(" Chain mode enabled\n");
 		priv->mode = STMMAC_CHAIN_MODE;
 	} else {
-		priv->hw->ring = priv->extend_desc?&ring_mode64_ops:&ring_mode_ops;
+		priv->hw->ring = priv->extend_desc64?&ring_mode64_ops:&ring_mode_ops;
 		pr_info(" Ring mode enabled\n");
 		priv->mode = STMMAC_RING_MODE;
 	}

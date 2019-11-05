@@ -87,7 +87,7 @@ static unsigned int stmmac_is_jumbo_frm(int len, int enh_desc)
 {
 	unsigned int ret = 0;
 
-	if (len >= BUF_SIZE_4KiB)
+	if (len >= BUF_SIZE_16KiB)
 		ret = 1;
 
 	return ret;
@@ -122,10 +122,7 @@ static void stmmac_clean_desc3(void *priv_ptr, struct dma_desc *p)
 
 static int stmmac_set_16kib_bfsize(int mtu)
 {
-	int ret = 0;
-	if (unlikely(mtu >= BUF_SIZE_8KiB))
-		ret = BUF_SIZE_16KiB;
-	return ret;
+	return ALIGN(mtu + ETH_HLEN + 4 + NET_IP_ALIGN, AXIWIDTH);
 }
 
 const struct stmmac_ring_mode_ops ring_mode64_ops = {

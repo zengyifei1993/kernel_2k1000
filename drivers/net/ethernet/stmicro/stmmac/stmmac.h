@@ -25,6 +25,7 @@
 
 #define STMMAC_RESOURCE_NAME   "stmmaceth"
 #define DRV_MODULE_VERSION	"March_2013"
+#define AXIWIDTH 16
 
 #include <linux/clk.h>
 #include <linux/stmmac.h>
