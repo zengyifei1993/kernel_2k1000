@@ -22,7 +22,6 @@ config KVM
 	select ANON_INODES
 	select KVM_GENERIC_DIRTYLOG_READ_PROTECT
 	select KVM_MMIO
-	select HAVE_KVM_EVENTFD
 	select MMU_NOTIFIER
 	select SRCU
 	---help---

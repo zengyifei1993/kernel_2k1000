@@ -3719,7 +3719,6 @@ static int kvm_vz_check_extension(struct kvm *kvm, long ext)
 	switch (ext) {
 	case KVM_CAP_IRQCHIP:
 	case KVM_CAP_MIPS_VZ:
-	case KVM_CAP_IOEVENTFD:
 		/* we wouldn't be here unless cpu_has_vz */
 		r = 1;
 		break;
