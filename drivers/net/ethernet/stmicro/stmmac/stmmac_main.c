@@ -1152,6 +1152,7 @@ static int init_dma_desc_rings(struct net_device *dev)
 
 	/* RX INITIALIZATION */
 	DBG(probe, INFO, "stmmac: SKB addresses:\nskb\t\tskb data\tdma data\n");
+	priv->dma_buf_sz = bfsize;
 	for (i = 0; i < rxsize; i++) {
 		struct dma_desc *p;
 		if (priv->extend_desc || priv->extend_desc64)
@@ -1168,7 +1169,6 @@ static int init_dma_desc_rings(struct net_device *dev)
 	}
 	priv->cur_rx = 0;
 	priv->dirty_rx = (unsigned int)(i - rxsize);
-	priv->dma_buf_sz = bfsize;
 	buf_sz = bfsize;
 
 	/* Setup the chained descriptor addresses */
