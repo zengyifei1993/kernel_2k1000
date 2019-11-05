@@ -71,9 +71,9 @@ void arch_suspend_disable_irqs(void)
 	inb(PIC_MASTER_IMR);
 #endif
 	/* disable all events of bonito */
-	cached_bonito_irq_mask = LOONGSON_INTEN;
-	LOONGSON_INTENCLR = 0xffff;
-	(void)LOONGSON_INTENCLR;
+	cached_bonito_irq_mask = readl(LOONGSON_INTEN);
+	writel(0xffff, LOONGSON_INTENCLR);
+	(void)readl(LOONGSON_INTENCLR);
 }
 
 void arch_suspend_enable_irqs(void)
@@ -86,8 +86,8 @@ void arch_suspend_enable_irqs(void)
 	outb(cached_master_mask, PIC_MASTER_IMR);
 #endif
 	/* enable all cached events of bonito */
-	LOONGSON_INTENSET = cached_bonito_irq_mask;
-	(void)LOONGSON_INTENSET;
+	writel(cached_bonito_irq_mask, LOONGSON_INTENSET);
+	(void)readl(LOONGSON_INTENSET);
 }
 
 /*

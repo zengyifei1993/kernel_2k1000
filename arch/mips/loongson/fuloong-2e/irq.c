@@ -54,8 +54,8 @@ void __init mach_init_irq(void)
 	 */
 
 	/* most bonito irq should be level triggered */
-	LOONGSON_INTEDGE = LOONGSON_ICU_SYSTEMERR | LOONGSON_ICU_MASTERERR |
-	    LOONGSON_ICU_RETRYERR | LOONGSON_ICU_MBOXES;
+	writel(LOONGSON_ICU_SYSTEMERR | LOONGSON_ICU_MASTERERR |
+	    LOONGSON_ICU_RETRYERR | LOONGSON_ICU_MBOXES, LOONGSON_INTEDGE);
 
 	/* Sets the first-level interrupt dispatcher. */
 	mips_cpu_irq_init();

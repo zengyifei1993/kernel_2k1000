@@ -344,12 +344,12 @@ asmlinkage void ip2_dispatch(void)
 	if(cpu == loongson_boot_cpu_id)
 	{
 		int core_index = loongson_boot_cpu_id % cores_per_node;
-		irqs_pci = LOONGSON_INT_ROUTER_ISR(core_index) & 0xf0;
-		irq_lpc = LOONGSON_INT_ROUTER_ISR(core_index) & 0x400;
+		irqs_pci = ls64_conf_read32(LS_IRC_ISR(core_index)) & 0xf0;
+		irq_lpc = ls64_conf_read32(LS_IRC_ISR(core_index)) & 0x400;
 		if(irqs_pci)
 		{
 			while ((irq = ffs(irqs_pci)) != 0) {
-			do_IRQ(irq - 1 + SYS_IRQ_BASE);
+				do_IRQ(irq - 1 + SYS_IRQ_BASE);
 				irqs_pci &= ~(1 << (irq-1));
 			}
 		}
@@ -394,8 +394,8 @@ void mach_irq_dispatch(unsigned int pending)
 		if(cpu == loongson_boot_cpu_id)
 		{
 			int core_index = loongson_boot_cpu_id % cores_per_node;
-			irqs_pci = LOONGSON_INT_ROUTER_ISR(core_index) & 0xf0;
-			irq_lpc = LOONGSON_INT_ROUTER_ISR(core_index) & 0x400;
+			irqs_pci = ls64_conf_read32(LS_IRC_ISR(core_index)) & 0xf0;
+			irq_lpc = ls64_conf_read32(LS_IRC_ISR(core_index)) & 0x400;
 			if(irqs_pci)
 			{
 				while ((irq = ffs(irqs_pci)) != 0) {
@@ -440,28 +440,15 @@ static inline void mask_loongson_irq(struct irq_data *d)
 	if(!desc->action)
 		return;
 
-	/* Workaround: UART IRQ may deliver to any core */
-	if (d->irq == LOONGSON_UART_IRQ) {
-		int cpu = smp_processor_id();
-		int node_id = cpu_logical_map(cpu) / cores_per_node;
-		u64 intenclr_addr = smp_group[node_id] |
-			(u64)(&LOONGSON_INT_ROUTER_INTENCLR);
+	if (d->irq == LOONGSON_UART_IRQ)
+		ls64_conf_write32(1 << 10, LS_IRC_ENCLR);
 
-		*(volatile u32 *)intenclr_addr = 1 << 10;
-	}
 }
 
 static inline void unmask_loongson_irq(struct irq_data *d)
 {
-	/* Workaround: UART IRQ may deliver to any core */
-	if (d->irq == LOONGSON_UART_IRQ) {
-		int cpu = smp_processor_id();
-		int node_id = cpu_logical_map(cpu) / cores_per_node;
-		u64 intenset_addr = smp_group[node_id] |
-			(u64)(&LOONGSON_INT_ROUTER_INTENSET);
-
-		*(volatile u32 *)intenset_addr = 1 << 10;
-	}
+	if (d->irq == LOONGSON_UART_IRQ)
+		ls64_conf_write32(1 << 10, LS_IRC_ENSET);
 }
 
 static inline unsigned int startup_loongson_irq(struct irq_data *d)

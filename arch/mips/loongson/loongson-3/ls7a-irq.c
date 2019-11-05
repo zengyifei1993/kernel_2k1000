@@ -186,10 +186,10 @@ asmlinkage void ls7a_irq_dispatch(void)
 void ls7a_msi_irq_dispatch(void)
 {
 	unsigned int i;
-	unsigned long long  irqs;
-	int cpu = smp_processor_id();
+	unsigned long long irqs;
+	int cpuid = read_c0_ebase() & 0x3ff;
 
-	unsigned int ls3a_irq_cpu = LOONGSON_INT_ROUTER_ISR(cpu_logical_map(cpu));
+	unsigned int ls3a_irq_cpu = ls64_conf_read32(LS_IRC_ISR(cpuid));
 
 	for(i = 0; i < 4; i++) {
 		if(ls3a_irq_cpu & (0x3 << (24 + (i << 1)))) {
@@ -311,6 +311,7 @@ void init_7a_irqs(struct irq_chip *pirq_chip)
 void ls7a_irq_router_init(void)
 {
 	int i;
+	unsigned int dummy;
 
 	if(ls3a_msi_enabled) {
 
@@ -320,20 +321,37 @@ void ls7a_irq_router_init(void)
 		/* route HT1 intx */
 		for (i = 0; i < loop; i++) {
 			if (i < 2) { /* vector 0-63 for PIC irq */
-				LOONGSON_INT_ROUTER_HT1(i) = LOONGSON_INT_COREx_INTy(loongson_boot_cpu_id, 1);
+				dummy = LOONGSON_INT_COREx_INTy(loongson_boot_cpu_id, 1);
+				ls64_conf_write64(dummy, LS_IRC_ENT_HT1(i));
+
 				LOONGSON_HT1_INTN_EN(i) = 0xffffffff;
-				LOONGSON_INT_ROUTER_INTENSET = LOONGSON_INT_ROUTER_INTEN | (1 << (i + 24));
+
+				dummy =  ls64_conf_read32(LS_IRC_EN);
+				dummy |=  (1 << (i + 24));
+				ls64_conf_write32(dummy, LS_IRC_ENSET);
+
 			} else {
-				LOONGSON_INT_ROUTER_HT1(i) = 1<<5 | 0xf;
+				ls64_conf_write64(((1 << 5) | 0xf), LS_IRC_ENT_HT1(i));
 				LOONGSON_HT1_INTN_EN(i) = 0xffffffff;
-				LOONGSON_INT_ROUTER_BOUNCE = LOONGSON_INT_ROUTER_BOUNCE | (1<<(i+24));
-				LOONGSON_INT_ROUTER_INTENSET = LOONGSON_INT_ROUTER_INTEN | (1<<(i+24));
+
+				dummy =  ls64_conf_read32(LS_IRC_BCE);
+				dummy |=  (1 << (i + 24));
+				ls64_conf_write32(dummy, LS_IRC_BCE);
+
+				dummy =  ls64_conf_read32(LS_IRC_EN);
+				dummy |=  (1 << (i + 24));
+				ls64_conf_write32(dummy, LS_IRC_ENSET);
+
 			}
 		}
 	} else {
 		/* route 3A CPU0 INT0 to node0 core0 INT1(IP3) */
-		LOONGSON_INT_ROUTER_ENTRY(0) = LOONGSON_INT_COREx_INTy(loongson_boot_cpu_id, 1);
-		LOONGSON_INT_ROUTER_INTENSET = LOONGSON_INT_ROUTER_INTEN | 0x1 << 0;
+		dummy = LOONGSON_INT_COREx_INTy(loongson_boot_cpu_id, 1);
+		ls64_conf_write32(dummy, LS_IRC_ENT(0));
+
+		dummy = ls64_conf_read32(LS_IRC_EN);
+		dummy |= 0x1;
+		ls64_conf_write64(dummy, LS_IRC_ENSET);
 	}
 }
 

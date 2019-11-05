@@ -18,13 +18,13 @@
 
 static inline void bonito_irq_enable(struct irq_data *d)
 {
-	LOONGSON_INTENSET = (1 << (d->irq - LOONGSON_IRQ_BASE));
+	writel(1 << (d->irq - LOONGSON_IRQ_BASE), LOONGSON_INTENSET);
 	mmiowb();
 }
 
 static inline void bonito_irq_disable(struct irq_data *d)
 {
-	LOONGSON_INTENCLR = (1 << (d->irq - LOONGSON_IRQ_BASE));
+	writel(1 << (d->irq - LOONGSON_IRQ_BASE), LOONGSON_INTENCLR);
 	mmiowb();
 }
 

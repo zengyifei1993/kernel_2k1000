@@ -114,10 +114,16 @@ static void ml2f_shutdown(void)
 
 static void yl2f89_shutdown(void)
 {
+	unsigned dummy;
 	/* cpu-gpio0 output low */
-	LOONGSON_GPIODATA &= ~0x00000001;
+	dummy = readl(LOONGSON_GPIODATA);
+	dummy &= ~0x00000001;
+	writel(dummy, LOONGSON_GPIODATA);
+
 	/* cpu-gpio0 as output */
-	LOONGSON_GPIOIE &= ~0x00000001;
+	dummy = readl(LOONGSON_GPIOIE);
+	dummy &= ~0x00000001;
+	writel(dummy, LOONGSON_GPIOIE);
 }
 
 void mach_prepare_reboot(void)

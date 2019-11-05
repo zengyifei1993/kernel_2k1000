@@ -46,29 +46,31 @@ static void __init setup_pcimap(void)
 	 * pcimap: PCI_MAP2  PCI_Mem_Lo2 PCI_Mem_Lo1 PCI_Mem_Lo0
 	 *	     [<2G]   [384M,448M] [320M,384M] [0M,64M]
 	 */
-	LOONGSON_PCIMAP = LOONGSON_PCIMAP_PCIMAP_2 |
+	unsigned int dummy;
+
+	dummy = LOONGSON_PCIMAP_PCIMAP_2 |
 		LOONGSON_PCIMAP_WIN(2, LOONGSON_PCILO2_BASE) |
 		LOONGSON_PCIMAP_WIN(1, LOONGSON_PCILO1_BASE) |
 		LOONGSON_PCIMAP_WIN(0, 0);
-
+	writel(dummy, LOONGSON_PCIMAP);
 	/*
 	 * PCI-DMA to local mapping: [2G,2G+256M] -> [0M,256M]
 	 */
-	LOONGSON_PCIBASE0 = 0x80000000ul;   /* base: 2G -> mmap: 0M */
+	writel(0x80000000, LOONGSON_PCIBASE0); /* base: 2G -> mmap: 0M */
 	/* size: 256M, burst transmission, pre-fetch enable, 64bit */
-	LOONGSON_PCI_HIT0_SEL_L = 0xc000000cul;
-	LOONGSON_PCI_HIT0_SEL_H = 0xfffffffful;
-	LOONGSON_PCI_HIT1_SEL_L = 0x00000006ul; /* set this BAR as invalid */
-	LOONGSON_PCI_HIT1_SEL_H = 0x00000000ul;
-	LOONGSON_PCI_HIT2_SEL_L = 0x00000006ul; /* set this BAR as invalid */
-	LOONGSON_PCI_HIT2_SEL_H = 0x00000000ul;
+	writel(0xc000000c, LOONGSON_PCI_HIT0_SEL_L);
+	writel(0xffffffff, LOONGSON_PCI_HIT0_SEL_H);
+	writel(0x00000006, LOONGSON_PCI_HIT1_SEL_L); /* set this BAR as invalid */
+	writel(0x00000000, LOONGSON_PCI_HIT1_SEL_H);
+	writel(0x00000006, LOONGSON_PCI_HIT2_SEL_L); /* set this BAR as invalid */
+	writel(0x00000000, LOONGSON_PCI_HIT2_SEL_H);
 
 	/* avoid deadlock of PCI reading/writing lock operation */
-	LOONGSON_PCI_ISR4C = 0xd2000001ul;
+	writel(0xd2000001, LOONGSON_PCI_ISR4C);
 
 	/* can not change gnt to break pci transfer when device's gnt not
 	deassert for some broken device */
-	LOONGSON_PXARB_CFG = 0x00fe0105ul;
+	writel(0x00fe0105, LOONGSON_PXARB_CFG);
 
 #ifdef CONFIG_CPU_SUPPORTS_ADDRWINCFG
 	/*
@@ -108,7 +110,7 @@ static int __init pcibios_init(void)
 	register_pci_controller(&loongson_pci_controller);
 
 #ifdef CONFIG_CPU_LOONGSON3
-    loongson_acpi_init();
+	loongson_acpi_init();
 #endif
 
 	return 0;

@@ -32,11 +32,16 @@
  */
 int mach_i8259_irq(void)
 {
-	int irq, isr;
+	int irq;
+	unsigned int isr;
+	unsigned int res;
 
 	irq = -1;
 
-	if ((LOONGSON_INTISR & LOONGSON_INTEN) & LOONGSON_INT_BIT_INT0) {
+	isr = readl(LOONGSON_INTISR);
+	res = readl(LOONGSON_INTEN);
+
+	if ((isr & res) & LOONGSON_INT_BIT_INT0) {
 		raw_spin_lock(&i8259A_lock);
 		isr = inb(PIC_MASTER_CMD) &
 			~inb(PIC_MASTER_IMR) & ~(1 << PIC_CASCADE_IR);
@@ -107,6 +112,7 @@ struct irqaction cascade_irqaction = {
 
 void __init mach_init_irq(void)
 {
+	unsigned int res;
 	/* init all controller
 	 *   0-15	  ------> i8259 interrupt
 	 *   16-23	  ------> mips cpu interrupt
@@ -114,8 +120,10 @@ void __init mach_init_irq(void)
 	 */
 
 	/* setup cs5536 as high level trigger */
-	LOONGSON_INTPOL = LOONGSON_INT_BIT_INT0 | LOONGSON_INT_BIT_INT1;
-	LOONGSON_INTEDGE &= ~(LOONGSON_INT_BIT_INT0 | LOONGSON_INT_BIT_INT1);
+	writel(LOONGSON_INT_BIT_INT0 | LOONGSON_INT_BIT_INT1, LOONGSON_INTPOL);
+	res = readl(LOONGSON_INTEDGE);
+	res &= ~(LOONGSON_INT_BIT_INT0 | LOONGSON_INT_BIT_INT1);
+	writel(res, LOONGSON_INTEDGE);
 
 	/* Sets the first-level interrupt dispatcher. */
 	mips_cpu_irq_init();

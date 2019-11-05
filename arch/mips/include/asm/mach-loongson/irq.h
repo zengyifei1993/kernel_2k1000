@@ -3,6 +3,21 @@
 
 #include <boot_param.h>
 
+#define LS_IRC_BASE	LS_CFG_OFF(0x1400)
+#define LS_IRC_OFF(x)	(LS_IRC_BASE + x)
+
+#define LS_IRC_ENT(x)	LS_IRC_OFF(x)
+#define LS_IRC_ENT_LPC	LS_IRC_ENT(0xa)
+#define LS_IRC_ENT_HT1(n)	LS_IRC_ENT(n + 0x18)
+#define LS_IRC_ENT_PCI(n)	LS_IRC_ENT(n + 0x4)
+
+#define LS_IRC_EN	LS_IRC_OFF(0x24)
+#define LS_IRC_ENSET	LS_IRC_OFF(0x28)
+#define LS_IRC_ENCLR	LS_IRC_OFF(0x2c)
+#define LS_IRC_BCE	LS_IRC_OFF(0x38)
+#define LS_IRC_AUT	LS_IRC_OFF(0x3c)
+#define LS_IRC_ISR(n)	LS_IRC_OFF(0x40 + 8 * (n))
+
 #ifdef CONFIG_CPU_LOONGSON3
 
 #define NR_IRQS	(320+32)
