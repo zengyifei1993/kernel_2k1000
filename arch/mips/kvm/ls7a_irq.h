@@ -54,6 +54,8 @@
 #define LS7A_IOAPIC_GUEST_REG_BASE          0x000000e010000000UL
 #define LS3A4000_LS7A_IOAPIC_GUEST_REG_BASE          0x00000e0010000000UL
 
+#define LS7A_IOAPIC_GUEST_GPA_BASE          0x900000e010000000UL
+
 #define LS7A_IOAPIC_NUM_PINS 64
 
 typedef struct kvm_ls7a_ioapic_state {
@@ -84,6 +86,8 @@ struct loongson_kvm_7a_ioapic {
 	struct kvm_io_device dev_ls7a_ioapic;
 	void (*ack_notifier)(void *opaque, int irq);
 	unsigned long irq_states[LS7A_APIC_NUM_PINS];
+	void * read_page_address;
+	struct page * read_page;
 };
 
 struct loongson_kvm_7a_ioapic *kvm_create_pic(struct kvm *kvm);
@@ -103,6 +107,26 @@ static inline int ls7a_ioapic_in_kernel(struct kvm *kvm)
 	ret = (ls7a_ioapic_irqchip(kvm) != NULL);
 	return ret;
 }
+
+#ifdef CONFIG_KVM_LOONGSON_IOAPIC_READ_OPT
+	static inline void ls7a_update_read_page_long(struct loongson_kvm_7a_ioapic *s,unsigned int addr,unsigned long value)
+	{
+		*(unsigned long *)(s->read_page_address + addr) = value;
+	}
+	static inline void ls7a_update_read_page_char(struct loongson_kvm_7a_ioapic *s,unsigned int addr,unsigned char value)
+	{
+		*(unsigned char *)(s->read_page_address + addr) = value;
+	}
+#else
+	static inline void ls7a_update_read_page_long(struct loongson_kvm_7a_ioapic *s,unsigned int addr,unsigned long value)
+	{
+		return;
+	}
+	static inline void ls7a_update_read_page_char(struct loongson_kvm_7a_ioapic *s,unsigned int addr,unsigned char value)
+	{
+		return;
+	}
+#endif
 
 int kvm_set_ls7a_ioapic(struct kvm *kvm, struct kvm_loongson_ls7a_ioapic_state *state);
 int kvm_get_ls7a_ioapic(struct kvm *kvm, struct kvm_loongson_ls7a_ioapic_state *state);
