@@ -16,14 +16,143 @@
 #include <asm/bootinfo.h>
 #include <linux/module.h>
 #include <ec_it8528.h>
+#include <loongson-pch.h>
+#include <linux/dmi.h>
 
 #define DRIVER_NAME "ea_pm_hotkey"
 
 #define EC_SCI_DEV	"ea_ec"
-#define SCI_IRQ_NUM	14
+
+#define SIO_IRQ_NUM 14 /* ec sio irq number */
+#define SCI_IRQ_NUM 123 /* sci gpio irq number */
+
+#define DFT_BACKLIGHT_LVL 25
+#define MAX_BACKLIGHT_LVL 255
+
+#define EA_VENDOR_ID 0x1BAB
+
+#define LS7A_LPC_SIQR_EN	(1 << 31)
+#define LS7A_LPC_SIQR14_HIGHPOL   (1 << 14)
+#define LS7A_LPC_BIT14INT_EN      (1 << 14)
+
+/* for L39, min_brightness should be 5, others, min_brightness is 0 */
+static int min_brightness;
+
+struct quirk_entry {
+	int sci_irq_num;
+	int is_laptop;
+	int is_allinone;
+};
+
+static struct quirk_entry quirk_default = {
+	.sci_irq_num = SIO_IRQ_NUM,
+	.is_laptop = 0,
+	.is_allinone = 0,
+};
+
+static struct quirk_entry quirk_ea_rs780e_laptop = {
+	.sci_irq_num = SIO_IRQ_NUM,
+	.is_laptop = 1,
+	.is_allinone = 0,
+};
+
+static struct quirk_entry quirk_ea_ls7a_laptop = {
+	.sci_irq_num = SCI_IRQ_NUM,
+	.is_laptop = 1,
+	.is_allinone = 0,
+};
+
+static struct quirk_entry quirk_ea_rs780e_allinone = {
+	.sci_irq_num = SIO_IRQ_NUM,
+	.is_laptop = 0,
+	.is_allinone = 1,
+};
+
+static struct quirk_entry quirk_ea_ls7a_allinone = {
+	.sci_irq_num = SCI_IRQ_NUM,
+	.is_laptop = 0,
+	.is_allinone = 1,
+};
+
+static struct quirk_entry *quirks = &quirk_default;
+
+static int dmi_check_cb(const struct dmi_system_id *dmi)
+{
+	pr_info("Identified EA device model '%s'\n", dmi->ident);
+
+	quirks = dmi->driver_data;
+
+	return 1;
+}
+
+static const struct dmi_system_id loongson_device_table[] = {
+	{
+		.ident = "RS780E laptop",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Loongson"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "EA-L39-RS780E-laptop"),
+		},
+		.callback = dmi_check_cb,
+		.driver_data = &quirk_ea_rs780e_laptop,
+	},
+	{
+		.ident = "RS780E allinone",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Loongson"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "EA-L41-RS780E-allinone"),
+		},
+		.callback = dmi_check_cb,
+		.driver_data = &quirk_ea_rs780e_allinone,
+	},
+	{
+		.ident = "LS7A laptop",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Loongson"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "EA-LS3A3000-LS7A-laptop"),
+		},
+		.callback = dmi_check_cb,
+		.driver_data = &quirk_ea_ls7a_laptop,
+	},
+	{
+		.ident = "LS7A allinone",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Loongson"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "EA-LS3A3000-LS7A-allinone"),
+		},
+		.callback = dmi_check_cb,
+		.driver_data = &quirk_ea_ls7a_allinone,
+	},
+	{
+		.ident = "EA LS7A laptop",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Loongson"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "EA-LS7A-laptop"),
+		},
+		.callback = dmi_check_cb,
+		.driver_data = &quirk_ea_ls7a_laptop,
+	},
+	{
+		.ident = "EA LS7A allinone",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Loongson"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "EA-LS7A-allinone"),
+		},
+		.callback = dmi_check_cb,
+		.driver_data = &quirk_ea_ls7a_allinone,
+	},
+	{}
+};
+MODULE_DEVICE_TABLE(dmi, loongson_device_table);
+
 static struct input_dev *ea_lid_input;
 
 extern struct board_devices *eboard;
+
+static int brightness = DFT_BACKLIGHT_LVL;
+
+static int dmi_checked;
+
+int lvds_off;
 
 /* Power supply */
 #define BIT_BAT_POWER_ACIN		(1 << 0)
@@ -174,6 +303,7 @@ struct sci_event
 static struct input_dev *loongson_hotkey_dev = NULL;
 static const struct sci_event se[] = {
 	[SCI_EVENT_NUM_LID] =			{INDEX_POWER_STATUS, loongson_lid_handler},
+	[SCI_EVENT_NUM_BRIGHTNESS_OFF] = {0, NULL},
 	[SCI_EVENT_NUM_BRIGHTNESS_DN] = {0, NULL},
 	[SCI_EVENT_NUM_BRIGHTNESS_UP] = {0, NULL},
 	[SCI_EVENT_NUM_DISPLAY_TOGGLE] ={0, NULL},
@@ -286,32 +416,39 @@ void loongson_ea_sci_hotkey_handler(int event)
 	struct sci_event * sep = NULL;
 
 	sep = (struct sci_event*)&(se[event]);
-	if(0 != sep->index)
-	{
+	if (0 != sep->index)
 		status = it8528_read(sep->index);
-	}
-	if(NULL != sep->handler)
-	{
+	if (NULL != sep->handler)
 		status = sep->handler(status);
-	}
 
 	ke = sparse_keymap_entry_from_scancode(loongson_hotkey_dev, event);
-	if(ke)
-	{
-		if(SW_LID == ke->keycode)
-		{
+	if (ke) {
+		if (SW_LID == ke->keycode) {
 			/* report LID event. */
 			input_report_switch(loongson_hotkey_dev, SW_LID, status);
 			input_sync(loongson_hotkey_dev);
-		}
-		else
-		{
+		} else {
 			sparse_keymap_report_entry(loongson_hotkey_dev, ke, 1, true);
 			input_sync(loongson_hotkey_dev);
 		}
 	}
 }
 
+static void loongson_ea_lpc_init(void)
+{
+	unsigned int lpc_int_ctl, lpc_int_pol, lpc_int_ena;
+
+	lpc_int_ctl = readl(LS_LPC_INT_CTL);
+	lpc_int_pol = readl(LS_LPC_INT_POL);
+	lpc_int_ena = readl(LS_LPC_INT_ENA);
+
+	if (!(lpc_int_ctl & LS7A_LPC_SIQR_EN))
+		writel(lpc_int_ctl | LS7A_LPC_SIQR_EN, LS_LPC_INT_CTL);
+	if (!(lpc_int_pol & LS7A_LPC_SIQR14_HIGHPOL))
+		writel(lpc_int_pol | LS7A_LPC_SIQR14_HIGHPOL, LS_LPC_INT_POL);
+	if (!(lpc_int_ena & LS7A_LPC_BIT14INT_EN))
+		writel(lpc_int_ena | LS7A_LPC_BIT14INT_EN, LS_LPC_INT_ENA);
+}
 
 static irqreturn_t loongson_sci_int_routine(int irq, void *dev_id)
 {
@@ -320,7 +457,8 @@ static irqreturn_t loongson_sci_int_routine(int irq, void *dev_id)
 		return IRQ_NONE;
 
 	/* Clean sci irq */
-	clean_it8528_event_status();
+	if (loongson_pch->board_type == RS780E)
+		clean_it8528_event_status();
 
 	event = ec_query_get_event_num();
 	if ((SCI_EVENT_NUM_AC > event) || (SCI_EVENT_NUM_POWERBTN < event))
@@ -329,7 +467,8 @@ static irqreturn_t loongson_sci_int_routine(int irq, void *dev_id)
 	return IRQ_HANDLED;
 
 exit_event_action:
-	clean_it8528_event_status();
+	if (loongson_pch->board_type == RS780E)
+		clean_it8528_event_status();
 	return IRQ_HANDLED;
 }
 
@@ -337,11 +476,12 @@ exit_event_action:
 static int sci_pci_init(void)
 {
 	int ret = -EIO;
-	struct pci_dev *pdev;
+	struct pci_dev *pdev = NULL;
 
 	printk(KERN_INFO "Loongson-EA: SCI PCI init.\n");
 
-	pdev = pci_get_device(PCI_VENDOR_ID_ATI, PCI_DEVICE_ID_ATI_SBX00_SMBUS, NULL);
+	if (loongson_pch->board_type == RS780E)
+		pdev = pci_get_device(PCI_VENDOR_ID_ATI, PCI_DEVICE_ID_ATI_SBX00_SMBUS, NULL);
 
 	loongson_sci_device = kmalloc(sizeof(struct sci_device), GFP_KERNEL);
 	if (!loongson_sci_device) {
@@ -349,20 +489,34 @@ static int sci_pci_init(void)
 		return -ENOMEM;
 	}
 
-	loongson_sci_device->irq = SCI_IRQ_NUM;
+	if (loongson_pch->board_type == RS780E)
+		loongson_sci_device->irq = SIO_IRQ_NUM;
+	else if (loongson_pch->board_type == LS7A) {
+		/* For L59 L60 */
+		if (strstr(eboard->name, "L59") || strstr(eboard->name, "L60")) {
+			loongson_sci_device->irq = SIO_IRQ_NUM;
+			loongson_ea_lpc_init();
+		} else
+			loongson_sci_device->irq = quirks->sci_irq_num;
+	}
+
+	printk(KERN_INFO "Loongson-EA: SCI irq_num:%d.\n", loongson_sci_device->irq);
 	loongson_sci_device->irq_data = 0x00;
 	loongson_sci_device->number = 0x00;
 	loongson_sci_device->parameter = 0x00;
 	strcpy(loongson_sci_device->name, EC_SCI_DEV);
 
 	/* Enable pci device and get the GPIO resources. */
-	if ((ret = pci_enable_device(pdev))) {
-		printk(KERN_ERR "Loongson-EA: Enable pci device fail.\n");
-		ret = -ENODEV;
-		goto out_pdev;
+	if (loongson_pch->board_type == RS780E) {
+		if ((ret = pci_enable_device(pdev))) {
+			printk(KERN_ERR "Loongson-EA: Enable pci device fail.\n");
+			ret = -ENODEV;
+			goto out_pdev;
+		}
 	}
 
-	clean_it8528_event_status();
+	if (loongson_pch->board_type == RS780E)
+		clean_it8528_event_status();
 
 	/* Regist pci irq */
 	ret = request_irq(loongson_sci_device->irq, loongson_sci_int_routine,
@@ -378,7 +532,8 @@ static int sci_pci_init(void)
 	return ret;
 
 out_irq:
-	pci_disable_device(pdev);
+	if (loongson_pch->board_type == RS780E)
+		pci_disable_device(pdev);
 out_pdev:
 	kfree(loongson_sci_device);
 	return ret;
@@ -397,20 +552,16 @@ static int sci_pci_driver_init(void)
 	return ret;
 }
 
-static int brightness = 90;
-
-int lvds_off = 0;
-
 int ec_get_brightness(void)
 {
 	int level;
 
-	if(lvds_off)
-		return 25;//default Backlight level
+	if (lvds_off)
+		return DFT_BACKLIGHT_LVL;/* default Backlight level */
 
 	level = it8528_read(INDEX_DISPLAY_BRIGHTNESS);
-	if(level == 0xFF)
-		return 25;
+	if (level == MAX_BACKLIGHT_LVL)
+		return DFT_BACKLIGHT_LVL;
 	else
 		return level;
 }
@@ -418,36 +569,42 @@ EXPORT_SYMBOL(ec_get_brightness);
 
 void ec_set_brightness(int level)
 {
-	if(lvds_off) //if lvds is off do nothing
+	if (lvds_off) /* if lvds is off do nothing */
 		return;
 
-	if(MAX_BRIGHTNESS < level)
-	{
+	if (level > MAX_BRIGHTNESS) {
 		level = MAX_BRIGHTNESS;
+	} else if (level < min_brightness) {
+		level = min_brightness;
 	}
-	else if(level <= 0)
-	{
-		level = 5;
-	}
-    it8528_write(INDEX_DISPLAY_BRIGHTNESS, level);
+
+	it8528_write(INDEX_DISPLAY_BRIGHTNESS, level);
 }
 EXPORT_SYMBOL(ec_set_brightness);
 
+
 int is_ea_laptop(void)
 {
+	if (!dmi_checked) {
+		dmi_check_system(loongson_device_table);
+		dmi_checked = 1;
+	}
+
 	if (strstr(eboard->name,"L39"))
 		return 1;
-	else
-		return 0;
+	return quirks->is_laptop;
 }
 EXPORT_SYMBOL(is_ea_laptop);
 
 int is_ea_minipc(void)
 {
+	if (!dmi_checked) {
+		dmi_check_system(loongson_device_table);
+		dmi_checked = 1;
+	}
 	if (strstr(eboard->name,"L41"))
 		return 1;
-	else
-		return 0;
+	return quirks->is_allinone;
 }
 EXPORT_SYMBOL(is_ea_minipc);
 
@@ -461,7 +618,7 @@ EXPORT_SYMBOL(ea_turn_off_lvds);
 
 void ea_turn_on_lvds(void)
 {
-	if(brightness > 0 && brightness <= 100)
+	if (brightness > min_brightness && brightness <= MAX_BRIGHTNESS)
 		it8528_write(INDEX_DISPLAY_BRIGHTNESS, brightness);
 	else
 		it8528_write(INDEX_DISPLAY_BRIGHTNESS, 90);
@@ -583,7 +740,7 @@ static void loongson_power_info_power_status_update(void)
 					APM_AC_ONLINE : APM_AC_OFFLINE;
 
 	power_info->bat_in = (power_status & MASK(BIT_POWER_BATPRES)) ? 1 : 0;
-	if( power_info->bat_in && ((it8528_read(INDEX_BATTERY_DC_LOW) | (it8528_read(INDEX_BATTERY_DC_HIGH) << 8)) == 0) )
+	if (power_info->bat_in && ((it8528_read(INDEX_BATTERY_DC_LOW) | (it8528_read(INDEX_BATTERY_DC_HIGH) << 8)) == 0))
 		power_info->bat_in = 0;
 
 	power_info->health = (power_info->bat_in) ?	POWER_SUPPLY_HEALTH_GOOD :
@@ -756,7 +913,7 @@ static int loongson_hotkey_init(void)
 	int ret;
 
 	loongson_hotkey_dev = input_allocate_device();
-	if(!loongson_hotkey_dev)
+	if (!loongson_hotkey_dev)
 		return -ENOMEM;
 
 	loongson_hotkey_dev->name = "Loongson-EA PM Hotkey Hotkeys";
@@ -765,8 +922,7 @@ static int loongson_hotkey_init(void)
 	loongson_hotkey_dev->dev.parent = NULL;
 
 	ret = sparse_keymap_setup(loongson_hotkey_dev, loongson_keymap, NULL);
-	if(ret)
-	{
+	if (ret) {
 		printk(KERN_ERR "Loongson-EA PM Hotkey Platform Driver: Fail to setup input device keymap\n");
 		input_free_device(loongson_hotkey_dev);
 
@@ -774,8 +930,7 @@ static int loongson_hotkey_init(void)
 	}
 
 	ret = input_register_device(loongson_hotkey_dev);
-	if(ret)
-	{
+	if (ret) {
 		sparse_keymap_free(loongson_hotkey_dev);
 		input_free_device(loongson_hotkey_dev);
 
@@ -787,7 +942,7 @@ static int loongson_hotkey_init(void)
 /* Hotkey device exit */
 static void loongson_hotkey_exit(void)
 {
-	if(loongson_hotkey_dev) {
+	if (loongson_hotkey_dev) {
 		sparse_keymap_free(loongson_hotkey_dev);
 		input_unregister_device(loongson_hotkey_dev);
 		loongson_hotkey_dev = NULL;
@@ -799,8 +954,10 @@ static int loongson_laptop_suspend(struct platform_device * pdev, pm_message_t s
 {
 	struct pci_dev *dev;
 
-	dev = pci_get_device(PCI_VENDOR_ID_ATI, PCI_DEVICE_ID_ATI_SBX00_SMBUS, NULL);
-	pci_disable_device(dev);
+	if (loongson_pch->board_type == RS780E) {
+		dev = pci_get_device(PCI_VENDOR_ID_ATI, PCI_DEVICE_ID_ATI_SBX00_SMBUS, NULL);
+		pci_disable_device(dev);
+	}
 
 	return 0;
 }
@@ -811,8 +968,14 @@ static int loongson_laptop_resume(struct platform_device * pdev)
 	struct pci_dev *dev;
 	int ret;
 
-	dev = pci_get_device(PCI_VENDOR_ID_ATI, PCI_DEVICE_ID_ATI_SBX00_SMBUS, NULL);
-	ret = pci_enable_device(dev);
+	if (loongson_pch->board_type == RS780E) {
+		dev = pci_get_device(PCI_VENDOR_ID_ATI, PCI_DEVICE_ID_ATI_SBX00_SMBUS, NULL);
+		ret = pci_enable_device(dev);
+	} else if (loongson_pch->board_type == LS7A) {
+		/* For L59 L60 */
+		if (strstr(eboard->name, "L59") || strstr(eboard->name, "L60"))
+			loongson_ea_lpc_init();
+	}
 
 	/* Process LID event */
 	loongson_ea_sci_hotkey_handler(SCI_EVENT_NUM_LID);
@@ -823,7 +986,8 @@ static int loongson_laptop_resume(struct platform_device * pdev)
 	 *
 	 * Clear all SCI events when suspend
 	 */
-	clean_it8528_event_status();
+	if (loongson_pch->board_type == RS780E)
+		clean_it8528_event_status();
 
 	/* Update the power statu when resume */
 	if(is_ea_laptop())
@@ -847,17 +1011,17 @@ static int loongson_laptop_resume(struct platform_device * pdev)
 static int loongson_sci_event_probe(struct platform_device *dev)
 {
 	int ret = 0;
-    struct input_dev *input;
+	struct input_dev *input;
 	printk(KERN_INFO "Loongson-EA: in probe!\n");
 	input = input_allocate_device();
-	if(!input) {
+	if (!input) {
 		ret = -ENOMEM;
 		goto fail_backlight_device_register;
 	}
 	input->name = "Lid Switch";
 
 	input->id.bustype = BUS_HOST;
-	input->id.product = 0x1BAB;
+	input->id.product = EA_VENDOR_ID;
 	input->evbit[0] = BIT_MASK(EV_SW);
 	set_bit(SW_LID, input->swbit);
 
@@ -872,7 +1036,7 @@ static int loongson_sci_event_probe(struct platform_device *dev)
 		goto fail_hotkey_init;
 	}
 
-	if(is_ea_laptop()){
+	if (is_ea_laptop()) {
 		/* Register power supply START */
 		power_info = kzalloc(sizeof(struct loongson_power_info), GFP_KERNEL);
 		if (!power_info) {
@@ -931,8 +1095,21 @@ static int __init loongson_ea_laptop_init(void)
 {
 	int ret;
 
-	if (!strstr(eboard->name,"L39") && !strstr(eboard->name,"L41"))
-		return 0;
+	if (!dmi_check_system(loongson_device_table)) {
+		if (strstr(eboard->name, "L39") || strstr(eboard->name, "L41")) {
+			/* L39: set min_brightness to 5 */
+			if (strstr(eboard->name, "L39"))
+				min_brightness = 5;
+			printk(KERN_ERR "EA 780E platform with PMON.\n");
+
+		}
+		else{
+			printk(KERN_ERR "Loongson-EA Laptop not dmimatch devices!\n");
+			return -ENODEV;
+		}
+	}
+
+	dmi_checked = 1;
 
 	printk(KERN_INFO "Loongson-EA PM Hotkey Platform Driver:regist loongson platform driver begain.\n");
 
