@@ -135,11 +135,11 @@ static void rs780_irq_router_init(void)
 
 	/* route LPC int to cpu core0 int 0 */
 	dummy = LOONGSON_INT_COREx_INTy(loongson_boot_cpu_id, 0);
-	ls64_conf_write32(dummy, LS_IRC_ENT_LPC);
+	ls64_conf_write8(dummy, LS_IRC_ENT_LPC);
 
 	/* route HT1 int0 ~ int7 to cpu core0 INT1*/
 	dummy = LOONGSON_INT_COREx_INTy(loongson_boot_cpu_id, 1);
-	ls64_conf_write32(dummy, LS_IRC_ENT_HT1(0));
+	ls64_conf_write8(dummy, LS_IRC_ENT_HT1(0));
 
 	for (i = 1; i <= 3; i++)
 	{
@@ -147,17 +147,17 @@ static void rs780_irq_router_init(void)
 
 		if(cpu_number_map(rawcpu)<setup_max_cpus && cpu_number_map(rawcpu)<nr_cpu_ids) {
 			dummy = LOONGSON_INT_COREx_INTy(rawcpu, 1);
-			ls64_conf_write32(dummy, LS_IRC_ENT_HT1(i));
+			ls64_conf_write8(dummy, LS_IRC_ENT_HT1(i));
 		} else {
 			dummy = LOONGSON_INT_COREx_INTy(loongson_boot_cpu_id, 1);
-			ls64_conf_write32(dummy, LS_IRC_ENT_HT1(i));
+			ls64_conf_write8(dummy, LS_IRC_ENT_HT1(i));
 			bootcore_int_mask2 |= 1<<i;
 		}
 	}
 
 	for (i = 4; i < 8; i++) {
 		dummy = LOONGSON_INT_COREx_INTy(loongson_boot_cpu_id, 1);
-		ls64_conf_write32(dummy, LS_IRC_ENT_HT1(i));
+		ls64_conf_write8(dummy, LS_IRC_ENT_HT1(i));
 	}
 
 	/* enable HT1 interrupt */

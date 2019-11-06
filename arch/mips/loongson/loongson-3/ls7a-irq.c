@@ -322,7 +322,7 @@ void ls7a_irq_router_init(void)
 		for (i = 0; i < loop; i++) {
 			if (i < 2) { /* vector 0-63 for PIC irq */
 				dummy = LOONGSON_INT_COREx_INTy(loongson_boot_cpu_id, 1);
-				ls64_conf_write64(dummy, LS_IRC_ENT_HT1(i));
+				ls64_conf_write8(dummy, LS_IRC_ENT_HT1(i));
 
 				LOONGSON_HT1_INTN_EN(i) = 0xffffffff;
 
@@ -331,7 +331,7 @@ void ls7a_irq_router_init(void)
 				ls64_conf_write32(dummy, LS_IRC_ENSET);
 
 			} else {
-				ls64_conf_write64(((1 << 5) | 0xf), LS_IRC_ENT_HT1(i));
+				ls64_conf_write8(((1 << 5) | 0xf), LS_IRC_ENT_HT1(i));
 				LOONGSON_HT1_INTN_EN(i) = 0xffffffff;
 
 				dummy =  ls64_conf_read32(LS_IRC_BCE);
@@ -347,7 +347,7 @@ void ls7a_irq_router_init(void)
 	} else {
 		/* route 3A CPU0 INT0 to node0 core0 INT1(IP3) */
 		dummy = LOONGSON_INT_COREx_INTy(loongson_boot_cpu_id, 1);
-		ls64_conf_write32(dummy, LS_IRC_ENT(0));
+		ls64_conf_write8(dummy, LS_IRC_ENT(0));
 
 		dummy = ls64_conf_read32(LS_IRC_EN);
 		dummy |= 0x1;

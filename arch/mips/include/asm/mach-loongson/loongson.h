@@ -472,6 +472,20 @@ static inline void ls64_conf_write32(u32 val, volatile void __iomem *addr)
 
 }
 
+static inline void ls64_conf_write8(u8 val, volatile void __iomem *addr)
+{
+	asm volatile (
+	"	.set push			\n"
+	"	.set noreorder			\n"
+	"	sb	%[v], (%[hw])		\n"
+	"	lb	$0, (%[hw])		\n"
+	"	.set pop			\n"
+	:
+	: [hw] "r" (addr), [v] "r" (val)
+	);
+
+}
+
 
 #define ls64_conf_read64(addr) readq(addr)
 #define ls64_conf_read32(addr) readl(addr)
