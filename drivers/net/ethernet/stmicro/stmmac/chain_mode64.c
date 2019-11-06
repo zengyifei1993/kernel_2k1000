@@ -39,10 +39,7 @@ static unsigned int stmmac_jumbo_frm(void *p, struct sk_buff *skb, int csum)
 	unsigned int i = 1, len;
 	dma_addr_t dma_phys;
 
-	if (priv->plat->enh_desc)
-		bmax = BUF_SIZE_8KiB;
-	else
-		bmax = BUF_SIZE_2KiB;
+	bmax = BUF_SIZE_8KiB;
 
 	len = nopaged_len - bmax;
 
@@ -88,10 +85,8 @@ static unsigned int stmmac_is_jumbo_frm(int len, int enh_desc)
 {
 	unsigned int ret = 0;
 
-	if ((enh_desc && (len > BUF_SIZE_8KiB)) ||
-	    (!enh_desc && (len > BUF_SIZE_2KiB))) {
+	if (len >= BUF_SIZE_16KiB)
 		ret = 1;
-	}
 
 	return ret;
 }
@@ -126,10 +121,16 @@ static void stmmac_clean_desc3(void *priv_ptr, struct dma_desc *p)
 {
 }
 
+static int stmmac_set_16kib_bfsize(int mtu)
+{
+	return ALIGN(mtu + ETH_HLEN + 4 + NET_IP_ALIGN, AXIWIDTH);
+}
+
 const struct stmmac_chain_mode_ops chain_mode64_ops = {
 	.init = stmmac_init_dma_chain,
 	.is_jumbo_frm = stmmac_is_jumbo_frm,
 	.jumbo_frm = stmmac_jumbo_frm,
 	.refill_desc3 = stmmac_refill_desc3,
 	.clean_desc3 = stmmac_clean_desc3,
+	.set_16kib_bfsize = stmmac_set_16kib_bfsize,
 };

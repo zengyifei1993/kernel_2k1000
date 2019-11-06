@@ -1103,7 +1103,7 @@ static int init_dma_desc_rings(struct net_device *dev)
 	/* Set the max buffer size according to the DESC mode
 	 * and the MTU. Note that RING mode allows 16KiB bsize.
 	 */
-	if (priv->mode == STMMAC_RING_MODE)
+	if (priv->mode == STMMAC_RING_MODE || priv->hw->ring->set_16kib_bfsize)
 		bfsize = priv->hw->ring->set_16kib_bfsize(dev->mtu);
 
 	if (!bfsize)
@@ -2927,7 +2927,7 @@ static int stmmac_hw_init(struct stmmac_priv *priv)
 
 	/* To use the chained or ring mode */
 	if (chain_mode) {
-		priv->hw->chain = priv->extend_desc64?&chain_mode64_ops:&chain_mode_ops;
+		priv->hw->ring = priv->hw->chain = priv->extend_desc64?&chain_mode64_ops:&chain_mode_ops;
 		pr_info(" Chain mode enabled\n");
 		priv->mode = STMMAC_CHAIN_MODE;
 	} else {

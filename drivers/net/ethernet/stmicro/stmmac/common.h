@@ -438,12 +438,13 @@ struct stmmac_ring_mode_ops {
 };
 
 struct stmmac_chain_mode_ops {
-	void (*init) (void *des, dma_addr_t phy_addr, unsigned int size,
-		      unsigned int extend_desc);
 	unsigned int (*is_jumbo_frm) (int len, int ehn_desc);
 	unsigned int (*jumbo_frm) (void *priv, struct sk_buff *skb, int csum);
 	void (*refill_desc3) (void *priv, struct dma_desc *p);
+	void (*init) (void *des, dma_addr_t phy_addr, unsigned int size,
+		      unsigned int extend_desc);
 	void (*clean_desc3) (void *priv, struct dma_desc *p);
+	int (*set_16kib_bfsize) (int mtu);
 };
 
 struct mac_device_info {
