@@ -76,7 +76,6 @@ void __init prom_init(void)
 
 	printk("loongson2k dmi_scan_machine \n");
 	dmi_scan_machine();
-	dmi_memdev_walk();
 	dmi_set_dump_stack_arch_desc();
 
 #if defined(CONFIG_SMP)
