@@ -207,13 +207,14 @@ static void ls_spi_work(struct work_struct *work)
 
 		spi = m->spi;
 
-		/*setup spi clock*/
-		ls_spi_update_state(ls_spi, spi, NULL);
-
 		/*in here set cs*/
 		set_cs(ls_spi, spi, 0);
 
 		list_for_each_entry(t, &m->transfers, transfer_list) {
+
+			/*setup spi clock*/
+			ls_spi_update_state(ls_spi, spi, t);
+
 			if (t->len)
 				m->actual_length +=
 					ls_spi_write_read(spi, t);
