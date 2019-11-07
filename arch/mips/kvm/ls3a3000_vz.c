@@ -44,6 +44,7 @@
 
 #include "trace.h"
 #include "ls3a3000.h"
+#include "ls7a_irq.h"
 
 
 /* Pointers to last VCPU loaded on each physical CPU */
@@ -3207,6 +3208,31 @@ int kvm_mips_handle_ls3a3000_vz_root_tlb_fault(unsigned long badvaddr,
 	pte_t pte_gpa[2];
 	int idx, index;
 	struct kvm_mips_tlb tlb;
+
+#ifdef CONFIG_KVM_LOONGSON_IOAPIC_READ_OPT
+	struct kvm *kvm = vcpu->kvm;
+	kvm_pfn_t pfn;
+	unsigned long prot_bits;
+	struct loongson_kvm_7a_ioapic *s;
+
+	if(((badvaddr&PAGE_MASK) == LS7A_IOAPIC_GUEST_GPA_BASE) && ls7a_ioapic_in_kernel(kvm) && (write_fault == false)){
+		s = kvm->arch.v_ioapic;
+		pfn = page_to_pfn(s->read_page);
+	        prot_bits = _PAGE_PRESENT | __READABLE | _page_cachable_default ;
+		pte_gpa[0] = pfn_pte(pfn,__pgprot(prot_bits));
+		pte_val(pte_gpa[0]) |= _PAGE_GLOBAL;
+		pte_val(pte_gpa[1]) = _PAGE_GLOBAL;
+		tlb.tlb_hi = (badvaddr & 0xc000ffffffffe000) & (PAGE_MASK << 1);
+		tlb.tlb_mask = 0x7800;
+		tlb.tlb_lo[0] = pte_to_entrylo(pte_val(pte_gpa[0]));
+		tlb.tlb_lo[1] = pte_to_entrylo(pte_val(pte_gpa[1]));
+		kvm_mips_tlbw(&tlb);
+		vcpu->stat.lsvz_ls7a_pic_read_exits++;
+		kvm_debug("7A IOAPIC tlb_hi = 0x%lx,tlb_lo = 0x%lx,badvaddr = 0x%lx\n",tlb.tlb_hi,tlb.tlb_lo[0],badvaddr);
+		++vcpu->stat.lsvz_general_exits;
+		return RESUME_GUEST;
+	}
+#endif
 
 	ret = RESUME_GUEST;
 	gpa = KVM_INVALID_ADDR;
