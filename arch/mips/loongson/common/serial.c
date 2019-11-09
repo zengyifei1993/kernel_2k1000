@@ -24,8 +24,9 @@
 	.irq		= int,					\
 	.uartclk	= clk,					\
 	.iotype		= UPIO_PORT,				\
-	.flags		= UPF_BOOT_AUTOCONF | UPF_SKIP_TEST,	\
+	.flags		= UPF_BOOT_AUTOCONF | UPF_SKIP_TEST | UPF_FIXED_PORT | UPF_FIXED_TYPE,	\
 	.regshift	= 0,					\
+	.type		= PORT_LOONGSON,			\
 }
 
 #define PORT_M(int, clk)				\
@@ -34,8 +35,9 @@
 	.uartclk	= clk,					\
 	.iotype		= UPIO_MEM,				\
 	.membase	= (void __iomem *)NULL,			\
-	.flags		= UPF_BOOT_AUTOCONF | UPF_SKIP_TEST,	\
+	.flags		= UPF_BOOT_AUTOCONF | UPF_SKIP_TEST | UPF_FIXED_PORT | UPF_FIXED_TYPE,	\
 	.regshift	= 0,					\
+	.type		= PORT_LOONGSON,			\
 }
 
 static struct plat_serial8250_port uart8250_data[][MAX_UARTS + 1] = {

@@ -48,7 +48,7 @@
 
 		uart0: serial@0x10080000 {
 			device_type = "serial";
-			compatible = "ns16550a";
+			compatible = "ns16550,loongson";
 			reg = <0 0x10080000 0x100>;
 			clock-frequency = <50000000>;
 			interrupts = <72>;
@@ -58,7 +58,7 @@
 
 		uart1: serial@0x10080100 {
 			device_type = "serial";
-			compatible = "ns16550a";
+			compatible = "ns16550,loongson";
 			reg = <0 0x10080100 0x100>;
 			clock-frequency = <50000000>;
 			interrupts = <72>;
@@ -68,7 +68,7 @@
 
 		uart2: serial@0x10080200 {
 			device_type = "serial";
-			compatible = "ns16550a";
+			compatible = "ns16550,loongson";
 			reg = <0 0x10080200 0x100>;
 			clock-frequency = <50000000>;
 			interrupts = <72>;
@@ -78,7 +78,7 @@
 
 		uart3: serial@0x10080300 {
 			device_type = "serial";
-			compatible = "ns16550a";
+			compatible = "ns16550,loongson";
 			reg = <0 0x10080300 0x100>;
 			clock-frequency = <50000000>;
 			interrupts = <72>;
