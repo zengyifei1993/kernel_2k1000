@@ -230,7 +230,7 @@ bad_area_nosemaphore:
 no_context:
 	/* Are we prepared to handle this kernel fault?	 */
 	if (fixup_exception(regs)) {
-		if (!in_atomic())
+		if (!hardirq_count())
 			current->thread.cp0_baduaddr = address;
 		return;
 	}
