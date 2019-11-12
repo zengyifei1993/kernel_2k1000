@@ -320,28 +320,18 @@ void ls7a_irq_router_init(void)
 
 		/* route HT1 intx */
 		for (i = 0; i < loop; i++) {
-			if (i < 2) { /* vector 0-63 for PIC irq */
-				dummy = LOONGSON_INT_COREx_INTy(loongson_boot_cpu_id, 1);
-				ls64_conf_write8(dummy, LS_IRC_ENT_HT1(i));
+			dummy = LOONGSON_INT_COREx_INTy(loongson_boot_cpu_id, 1);
+			ls64_conf_write8(dummy, LS_IRC_ENT_HT1(i));
+			LOONGSON_HT1_INTN_EN(i) = 0xffffffff;
 
-				LOONGSON_HT1_INTN_EN(i) = 0xffffffff;
+			dummy =  ls64_conf_read32(LS_IRC_EN);
+			dummy |=  (1 << (i + 24));
+			ls64_conf_write32(dummy, LS_IRC_ENSET);
 
-				dummy =  ls64_conf_read32(LS_IRC_EN);
-				dummy |=  (1 << (i + 24));
-				ls64_conf_write32(dummy, LS_IRC_ENSET);
-
-			} else {
-				ls64_conf_write8(((1 << 5) | 0xf), LS_IRC_ENT_HT1(i));
-				LOONGSON_HT1_INTN_EN(i) = 0xffffffff;
-
-				dummy =  ls64_conf_read32(LS_IRC_BCE);
-				dummy |=  (1 << (i + 24));
-				ls64_conf_write32(dummy, LS_IRC_BCE);
-
-				dummy =  ls64_conf_read32(LS_IRC_EN);
-				dummy |=  (1 << (i + 24));
-				ls64_conf_write32(dummy, LS_IRC_ENSET);
-
+			if (i > 2) {
+ 				dummy =  ls64_conf_read32(LS_IRC_BCE);
+ 				dummy |=  (1 << (i + 24));
+ 				ls64_conf_write32(dummy, LS_IRC_BCE);
 			}
 		}
 	} else {

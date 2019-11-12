@@ -53,6 +53,7 @@ extern int autoplug_verbose;
 
 void	(*loongson3_ipi)(struct pt_regs *regs);
 
+extern void fixup_irq_route(bool online);
 extern unsigned short ls3a_ipi_pos2irq[];
 extern unsigned int ls2h_pos2irq[];
 extern unsigned int rs780e_pos2irq[];
@@ -227,6 +228,7 @@ static void  loongson3_comp_smp_finish(void)
 	write_c0_compare(read_c0_count() + mips_hpt_frequency/HZ);
 #endif
 #endif
+	fixup_irq_route(true);
 	local_irq_enable();
 	dwrite_csr(LOONGSON_MAIL_BUF_OFFSET, 0);
 	if (verbose || system_state == SYSTEM_BOOTING)
@@ -453,6 +455,7 @@ static void  loongson3_smp_finish(void)
 #ifndef CONFIG_LOONGSON3_ENHANCEMENT
 	write_c0_compare(read_c0_count() + mips_hpt_frequency/HZ);
 #endif
+	fixup_irq_route(true);
 	local_irq_enable();
 	ls64_conf_write64(0, (void *)(ipi_mailbox_buf[cpu_logical_map(cpu)]+0x0));
 	if (verbose || system_state == SYSTEM_BOOTING)

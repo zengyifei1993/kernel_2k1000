@@ -489,6 +489,7 @@ static inline void ls64_conf_write8(u8 val, volatile void __iomem *addr)
 
 #define ls64_conf_read64(addr) readq(addr)
 #define ls64_conf_read32(addr) readl(addr)
+#define ls64_conf_read8(addr) readb(addr)
 
 /*
  * Loongson specific extension encodings
