@@ -70,7 +70,8 @@
 #define LS_ANYSEND_OTHER_FUNC_OFFSET	(LOONGSON_OTHER_FUNC_OFFSET + 4)
 #define LS_ANYSEND_OTHER_FUNC_EXT_IOI	(LOONGSON_OTHER_FUNC_EXT_IOI >> 32)
 #define LS_ANYSEND_BLOCK_SHIFT	31
-#define LS_ANYSEND_CPU_SHIFT	16
+#define LS_ANYSEND_NODE_SHIFT	18
+#define LS_ANYSEND_MASK_SHIFT	27
 #define LS_ANYSEND_CPU_MASK	0x3FF
 #define LS_ANYSEND_DATA_SHIFT	32
 #define LS_ANYSEND_IOI_NODEMAP_ITEMS	8
@@ -83,16 +84,15 @@
 #define LS_ANYSEND_IOI_IPMAP_DATA	0x02020202 /* route to IP3 */
 #define LS_ANYSEND_IOI_ROUTE_DATA	0x11111111 /* route to node 0 core 0 */
 #define LS_ANYSEND_IOI_BOUNCE_DATA	0xFFFFFFFF
-#define LS_ANYSEND_HANDLE_IRQS		4
 #define LS_IOI_CPUNODE_SHIFT_IN_ROUTE	4
 #define LS_ANYSEND_ROUTE_DATA_POS(n)	(n << 3)
 #define LS_ANYSEND_IOI_UPDATE_IRQ_NUM	32
 
-extern void any_send(unsigned int off, unsigned int data, unsigned int cpu);
-#define EXT_IOI_REGS_INIT(cnt, off, data, cpu) ({	\
+extern void any_send(unsigned int off, unsigned int data, unsigned int data_mask, unsigned int node);
+#define EXT_IOI_REGS_INIT(cnt, off, data, node) ({	\
 	int x;						\
 	for (x = 0; x < cnt; x++)			\
-		any_send(off + (x << 2), data, cpu);	\
+		any_send(off + (x << 2), data, 0, node);	\
 })
 
 /* group 0 */

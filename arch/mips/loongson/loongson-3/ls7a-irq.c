@@ -229,10 +229,9 @@ static void init_7a_irq(int dev, int irq, struct irq_chip *pirq_chip) {
 
 static void ext_ioi_init(void)
 {
-	int i, j, cpu;
+	int i;
 	unsigned int data = 0;
-	unsigned int tmp = 0;
-	int package = -1;
+	unsigned int tmp, node;
 
 	tmp = (unsigned int)(read_csr(LS_ANYSEND_OTHER_FUNC_OFFSET) | LS_ANYSEND_OTHER_FUNC_EXT_IOI);
 
@@ -241,24 +240,18 @@ static void ext_ioi_init(void)
 		ext_ini_en[i] = LS_ANYSEND_IOI_EN32_DATA;
 	}
 
-	for_each_cpu(i, cpu_possible_mask) {
-		int cur_package = __cpu_logical_map[i] / cores_per_package;
-		if (package != cur_package) {
-			package = cur_package;
-			cpu = __cpu_logical_map[i];
+	for_each_online_node(node) {
+		any_send(LS_ANYSEND_OTHER_FUNC_OFFSET, tmp, 0, node);
 
-			any_send(LS_ANYSEND_OTHER_FUNC_OFFSET, tmp, cpu);
-
-			for(j = 0; j < LS_ANYSEND_IOI_NODEMAP_ITEMS; j++) {
-				data = ((((j << 1) + 1) << LS_IOI_NODEMAP_BITS_PER_ENTRY) | (j << 1));
-				any_send(LOONGSON_EXT_IOI_NODEMAP_OFFSET + j*4, data, cpu);
-			}
-
-			EXT_IOI_REGS_INIT(LS_ANYSEND_IOI_EN_ITEMS, LOONGSON_EXT_IOI_EN64_OFFSET, LS_ANYSEND_IOI_EN32_DATA, cpu);
-			EXT_IOI_REGS_INIT(LS_ANYSEND_IOI_IPMAP_ITEMS, LOONGSON_EXT_IOI_MAP_OFFSET, LS_ANYSEND_IOI_IPMAP_DATA, cpu);
-			EXT_IOI_REGS_INIT(LS_ANYSEND_IOI_ROUTE_ITEMS, LOONGSON_EXT_IOI_ROUTE_OFFSET, LS_ANYSEND_IOI_ROUTE_DATA, cpu);
-			EXT_IOI_REGS_INIT(LS_ANYSEND_IOI_BOUNCE_ITEMS, LOONGSON_EXT_IOI_BOUNCE64_OFFSET, LS_ANYSEND_IOI_BOUNCE_DATA, cpu);
+		for(i = 0; i < LS_ANYSEND_IOI_NODEMAP_ITEMS; i++) {
+			data = ((((i << 1) + 1) << LS_IOI_NODEMAP_BITS_PER_ENTRY) | (i << 1));
+			any_send(LOONGSON_EXT_IOI_NODEMAP_OFFSET + i*4, data, 0, node);
 		}
+
+		EXT_IOI_REGS_INIT(LS_ANYSEND_IOI_EN_ITEMS, LOONGSON_EXT_IOI_EN64_OFFSET, LS_ANYSEND_IOI_EN32_DATA, node);
+		EXT_IOI_REGS_INIT(LS_ANYSEND_IOI_IPMAP_ITEMS, LOONGSON_EXT_IOI_MAP_OFFSET, LS_ANYSEND_IOI_IPMAP_DATA, node);
+		EXT_IOI_REGS_INIT(LS_ANYSEND_IOI_ROUTE_ITEMS, LOONGSON_EXT_IOI_ROUTE_OFFSET, LS_ANYSEND_IOI_ROUTE_DATA, node);
+		EXT_IOI_REGS_INIT(LS_ANYSEND_IOI_BOUNCE_ITEMS, LOONGSON_EXT_IOI_BOUNCE64_OFFSET, LS_ANYSEND_IOI_BOUNCE_DATA, node);
 	}
 	loongson_pch->irq_dispatch = ls7a_ext_irq_dispatch;
 

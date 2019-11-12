@@ -167,66 +167,48 @@ void ls3a_destroy_msi_irq(unsigned int irq, unsigned char need_ipi)
 	clear_bit(pos, ls3a_msi_irq_in_use);
 }
 
-void any_send(unsigned int off, unsigned int data, unsigned int cpu)
+void any_send(unsigned int off, unsigned int data, unsigned int data_mask, unsigned int node)
 {
 	unsigned long data64 = 0;
 	unsigned int blk_bit_set = (unsigned int)(1 << LS_ANYSEND_BLOCK_SHIFT);
 
 	data64 = blk_bit_set | off;
-	data64 |= (cpu << LS_ANYSEND_CPU_SHIFT);
+	data64 |= (node << LS_ANYSEND_NODE_SHIFT);
+	data64 |= (data_mask << LS_ANYSEND_MASK_SHIFT);
 	data64 |= ((unsigned long)data << LS_ANYSEND_DATA_SHIFT);
 	dwrite_csr(LOONGSON_ANY_SEND_OFFSET, data64);
 }
 
 static void set_irq_route(int pos, const struct cpumask *affinity)
 {
-	int k, pos_off;
-	unsigned int nodemap[LS_ANYSEND_HANDLE_IRQS];
-	unsigned char coremap[LS_ANYSEND_HANDLE_IRQS][MAX_NUMNODES];
+	int pos_off;
+	unsigned int nodemap, route_node, data_byte, data_mask;
+	unsigned char coremap[MAX_NUMNODES];
 	unsigned long data = 0;
-	int package = -1;
-	int cpu;
+	int cpu, node;
 
-	pos_off = pos & (~3); /* get pos of aligned 4 irqs */
-	memset(nodemap, 0, sizeof(unsigned int) * LS_ANYSEND_HANDLE_IRQS);
-	memset(coremap, 0, sizeof(unsigned char) * LS_ANYSEND_HANDLE_IRQS * MAX_NUMNODES);
+	pos_off = pos & (~3);
+	data_byte = pos & (3);
+	data_mask = ~BIT_MASK(data_byte) & 0xf;
+	nodemap = 0;
+	memset(coremap, 0, sizeof(unsigned char) * MAX_NUMNODES);
 
-	/* calculate nodemap and coremap of 4 irqs including target irq */
-	for (k = 0; k < LS_ANYSEND_HANDLE_IRQS; k++) {
-		const struct cpumask *affinity_tmp;
-		if (pos_off + k == pos) {
-			affinity_tmp = affinity;
-		} else {
-			struct irq_desc *desc = irq_to_desc(LS3A_VECTOR2IOIRQ(pos_off + k));
-			affinity_tmp = desc->irq_data.affinity;
-		}
-		for_each_cpu(cpu, affinity_tmp) {
-			nodemap[k] |= (1 << (__cpu_logical_map[cpu] / cores_per_node));
-			coremap[k][__cpu_logical_map[cpu] / cores_per_node] |= (1 << (__cpu_logical_map[cpu] % cores_per_node));
-		}
+	/* calculate nodemap and coremap of target irq */
+	for_each_cpu(cpu, affinity) {
+		node = __cpu_logical_map[cpu] / cores_per_node;
+		nodemap |= (1 << node);
+		coremap[node] |= (1 << (__cpu_logical_map[cpu] % cores_per_node));
 	}
 
-	/* csr write access to force current interrupt route completed on every core */
-	for_each_cpu(cpu, cpu_online_mask)
-		any_send(LOONGSON_EXT_IOI_BOUNCE64_OFFSET, LS_ANYSEND_IOI_EN32_DATA, __cpu_logical_map[cpu]);
 
-	for_each_cpu(cpu, cpu_online_mask) {
-		if (package != cpu_data[cpu].package) {
+	for_each_online_node(node) {
 
-			package = cpu_data[cpu].package;
-			data = 0;
-
-			/* !!!! Only support 32bit data write, need to update 4 irqs route reg one time */
-			for (k = 0; k < LS_ANYSEND_HANDLE_IRQS; k++) {
-				if ((nodemap[k] & (1 << package)) && (__cpu_logical_map[cpu] != loongson_boot_cpu_id)) {
-					/* target node only set itself to avoid unreasonable transfer */
-					data |= ((unsigned long)(coremap[k][package] | ((1 << package) << LS_IOI_CPUNODE_SHIFT_IN_ROUTE)) << (LS_ANYSEND_ROUTE_DATA_POS(k)));
-				} else {
-					data |= ((unsigned long)(coremap[k][package] | (nodemap[k] << LS_IOI_CPUNODE_SHIFT_IN_ROUTE)) << (LS_ANYSEND_ROUTE_DATA_POS(k)));
-				}
-			}
-			any_send(LOONGSON_EXT_IOI_ROUTE_OFFSET + pos_off, data, __cpu_logical_map[cpu]);
-		}
+		data = 0;
+		/* Node 0 is in charge of inter-node interrupt dispatch */
+		route_node = (node == 0) ? nodemap : (1 << node);
+		data |= ((coremap[node] | (route_node << LS_IOI_CPUNODE_SHIFT_IN_ROUTE))\
+			 << (LS_ANYSEND_ROUTE_DATA_POS(data_byte)));
+		any_send(LOONGSON_EXT_IOI_ROUTE_OFFSET + pos_off, data, data_mask, node);
 	}
 
 }
@@ -239,6 +221,7 @@ int ext_set_irq_affinity(struct irq_data *d, const struct cpumask *affinity,
 	unsigned short pos_off;
 	unsigned int vector;
 	struct cpumask tmp;
+	unsigned int node;
 
 	if (!config_enabled(CONFIG_SMP))
 		return -EPERM;
@@ -263,9 +246,10 @@ int ext_set_irq_affinity(struct irq_data *d, const struct cpumask *affinity,
 	vector = LS3A_IOIRQ2VECTOR(d->irq);
 	pos_off = vector >> 5;
 
-	any_send(LOONGSON_EXT_IOI_EN64_OFFSET + (pos_off << 2), ext_ini_en[pos_off] & (~((1 << (vector & 0x1F)))), loongson_boot_cpu_id);
+	node = loongson_boot_cpu_id / cores_per_node;
+	any_send(LOONGSON_EXT_IOI_EN64_OFFSET + (pos_off << 2), ext_ini_en[pos_off] & (~((1 << (vector & 0x1F)))), 0, node);
 	set_irq_route(vector, &tmp);
-	any_send(LOONGSON_EXT_IOI_EN64_OFFSET + (pos_off << 2), ext_ini_en[pos_off], loongson_boot_cpu_id);
+	any_send(LOONGSON_EXT_IOI_EN64_OFFSET + (pos_off << 2), ext_ini_en[pos_off], 0, node);
 
 	cpumask_copy(d->affinity, &tmp);
 	spin_unlock_irqrestore(&affinity_lock, flags);
