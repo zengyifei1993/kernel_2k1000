@@ -52,7 +52,7 @@ static void __set_level(struct ls2_gpio_chip *lgpio, unsigned pin, int high)
  */
 static int ls2_gpio_request(struct gpio_chip *chip, unsigned pin)
 {
-	if (pin >= (chip->ngpio + chip->base))
+	if (pin >= chip->ngpio)
 		return -EINVAL;
 	else
 		return 0;
