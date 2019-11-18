@@ -133,6 +133,7 @@ int ls_set_affinity_icu_irq(struct irq_data *data, const struct cpumask *affinit
 	cpumask_copy(data->affinity, &tmask);
 
 	mask = cpumask_bits(&tmask);
+	*mask = ((*mask&1)?(1<<cpu_logical_map(0)):0)|((*mask&2)?(1<<cpu_logical_map(1)):0);
 	entry = (void *)(base  + off);
 	switch(*mask&3)
 	{

@@ -136,6 +136,7 @@ void  loongson_smp_finish(void)
 void __init loongson_smp_setup(void)
 {
 	int i = 0;
+	int core_id = (read_c0_ebase() & 0x3ff);
 
 	init_cpu_possible(cpu_none_mask);
 
@@ -147,6 +148,10 @@ void __init loongson_smp_setup(void)
 		set_cpu_possible(i, true);
 		i++;
 	}
+	__cpu_logical_map[0] = core_id;
+	__cpu_number_map[0] = core_id;
+	__cpu_logical_map[core_id] = 0;
+	__cpu_number_map[core_id] = 0;
 	printk(KERN_INFO "Detected %i available CPU(s)\n", i);
 
 	printk("Detected %i available CPU(s)\n", i);
