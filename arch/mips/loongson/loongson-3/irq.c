@@ -79,6 +79,7 @@ extern struct platform_controller_hub ls7a_pch;
 extern struct platform_controller_hub rs780_pch;
 
 extern unsigned long long smp_group[4];
+extern enum irq_chip_model msi_chip_model;
 
 int ls3a_msi_enabled = 0;
 EXPORT_SYMBOL(ls3a_msi_enabled);
@@ -237,6 +238,7 @@ int ext_set_irq_affinity(struct irq_data *d, const struct cpumask *affinity,
 	unsigned long flags;
 	unsigned short pos_off;
 	unsigned int vector;
+	struct cpumask tmp;
 
 	if (!config_enabled(CONFIG_SMP))
 		return -EPERM;
@@ -248,11 +250,12 @@ int ext_set_irq_affinity(struct irq_data *d, const struct cpumask *affinity,
 		return -EINVAL;
 	}
 
-	if (!cpumask_subset(affinity, cpu_online_mask)) {
+	if (!cpumask_intersects(affinity, cpu_online_mask)) {
 		spin_unlock_irqrestore(&affinity_lock, flags);
 		return -EINVAL;
 	}
 
+	cpumask_and(&tmp, affinity, cpu_online_mask);
 	/*
 	 * control interrupt enable or disalbe through boot cpu
 	 * which is reponsible for dispatching interrupts.
@@ -261,10 +264,10 @@ int ext_set_irq_affinity(struct irq_data *d, const struct cpumask *affinity,
 	pos_off = vector >> 5;
 
 	any_send(LOONGSON_EXT_IOI_EN64_OFFSET + (pos_off << 2), ext_ini_en[pos_off] & (~((1 << (vector & 0x1F)))), loongson_boot_cpu_id);
-	set_irq_route(vector, affinity);
+	set_irq_route(vector, &tmp);
 	any_send(LOONGSON_EXT_IOI_EN64_OFFSET + (pos_off << 2), ext_ini_en[pos_off], loongson_boot_cpu_id);
 
-	cpumask_copy(d->affinity, affinity);
+	cpumask_copy(d->affinity, &tmp);
 	spin_unlock_irqrestore(&affinity_lock, flags);
 
 	return IRQ_SET_MASK_OK_NOCOPY;
@@ -284,11 +287,11 @@ int plat_set_irq_affinity(struct irq_data *d, const struct cpumask *affinity,
 		return -EINVAL;
 	}
 
-	if (!cpumask_subset(affinity, cpu_online_mask)) {
+	if (!cpumask_intersects(affinity, cpu_online_mask)) {
 		return -EINVAL;
 	}
 
-	cpumask_copy(d->affinity, affinity);
+	cpumask_and(d->affinity, affinity, cpu_online_mask);
 
 	return IRQ_SET_MASK_OK_NOCOPY;
 }
@@ -523,10 +526,64 @@ void __init mach_init_irq(void)
 	set_irq_mode();
 }
 
+void fixup_irq_route(bool online)
+{
+	unsigned char val;
+	unsigned int phy_cpu = __cpu_logical_map[smp_processor_id()];
+
+	if (msi_chip_model != ICM_PCI_MSI_EXT && \
+			loongson_pch->board_type == LS7A) {
+		if (phy_cpu < cores_per_node) {
+			if (online) {
+				val = ls64_conf_read8(LS_IRC_ENT_HT1(2));
+				val |= (1 << phy_cpu);
+				ls64_conf_write8(val, LS_IRC_ENT_HT1(2));
+
+				val = ls64_conf_read8(LS_IRC_ENT_HT1(3));
+				val |= (1 << phy_cpu);
+				ls64_conf_write8(val, LS_IRC_ENT_HT1(3));
+			} else {
+				val = ls64_conf_read8(LS_IRC_ENT_HT1(2));
+				val &= (~(1 << phy_cpu));
+				ls64_conf_write8(val, LS_IRC_ENT_HT1(2));
+
+				val = ls64_conf_read8(LS_IRC_ENT_HT1(3));
+				val &= (~(1 << phy_cpu));
+				ls64_conf_write8(val, LS_IRC_ENT_HT1(3));
+			}
+		}
+	}
+}
+
 #ifdef CONFIG_HOTPLUG_CPU
+void handle_irq_affinity(void)
+{
+	struct irq_desc *desc;
+	struct irq_chip *chip;
+	unsigned int irq;
+	unsigned long flags;
+
+	for_each_active_irq(irq) {
+		const struct cpumask *affinity;
+		desc = irq_to_desc(irq);
+
+		raw_spin_lock_irqsave(&desc->lock, flags);
+		affinity = desc->irq_data.affinity;
+		if (cpumask_any_and(affinity, cpu_online_mask) >= nr_cpu_ids) {
+			affinity = cpu_online_mask;
+		}
+
+		chip = irq_data_get_irq_chip(&desc->irq_data);
+		if (chip && chip->irq_set_affinity)
+			chip->irq_set_affinity(&desc->irq_data, affinity, true);
+		raw_spin_unlock_irqrestore(&desc->lock, flags);
+	}
+}
 
 void fixup_irqs(void)
 {
+	handle_irq_affinity();
+	fixup_irq_route(false);
 	irq_cpu_offline();
 	clear_c0_status(ST0_IM);
 }
