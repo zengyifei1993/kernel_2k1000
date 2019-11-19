@@ -16,38 +16,36 @@
 #define UINT64_C(x) x##ULL
 #define DP_FBITS 52
 
-#if defined (CONFIG_CPU_LOONGSON3) || defined (CONFIG_CPU_LOONGSON2K) || defined (CONFIG_CPU_MIPS64R2)
-inline int dclz(unsigned long int a0)
+/* 128 bits shift right logical with rounding. */
+void srl128(u64 *hptr, u64 *lptr, int count)
 {
-	int cnt;
-	asm (
-		"dclz\t%[cnt], %[a0]\n\t"
-		: [cnt] "=&r" (cnt)
-		: [a0] "r" (a0));
+	u64 low;
 
-	return cnt;
-}
-#else
-inline int dclz(unsigned long int a0)
-{
-	int i = 0;
-
-	while (i < 64) {
-		if (a0 & 0x8000000000000000)
-			return i;
-		a0 <<= 1;
-		i++;
+	if (count >= 128) {
+		*lptr = *hptr != 0 || *lptr != 0;
+		*hptr = 0;
+	} else if (count >= 64) {
+		if (count == 64) {
+			*lptr = *hptr | (*lptr != 0);
+		} else {
+			low = *lptr;
+			*lptr = *hptr >> (count - 64);
+			*lptr |= (*hptr << (128 - count)) != 0 || low != 0;
+		}
+		*hptr = 0;
+	} else {
+		low = *lptr;
+		*lptr = low >> count | *hptr << (64 - count);
+		*lptr |= (low << (64 - count)) != 0;
+		*hptr = *hptr >> count;
 	}
-	return i;
 }
-#endif
 
 static ieee754dp _ieee754dp_maddf(ieee754dp z, ieee754dp x,
 				ieee754dp y, int opt)
 {
 	int re;
 	int rs;
-	u64 rm = 0;
 	unsigned lxm;
 	unsigned hxm;
 	unsigned lym;
@@ -186,15 +184,13 @@ static ieee754dp _ieee754dp_maddf(ieee754dp z, ieee754dp x,
 #if defined (CONFIG_MACH_LOONGSON) || defined (CONFIG_MACH_LOONGSON2)
 	rs = xs ^ ys ^ (opt & 2);
 	zs = zs ^ (opt & 1) ^ (opt & 2);
-	xm <<= 64 - (DP_FBITS + 2);
-	ym <<= 64 - (DP_FBITS + 2);
 #else
 	rs = xs ^ ys;
+#endif
 
 	/* shunt to top of word */
 	xm <<= 64 - (DP_FBITS + 1);
 	ym <<= 64 - (DP_FBITS + 1);
-#endif
 	/*
 	 * Multiply 32 bits xm, ym to give high 32 bits rm with stickness.
 	 */
@@ -226,104 +222,110 @@ static ieee754dp _ieee754dp_maddf(ieee754dp z, ieee754dp x,
 
 	hrm = hrm + (t >> 32);
 #if defined (CONFIG_MACH_LOONGSON) || defined (CONFIG_MACH_LOONGSON2)
-	/* here we need to normalize hrm|rm */
-	if (hrm < UINT64_C( 0x2000000000000000)) {
-		hrm = (hrm << 1) | ((lrm & 0x8000000000000000) != 0);
-		lrm =  lrm << 1;
-	} else
+	/* Put explicit bit at bit 126 if necessary */
+	if ((int64_t)hrm < 0) {
+		lrm = (hrm << 63) | (lrm >> 1);
+		hrm = hrm >> 1;
 		re++;
-
-	rm = hrm | (lrm != 0);
-
-	if (zc == IEEE754_CLASS_ZERO)
-		goto done;
-
-
-	zm = (zm << 9);
-	/* do the 106/105bit + 53bit  */
-	/* adjust mantissa and exponent */
-	s = re - ze;
-	if (s < 0) {
-		re = ze;
-		if ((zs == rs) || (s < -1))
-			hrm = (-s) < 63 ? hrm >> (-s) | ((uint64_t) (hrm << (s & 63)) != 0) :
-				(hrm != 0);
-		else {
-			lrm = hrm << 63 | lrm >> 1 | ((uint64_t) (lrm << 63) != 0);
-			hrm = hrm >> 1;
-		}
-	} else if (s > 0) {
-		if (s < 64) {
-			hzm = zm >> s;
-			lzm = zm << (-s & 63);
-		} else {
-			hzm = 0;
-			lzm = (s < 127) ? zm >> (s & 63) |
-				((zm & (((uint64_t) 1 << ( s & 63)) - 1)) != 0) :
-				(zm != 0);
-		}
 	}
 
+	assert(hrm & (1 << 62));
 
+	if (zc == IEEE754_CLASS_ZERO) {
+		/*
+		 * Move explicit bit from bit 126 to bit 55 since the
+		 * ieee754dp_format code expects the mantissa to be
+		 * 56 bits wide (53 + 3 rounding bits).
+		 */
+		srl128(&hrm, &lrm, (126 - 55));
+		return ieee754dp_format(rs, re, lrm);
+	}
+
+	/* Move explicit bit from bit 52 to bit 126 */
+	lzm = 0;
+	hzm = zm << 10;
+	assert(hzm & (1 << 62));
+
+	/* Make the exponents the same */
+	if (ze > re) {
+		/*
+		 * Have to shift y fraction right to align.
+		 */
+		s = ze - re;
+		srl128(&hrm, &lrm, s);
+		re += s;
+	} else if (re > ze) {
+		/*
+		 * Have to shift x fraction right to align.
+		 */
+		s = re - ze;
+		srl128(&hzm, &lzm, s);
+		ze += s;
+	}
+	assert(ze == re);
+	assert(ze <= DP_EMAX);
+
+	/* Do the addition */
 	if (zs == rs) {
-		if (s <= 0) {
-			rm = hrm = (hrm + zm) | (lrm != 0);
-		} else {
-			lrm = at = lrm + lzm;
-			hrm = hrm + hzm + (at < lzm);
-			rm = hrm | (lrm != 0);
+		/*
+		 * Generate 128 bit result by adding two 127 bit numbers
+		 * leaving result in hzm:lzm, zs and ze.
+		 */
+		hzm = hzm + hrm + (lzm > (lzm + lrm));
+		lzm = lzm + lrm;
+		if ((int64_t)hzm < 0) {        /* carry out */
+			srl128(&hzm, &lzm, 1);
+			ze++;
 		}
-
-		if (rm < UINT64_C(0x4000000000000000))
-			rm <<= 1;
-		else
-			re++;
-
 	} else {
-		if (s < 0) {
-			rs = zs;
-			hrm = zm - hrm - (lrm != 0);
-			lrm = -lrm;
-		} else if (!s) {
-			hrm = hrm - zm;
-			if (!(hrm | lrm))
-				return ieee754dp_zero(ieee754_csr.rm == FPU_CSR_RD);
-			if (hrm & UINT64_C(0x8000000000000000)) {
-				rs = !rs;
-				hrm = -hrm - (lrm != 0);
-				lrm = -lrm;
-			}
+		if (hzm > hrm || (hzm == hrm && lzm >= lrm)) {
+			hzm = hzm - hrm - (lzm < lrm);
+			lzm = lzm - lrm;
 		} else {
-			at =  (lrm < lzm);
-			lrm = lrm - lzm;
-			hrm = hrm - hzm - at;
+			hzm = hrm - hzm - (lrm < lzm);
+			lzm = lrm - lzm;
+			zs = rs;
+		}
+		if (lzm == 0 && hzm == 0)
+			return ieee754dp_zero(ieee754_csr.rm == FPU_CSR_RD);
+
+		/*
+		 * Put explicit bit at bit 126 if necessary.
+		 */
+		if (hzm == 0) {
+			/* left shift by 63 or 64 bits */
+			if ((int64_t)lzm < 0) {
+				/* MSB of lzm is the explicit bit */
+				hzm = lzm >> 1;
+				lzm = lzm << 63;
+				ze -= 63;
+			} else {
+				hzm = lzm;
+				lzm = 0;
+				ze -= 64;
+			}
 		}
 
-		/* adjust the iff if rs != zs */
-		if (!hrm) {
-			re -= 64;
-			hrm = lrm;
-			lrm = 0;
-		}
-		/* adjust exponent */
-		s = dclz(hrm) - 1;
-		re -= (s-1);
-		/* hrm of diff is 0 */
-		if (s < 0)
-			hrm = hrm >> (-s);
-		else {
-			hrm = (hrm << s) | (lrm >> (-s & 63));
-			lrm = lrm << s;
-			rm = hrm;
-		}
+		t = 0;
+		while ((hzm >> (62 - t)) == 0)
+			t++;
 
-		rm |= (lrm != 0);
+		assert(t <= 62);
+		if (t) {
+			hzm = hzm << t | lzm >> (64 - t);
+			lzm = lzm << t;
+			ze -= t;
+		}
 	}
-done:
 
-	rm = (rm >> 7) | ((rm & 0x7f) != 0);
+	/*
+	 * Move explicit bit from bit 126 to bit 55 since the
+	 * ieee754dp_format code expects the mantissa to be
+	 * 56 bits wide (53 + 3 rounding bits).
+	 */
+	srl128(&hzm, &lzm, (126 - 55));
 
-	return ieee754dp_format(rs, re, rm);
+	return ieee754dp_format(zs, ze, lzm);
 #else
 	rm = hrm | (lrm != 0);
 
