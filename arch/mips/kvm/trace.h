@@ -21,7 +21,7 @@
  * arch/mips/kvm/mips.c
  */
 extern bool kvm_trace_guest_mode_change;
-int kvm_guest_mode_change_trace_reg(void);
+void kvm_guest_mode_change_trace_reg(void);
 void kvm_guest_mode_change_trace_unreg(void);
 
 /*
@@ -250,7 +250,7 @@ TRACE_EVENT(kvm_hwr,
 	{ KVM_TRACE_AUX_FPU,     "FPU" },	\
 	{ KVM_TRACE_AUX_MSA,     "MSA" },	\
 	{ KVM_TRACE_AUX_LASX,    "LASX" },	\
-	{ KVM_TRACE_AUX_FPU_MSA, "FPU & MSA" } \
+	{ KVM_TRACE_AUX_FPU_MSA, "FPU & MSA" }, \
 	{ KVM_TRACE_AUX_FPU_MSA_LASX, "FPU & MSA & LASX" }
 
 TRACE_EVENT(kvm_aux,

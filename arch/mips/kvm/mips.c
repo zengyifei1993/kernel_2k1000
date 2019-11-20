@@ -147,10 +147,9 @@ struct kvm_stats_debugfs_item debugfs_entries[] = {
 
 bool kvm_trace_guest_mode_change;
 
-int kvm_guest_mode_change_trace_reg(void)
+void kvm_guest_mode_change_trace_reg(void)
 {
 	kvm_trace_guest_mode_change = 1;
-	return 0;
 }
 
 void kvm_guest_mode_change_trace_unreg(void)
