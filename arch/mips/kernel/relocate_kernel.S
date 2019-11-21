@@ -136,6 +136,26 @@ LEAF(kexec_smp_wait)
 	sync
 #endif
 
+#ifdef CONFIG_CPU_LOONGSON2K
+	/* s0:prid s1:initfn */
+	/* t0:base t9:count */
+	mfc0  t1, $15, 1
+	andi  t1, 0x3ff
+	andi  t3, t1, 0x1
+	sll   t3, 8               /* get core id */
+	li    t0, 0xbfe11000
+	or    t0, t0, t3
+1:	li    t9, 0x100           /* wait for init loop */
+2:	addiu t9, -1              /* limit mailbox access */
+	bnez  t9, 2b
+	ld    s1, 0x20(t0)        /* get PC via mailbox */
+	beqz  s1, 1b
+	ld    sp, 0x28(t0)        /* get SP via mailbox */
+	ld    gp, 0x30(t0)        /* get GP via mailbox */
+	ld    a1, 0x38(t0)
+	jr    s1                  /* jump to initial PC */
+#endif
+
 #ifdef CONFIG_CPU_LOONGSON3
 	/* s0:prid s1:initfn */
 	/* t0:base t1:cpuid t2:node t3:core t9:count */

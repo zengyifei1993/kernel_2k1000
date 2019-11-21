@@ -20,6 +20,7 @@ config 2K1000_SBC
 	select DMA_MAYBE_COHERENT
 	select ARCH_SUPPORTS_MSI
 	select USE_OF
+	select LIBFDT
 	select ZONE_DMA32 if SWIOTLB
 	help
 		Loongson 2K1000 SBC
