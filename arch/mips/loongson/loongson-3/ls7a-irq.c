@@ -187,8 +187,7 @@ void ls7a_msi_irq_dispatch(void)
 {
 	unsigned int i;
 	unsigned long long irqs;
-	int cpuid = read_c0_ebase() & 0x3ff;
-
+	int cpuid = get_core_id();
 	unsigned int ls3a_irq_cpu = ls64_conf_read32(LS_IRC_ISR(cpuid));
 
 	for(i = 0; i < 4; i++) {

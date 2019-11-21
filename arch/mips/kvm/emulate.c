@@ -2016,7 +2016,7 @@ enum emulation_result kvm_mips_emulate_load(union mips_instruction inst,
 	}
 
 	/* Emulate temperature read */
-	if(((vcpu->arch.gprs[rs] + offset) && ((0x1ULL << 32) -1)) == TEMP_ADDR) {
+	if(((vcpu->arch.gprs[rs] + offset) & ((0x1ULL << 32) -1)) == TEMP_ADDR) {
 		vcpu->arch.gprs[rt] = (*(volatile u32 *)(vcpu->arch.gprs[rs] + offset));
 		vcpu->arch.pc = vcpu->arch.io_pc;
 		return EMULATE_DONE;

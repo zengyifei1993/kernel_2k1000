@@ -564,7 +564,7 @@ static void  decode_configs(struct cpuinfo_mips *c)
 	}
 
 	if (cpu_has_mips_r2)
-		c->core = read_c0_ebase() & 0x3ff;
+		c->core = get_core_id();
 }
 
 /*
