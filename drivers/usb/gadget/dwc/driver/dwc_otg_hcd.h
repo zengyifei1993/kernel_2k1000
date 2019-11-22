@@ -601,6 +601,8 @@ extern void dwc_otg_hcd_qh_remove(dwc_otg_hcd_t * hcd, dwc_otg_qh_t * qh);
 extern void dwc_otg_hcd_qh_deactivate(dwc_otg_hcd_t * hcd, dwc_otg_qh_t * qh,
 				      int sched_csplit);
 
+extern void dwc_otg_resume_root_hub(dwc_otg_hcd_t * hcd);
+
 /** Remove and free a QH */
 static inline void dwc_otg_hcd_qh_remove_and_free(dwc_otg_hcd_t * hcd,
 						  dwc_otg_qh_t * qh)

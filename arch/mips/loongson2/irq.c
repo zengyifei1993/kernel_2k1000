@@ -28,6 +28,104 @@ static int irqbalance = 1;
 module_param(irqbalance, int, 0664);
 static unsigned int int_auto[2], int_bounce[2];
 
+#ifdef CONFIG_HOTPLUG_CPU
+void handle_irq_affinity(void)
+{
+	struct irq_desc *desc;
+	struct irq_chip *chip;
+	unsigned int irq;
+	unsigned long flags;
+
+	for_each_active_irq(irq) {
+		const struct cpumask *affinity;
+		desc = irq_to_desc(irq);
+
+		raw_spin_lock_irqsave(&desc->lock, flags);
+		affinity = desc->irq_data.affinity;
+		if (cpumask_any_and(affinity, cpu_online_mask) >= nr_cpu_ids) {
+			affinity = cpu_online_mask;
+		}
+
+		chip = irq_data_get_irq_chip(&desc->irq_data);
+		if (chip && chip->irq_set_affinity)
+			chip->irq_set_affinity(&desc->irq_data, affinity, true);
+		raw_spin_unlock_irqrestore(&desc->lock, flags);
+	}
+}
+
+void fixup_irqs(void)
+{
+	handle_irq_affinity();
+	irq_cpu_offline();
+	clear_c0_status(ST0_IM);
+}
+#endif
+
+struct ls2k_irq_registers {
+	u32 Inten_0;
+	u32 Intpol_0;
+	u32 Intedge_0;
+	u32 Intbounce_0;
+	u32 Intauto_0;
+	u32 Inten_1;
+	u32 Intpol_1;
+	u32 Intedge_1;
+	u32 Intbounce_1;
+	u32 Intauto_1;
+	u8  Entry[64];
+};
+static struct ls2k_irq_registers ls2k_irq_regs;
+
+void ls2k_suspend_irq(void)
+{
+	unsigned long base;
+	int index;
+
+	base = CKSEG1ADDR(CONF_BASE) + INT_LO_OFF;
+
+	ls2k_irq_regs.Inten_0 = ls64_conf_read32((void*)(base + INT_EN_OFF));
+	ls2k_irq_regs.Intpol_0 = ls64_conf_read32((void*)(base + INT_PLE_OFF));
+	ls2k_irq_regs.Intedge_0 = ls64_conf_read32((void*)(base + INT_EDG_OFF));
+	ls2k_irq_regs.Intbounce_0 = ls64_conf_read32((void*)(base + INT_BCE_OFF));
+	ls2k_irq_regs.Intauto_0 = ls64_conf_read32((void*)(base + INT_AUTO_OFF));
+
+	ls2k_irq_regs.Inten_1 = ls64_conf_read32((void*)(base + 0x40 + INT_EN_OFF));
+	ls2k_irq_regs.Intpol_1 = ls64_conf_read32((void*)(base + 0x40 + INT_PLE_OFF));
+	ls2k_irq_regs.Intedge_1 = ls64_conf_read32((void*)(base + 0x40 + INT_EDG_OFF));
+	ls2k_irq_regs.Intbounce_1 = ls64_conf_read32((void*)(base + 0x40 + INT_BCE_OFF));
+	ls2k_irq_regs.Intauto_1 = ls64_conf_read32((void*)(base + 0x40 + INT_AUTO_OFF));
+
+	for (index = 0; index < 32; index++)
+		ls2k_irq_regs.Entry[index] = ls64_conf_read8((void *)(base + index));
+	for (index = 0; index < 32; index++)
+		ls2k_irq_regs.Entry[index] = ls64_conf_read8((void *)(base + 0x40 + index));
+}
+
+void ls2k_resume_irq(void)
+{
+	unsigned long base;
+	int index;
+
+	base = CKSEG1ADDR(CONF_BASE) + INT_LO_OFF;
+
+	ls64_conf_write32(ls2k_irq_regs.Inten_0, (void *)(base + INT_SET_OFF));
+	ls64_conf_write32(ls2k_irq_regs.Intpol_0,   (void *)(base + INT_PLE_OFF));
+	ls64_conf_write32(ls2k_irq_regs.Intedge_0,  (void *)(base + INT_EDG_OFF));
+	ls64_conf_write32(ls2k_irq_regs.Intbounce_0, (void *)(base + INT_BCE_OFF));
+	ls64_conf_write32(ls2k_irq_regs.Intauto_0,   (void *)(base + INT_AUTO_OFF));
+
+	ls64_conf_write32(ls2k_irq_regs.Inten_1, (void *)(base + 0x40 + INT_SET_OFF));
+	ls64_conf_write32(ls2k_irq_regs.Intpol_1,   (void *)(base + 0x40 + INT_PLE_OFF));
+	ls64_conf_write32(ls2k_irq_regs.Intedge_1,  (void *)(base + 0x40 + INT_EDG_OFF));
+	ls64_conf_write32(ls2k_irq_regs.Intbounce_1, (void *)(base + 0x40 + INT_BCE_OFF));
+	ls64_conf_write32(ls2k_irq_regs.Intauto_1,   (void *)(base + 0x40 + INT_AUTO_OFF));
+
+	for (index = 0; index < 32; index++)
+		ls64_conf_write8(ls2k_irq_regs.Entry[index], (void *)(base + index));
+	for (index = 0; index < 32; index++)
+		ls64_conf_write8(ls2k_irq_regs.Entry[index], (void *)(base + 0x40 + index));
+}
+
 static int param_set_intparam(const char *val, struct kernel_param *kp)
 {
 	unsigned long base;

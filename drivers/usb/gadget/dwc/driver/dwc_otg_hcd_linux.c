@@ -90,6 +90,8 @@ extern int hub_status_data(struct usb_hcd *hcd, char *buf);
 extern int hub_control(struct usb_hcd *hcd,
 		       u16 typeReq,
 		       u16 wValue, u16 wIndex, char *buf, u16 wLength);
+extern int dwc_otg_bus_suspend (struct usb_hcd *hcd);
+extern int dwc_otg_bus_resume (struct usb_hcd *hcd);
 
 struct wrapper_priv_data {
 	dwc_otg_hcd_t *dwc_otg_hcd;
@@ -123,8 +125,8 @@ static struct hc_driver dwc_otg_hc_driver = {
 
 	.hub_status_data = hub_status_data,
 	.hub_control = hub_control,
-	//.bus_suspend =
-	//.bus_resume =
+	.bus_suspend = dwc_otg_bus_suspend,
+	.bus_resume = dwc_otg_bus_resume,
 };
 
 /** Gets the dwc_otg_hcd from a struct usb_hcd */
@@ -302,6 +304,8 @@ static int _complete(dwc_otg_hcd_t * hcd, void *urb_handle,
 					   urb);
 		}
 	}
+
+	usb_hcd_unlink_urb_from_ep(dwc_otg_hcd_to_hcd(hcd), urb);
 
 	DWC_FREE(dwc_otg_urb);
 
@@ -629,6 +633,11 @@ static int urb_enqueue(struct usb_hcd *hcd,
 		DWC_WARN("Wrong ep type\n");
 	}
 
+	retval = usb_hcd_link_urb_to_ep(hcd, urb);
+	if (retval){
+		return retval;
+	}
+
 	dwc_otg_urb = dwc_otg_hcd_urb_alloc(dwc_otg_hcd,
 					    urb->number_of_packets,
 					    mem_flags == GFP_ATOMIC ? 1 : 0);
@@ -682,6 +691,8 @@ static int urb_enqueue(struct usb_hcd *hcd,
 		if (retval == -DWC_E_NO_DEVICE) {
 			retval = -ENODEV;
 		}
+
+		usb_hcd_unlink_urb_from_ep(hcd, urb);
 	}
 
 	return retval;
@@ -710,6 +721,8 @@ static int urb_dequeue(struct usb_hcd *hcd, struct urb *urb, int status)
 	DWC_SPINLOCK_IRQSAVE(dwc_otg_hcd->lock, &flags);
 
 	dwc_otg_hcd_urb_dequeue(dwc_otg_hcd, urb->hcpriv);
+
+	usb_hcd_unlink_urb_from_ep(hcd, urb);
 
 	DWC_FREE(urb->hcpriv);
 	urb->hcpriv = NULL;
@@ -825,6 +838,58 @@ int hub_control(struct usb_hcd *hcd,
 	}
 
 	return retval;
+}
+
+int dwc_otg_bus_suspend (struct usb_hcd *hcd)
+{
+	dwc_otg_hcd_t *dwc_otg_hcd = hcd_to_dwc_otg_hcd(hcd);
+	dwc_otg_core_if_t *core_if = dwc_otg_hcd->core_if;
+
+	if (dwc_otg_is_device_mode(core_if)) {
+		goto skip;
+	}
+
+	if (core_if->lx_state != DWC_OTG_L0) {
+		goto skip;
+	}
+
+	core_if->lx_state = DWC_OTG_L2;
+
+skip:
+	return 0;
+}
+
+int dwc_otg_bus_resume (struct usb_hcd *hcd)
+{
+	dwc_otg_hcd_t *dwc_otg_hcd = hcd_to_dwc_otg_hcd(hcd);
+	dwc_otg_core_if_t *core_if = dwc_otg_hcd->core_if;
+
+	if (dwc_otg_is_device_mode(core_if)) {
+		goto skip;
+	}
+
+	if (core_if->lx_state != DWC_OTG_L2) {
+		goto skip;
+	}
+
+
+	if (!dwc_otg_hcd->flags.b.port_connect_status_change) {
+		core_if->op_state = A_HOST;
+		dwc_otg_core_init(core_if);
+		dwc_otg_enable_global_interrupts(core_if);
+		cil_hcd_start(core_if);
+	}
+
+	core_if->lx_state = DWC_OTG_L0;
+skip:
+	return 0;
+}
+
+void dwc_otg_resume_root_hub(dwc_otg_hcd_t * hcd)
+{
+	struct usb_hcd *usb_hcd = dwc_otg_hcd_to_hcd(hcd);
+
+	usb_hcd_resume_root_hub(usb_hcd);
 }
 
 #endif /* DWC_DEVICE_ONLY */

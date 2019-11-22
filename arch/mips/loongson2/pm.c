@@ -1,3 +1,4 @@
+#include <linux/suspend.h>
 #include <linux/pm.h>
 #include <linux/reboot.h>
 #include <linux/io.h>
@@ -10,6 +11,43 @@
 #include <linux/slab.h>
 #include <linux/delay.h>
 #include <linux/libfdt.h>
+#include <asm/tlbflush.h>
+
+extern u64 suspend_addr;
+extern void loongson_suspend_lowlevel(void);
+extern void ls2k_suspend_irq(void);
+extern void ls2k_resume_irq(void);
+
+struct loongson2k_registers {
+	u32 config5;
+	u32 hwrena;
+	u32 wired;
+	u64 userlocal;
+	u64 pagemask;
+	u64 gmac;
+	u64 uart;
+	u64 gpu;
+	u64 apbdma;
+	u64 usb_phy01;
+	u64 usb_phy23;
+	u64 sata;
+	u64 dma0;
+	u64 dma1;
+	u64 dma2;
+	u64 dma3;
+	u64 dma4;
+};
+
+static struct loongson2k_registers loongson2k_regs;
+
+u32 loongson2k_nr_nodes;
+u64 loongson2k_suspend_addr;
+u32 loongson2k_pcache_ways;
+u32 loongson2k_scache_ways;
+u32 loongson2k_pcache_sets;
+u32 loongson2k_scache_sets;
+u32 loongson2k_pcache_linesz;
+u32 loongson2k_scache_linesz;
 
 enum ACPI_Sx {
 	ACPI_S3 = 5,
@@ -212,3 +250,134 @@ int  __init ls2k_kexec_setup(void)
 }
 
 arch_initcall(ls2k_kexec_setup);
+
+static int ls2k_pm_valid_state(suspend_state_t state)
+{
+	switch (state) {
+	case PM_SUSPEND_ON:
+		return 1;
+	case PM_SUSPEND_MEM:
+		return !!suspend_addr;
+	default:
+		return 0;
+	}
+}
+
+static int ls2k_pm_begin(suspend_state_t state)
+{
+	return 0;
+}
+
+void ls2k_suspend_reg(void)
+{
+	unsigned long base;
+
+	base = CKSEG1ADDR(CONF_BASE);
+
+	loongson2k_regs.gmac = ls64_conf_read64((void*)(base + GMAC_OFF));
+	loongson2k_regs.uart = ls64_conf_read64((void*)(base + UART_OFF));
+	loongson2k_regs.gpu = ls64_conf_read64((void*)(base + GPU_OFF));
+	loongson2k_regs.apbdma = ls64_conf_read64((void*)(base + APBDMA_OFF));
+	loongson2k_regs.usb_phy01 = ls64_conf_read64((void*)(base + USB_PHY01_OFF));
+	loongson2k_regs.usb_phy23 = ls64_conf_read64((void*)(base + USB_PHY23_OFF));
+	loongson2k_regs.sata = ls64_conf_read64((void*)(base + SATA_OFF));
+	loongson2k_regs.dma0 = ls64_conf_read64((void*)(base + CONF_DMA0_OFF));
+	loongson2k_regs.dma1 = ls64_conf_read64((void*)(base + CONF_DMA1_OFF));
+	loongson2k_regs.dma2 = ls64_conf_read64((void*)(base + CONF_DMA2_OFF));
+	loongson2k_regs.dma3 = ls64_conf_read64((void*)(base + CONF_DMA3_OFF));
+	loongson2k_regs.dma4 = ls64_conf_read64((void*)(base + CONF_DMA4_OFF));
+}
+void ls2k_resume_reg(void)
+{
+	unsigned long base;
+
+	base = CKSEG1ADDR(CONF_BASE);
+	ls64_conf_write64(loongson2k_regs.gmac, (void *)(base + GMAC_OFF));
+	ls64_conf_write64(loongson2k_regs.uart, (void *)(base + UART_OFF));
+	ls64_conf_write64(loongson2k_regs.gpu, (void *)(base + GPU_OFF));
+	ls64_conf_write64(loongson2k_regs.apbdma, (void *)(base + APBDMA_OFF));
+	ls64_conf_write64(loongson2k_regs.usb_phy01, (void *)(base + USB_PHY01_OFF));
+	ls64_conf_write64(loongson2k_regs.usb_phy23, (void *)(base + USB_PHY23_OFF));
+	ls64_conf_write64(loongson2k_regs.sata, (void *)(base + SATA_OFF));
+	ls64_conf_write64(loongson2k_regs.dma0, (void *)(base + CONF_DMA0_OFF));
+	ls64_conf_write64(loongson2k_regs.dma1, (void *)(base + CONF_DMA1_OFF));
+	ls64_conf_write64(loongson2k_regs.dma2, (void *)(base + CONF_DMA2_OFF));
+	ls64_conf_write64(loongson2k_regs.dma3, (void *)(base + CONF_DMA3_OFF));
+	ls64_conf_write64(loongson2k_regs.dma4, (void *)(base + CONF_DMA4_OFF));
+}
+
+void mach_suspend(suspend_state_t state)
+{
+	if (state == PM_SUSPEND_MEM) {
+		loongson2k_regs.config5 = read_c0_config5();
+		loongson2k_regs.hwrena = read_c0_hwrena();
+		loongson2k_regs.userlocal = read_c0_userlocal();
+		loongson2k_regs.wired = read_c0_wired();
+		ls2k_suspend_irq();
+		ls2k_suspend_reg();
+	}
+}
+
+void mach_resume(suspend_state_t state)
+{
+	if (state == PM_SUSPEND_MEM) {
+		write_c0_config5(loongson2k_regs.config5);
+		write_c0_hwrena(loongson2k_regs.hwrena);
+		write_c0_userlocal(loongson2k_regs.userlocal);
+		write_c0_wired(loongson2k_regs.wired);
+		local_flush_tlb_all();
+		ls2k_resume_irq();
+		ls2k_resume_reg();
+	}
+}
+
+static int ls2k_pm_enter(suspend_state_t state)
+{
+	mach_suspend(state);
+
+	/* processor specific suspend */
+	switch(state){
+	case PM_SUSPEND_MEM:
+		loongson2k_nr_nodes = MAX_NUMNODES;
+		loongson2k_suspend_addr = CKSEG1ADDR(suspend_addr);
+		loongson2k_pcache_ways = cpu_data[0].dcache.ways;
+		loongson2k_scache_ways = cpu_data[0].scache.ways;
+		loongson2k_pcache_sets = cpu_data[0].dcache.sets;
+		loongson2k_scache_sets = cpu_data[0].scache.sets;
+		loongson2k_pcache_linesz = cpu_data[0].dcache.linesz;
+		loongson2k_scache_linesz = cpu_data[0].scache.linesz;
+		loongson_suspend_lowlevel();
+		break;
+	default:
+		break;
+	}
+
+	mach_resume(state);
+
+	return 0;
+}
+
+static void ls2k_pm_wake(void)
+{
+
+}
+
+static void ls2k_pm_end(void)
+{
+
+}
+
+static const struct platform_suspend_ops ls2k_pm_ops = {
+	.valid	= ls2k_pm_valid_state,
+	.begin	= ls2k_pm_begin,
+	.enter	= ls2k_pm_enter,
+	.wake	= ls2k_pm_wake,
+	.end	= ls2k_pm_end,
+};
+
+static int __init ls2k_pm_init(void)
+{
+	suspend_set_ops(&ls2k_pm_ops);
+	return 0;
+}
+arch_initcall(ls2k_pm_init);

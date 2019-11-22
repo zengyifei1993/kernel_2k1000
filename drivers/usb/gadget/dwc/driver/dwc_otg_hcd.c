@@ -365,6 +365,27 @@ static int32_t dwc_otg_hcd_disconnect_cb(void *p)
 }
 
 /**
+ * HCD Callback function for connect of the HCD.
+ *
+ * @param p void pointer to the <code>struct usb_hcd</code>
+ */
+static int32_t dwc_otg_hcd_connect_cb(void *p)
+{
+	dwc_otg_hcd_t *dwc_otg_hcd = p;
+
+	if (dwc_otg_hcd->core_if->lx_state != DWC_OTG_L0)
+		dwc_otg_resume_root_hub(dwc_otg_hcd);
+
+	/*
+	 * Set status flags for the hub driver.
+	 */
+	dwc_otg_hcd->flags.b.port_connect_status_change = 1;
+	dwc_otg_hcd->flags.b.port_connect_status = 0;
+
+	return 1;
+}
+
+/**
  * HCD Callback function for stopping the HCD.
  *
  * @param p void pointer to the <code>struct usb_hcd</code>
@@ -599,6 +620,7 @@ static dwc_otg_cil_callbacks_t hcd_cil_callbacks = {
 	.start = dwc_otg_hcd_start_cb,
 	.stop = dwc_otg_hcd_stop_cb,
 	.disconnect = dwc_otg_hcd_disconnect_cb,
+	.connect = dwc_otg_hcd_connect_cb,
 	.session_start = dwc_otg_hcd_session_start_cb,
 	.resume_wakeup = dwc_otg_hcd_rem_wakeup_cb,
 #ifdef CONFIG_USB_DWC_OTG_LPM

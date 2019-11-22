@@ -1283,6 +1283,8 @@ typedef struct dwc_otg_cil_callbacks {
 	int (*stop) (void *_p);
 	/** Disconnect Function for role change */
 	int (*disconnect) (void *_p);
+	/** Connect Function for role change */
+	int (*connect) (void *_p);
 	/** Resume/Remote wakeup Function */
 	int (*resume_wakeup) (void *_p);
 	/** Suspend function */
@@ -1337,6 +1339,17 @@ static inline void cil_hcd_disconnect(dwc_otg_core_if_t * core_if)
 {
 	if (core_if->hcd_cb && core_if->hcd_cb->disconnect) {
 		core_if->hcd_cb->disconnect(core_if->hcd_cb->p);
+	}
+}
+
+/** Connect the HCD.  Helper function for using the HCD callbacks.
+ *
+ * @param core_if Programming view of DWC_otg controller.
+ */
+static inline void cil_hcd_connect(dwc_otg_core_if_t * core_if)
+{
+	if (core_if->hcd_cb && core_if->hcd_cb->connect) {
+		core_if->hcd_cb->connect(core_if->hcd_cb->p);
 	}
 }
 

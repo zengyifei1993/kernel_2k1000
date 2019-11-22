@@ -12,6 +12,7 @@
 #define HPET_MIN_PROG_DELTA	(HPET_MIN_CYCLES * 12)
 
 int hpet_enabled;
+unsigned int hpet_t0_cfg;
 static DEFINE_SPINLOCK(hpet_lock);
 DEFINE_PER_CPU(struct clock_event_device, hpet_clockevent_device);
 
@@ -187,10 +188,12 @@ static cycle_t hpet_read_counter(struct clocksource *cs)
 
 static void hpet_suspend(struct clocksource *cs)
 {
+	hpet_t0_cfg = hpet_read(HPET_T0_CFG);
 }
 
 static void hpet_resume(struct clocksource *cs)
 {
+	hpet_write(HPET_T0_CFG, hpet_t0_cfg);
 	hpet_restart_counter();
 }
 
