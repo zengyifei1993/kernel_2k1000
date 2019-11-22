@@ -1224,6 +1224,14 @@ static const struct mips_perf_event loongson3_cache_map2
 		[C(RESULT_MISS)]    = { 0x1a, CNTR_ALL },
 	},
 },
+[C(DTLB)] = {
+	[C(OP_READ)] = {
+		[C(RESULT_MISS)]    = { 0x92, CNTR_ALL },
+	},
+	[C(OP_WRITE)] = {
+		[C(RESULT_MISS)]    = { 0x92, CNTR_ALL },
+	},
+},
 [C(BPU)] = {
 	/* Using the same code for *HW_BRANCH* */
 	[C(OP_READ)] = {
@@ -1257,6 +1265,14 @@ static const struct mips_perf_event loongson2k_cache_map
 [C(ITLB)] = {
 	[C(OP_READ)] = {
 		[C(RESULT_MISS)]    = { 0x1a, CNTR_ALL },
+	},
+},
+[C(DTLB)] = {
+	[C(OP_READ)] = {
+		[C(RESULT_MISS)]    = { 0x18, CNTR_ALL },
+	},
+	[C(OP_WRITE)] = {
+		[C(RESULT_MISS)]    = { 0x19, CNTR_ALL },
 	},
 },
 [C(BPU)] = {
