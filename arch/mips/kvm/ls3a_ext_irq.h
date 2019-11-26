@@ -25,18 +25,22 @@ typedef struct kvm_ls3a_extirq_state {
 	union en{
 		uint64_t reg_u64[4];
 		uint32_t reg_u32[8];
+		uint8_t reg_u8[32];
 	}en;
 	union bounce{
 		uint64_t reg_u64[4];
 		uint32_t reg_u32[8];
+		uint8_t reg_u8[32];
 	}bounce;
 	union isr{
 		uint64_t reg_u64[4];
 		uint32_t reg_u32[8];
+		uint8_t reg_u8[32];
 	}isr;
 	union core_isr{
 		uint64_t reg_u64[4][4];
 		uint32_t reg_u32[4][8];
+		uint8_t reg_u8[4][32];
 	}core_isr;
 	union map{
 		uint64_t reg_u64;
@@ -52,10 +56,12 @@ typedef struct kvm_ls3a_extirq_state {
 		uint64_t reg_u64[4];
 		uint32_t reg_u32[8];
 		uint16_t reg_u16[16];
+		uint8_t reg_u8[32];
 	}node_type;
 	union ext_en{
 		uint64_t reg_u64;
 		uint32_t reg_u32[2];
+		uint8_t reg_u8[8];
 	} ext_en;
 }LS3AExtirqState;
 
