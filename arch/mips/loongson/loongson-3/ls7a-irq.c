@@ -321,7 +321,7 @@ void ls7a_irq_router_init(void)
 			dummy |=  (1 << (i + 24));
 			ls64_conf_write32(dummy, LS_IRC_ENSET);
 
-			if (i > 2) {
+			if (i >= 2) {
  				dummy =  ls64_conf_read32(LS_IRC_BCE);
  				dummy |=  (1 << (i + 24));
  				ls64_conf_write32(dummy, LS_IRC_BCE);
