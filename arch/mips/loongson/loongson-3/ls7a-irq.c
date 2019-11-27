@@ -333,7 +333,7 @@ void ls7a_irq_router_init(void)
 
 		dummy = ls64_conf_read32(LS_IRC_EN);
 		dummy |= 0x1;
-		ls64_conf_write64(dummy, LS_IRC_ENSET);
+		ls64_conf_write32(dummy, LS_IRC_ENSET);
 	}
 }
 
