@@ -222,11 +222,7 @@ void __init prom_init_env(void)
 	loongson_reserved_cpus_mask = ecpu->reserved_cores_mask;
 	nr_nodes_loongson = ecpu->total_node;
 #ifdef CONFIG_KEXEC
-#ifdef CONFIG_KVM_GUEST_LS3A3000
-	loongson_boot_cpu_id = read_c0_ebase() & 0xff;
-#else
-	loongson_boot_cpu_id = read_c0_ebase() & 0x3ff;
-#endif
+	loongson_boot_cpu_id = get_core_id();
 	for (i = 0; i < loongson_boot_cpu_id; i++)
 		loongson_reserved_cpus_mask |= (1<<i);
 	pr_info("Boot CPU ID is being fixed from %d to %d\n",

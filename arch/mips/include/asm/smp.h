@@ -94,4 +94,11 @@ static inline void arch_send_call_function_ipi_mask(const struct cpumask *mask)
 	mp_ops->send_ipi_mask(mask, SMP_CALL_FUNCTION);
 }
 
+static inline int get_core_id(void) {
+#ifdef CONFIG_KVM_GUEST_LS3A3000
+	return read_c0_ebase() & 0xff;
+#else
+	return read_c0_ebase() & 0x3ff;
+#endif
+}
 #endif /* __ASM_SMP_H */
