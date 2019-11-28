@@ -224,8 +224,9 @@ void __init prom_init(void)
 		prom_init_memory();
 	}
 #endif
+#ifdef CONFIG_ACPI
 	acpi_disabled = 1;
-
+#endif
 	dmi_scan_machine();
 	dmi_set_dump_stack_arch_desc();
 	if (loongson_acpiboot_flag)
