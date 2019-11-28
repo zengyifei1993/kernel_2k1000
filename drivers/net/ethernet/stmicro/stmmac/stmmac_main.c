@@ -3259,6 +3259,28 @@ int stmmac_dvr_remove(struct net_device *ndev)
 }
 
 #ifdef CONFIG_PM
+
+#if defined(CONFIG_CPU_LOONGSON2K)
+
+#define MII_MV1111_PHY_EXT_CR            0x14
+#define MII_MV1111_RX_DELAY              0x80
+#define MII_MV1111_TX_DELAY              0x2
+
+void mv88e1111_config_init(struct phy_device *phydev)
+{
+	u16 data;
+
+	/*set 88e1111 clock phase delay*/
+	data = (u16)phy_read(phydev, MII_MV1111_PHY_EXT_CR);
+	data = data | MII_MV1111_RX_DELAY | MII_MV1111_TX_DELAY;
+	phy_write(phydev, MII_MV1111_PHY_EXT_CR, data);
+
+	data = (u16)phy_read(phydev, MII_BMCR);
+	data = data | BMCR_RESET;
+	phy_write(phydev, MII_BMCR, data);
+}
+#endif
+
 int stmmac_suspend(struct net_device *ndev)
 {
 	struct stmmac_priv *priv = netdev_priv(ndev);
@@ -3335,8 +3357,20 @@ int stmmac_resume(struct net_device *ndev)
 
 	spin_unlock_irqrestore(&priv->lock, flags);
 
-	if (priv->phydev)
+	if (priv->phydev){
+#if defined(CONFIG_CPU_LOONGSON2K)
+
+#define MARVELL_PHY_ID_88E1111          0x01410cc0
+#define MARVELL_PHY_ID_MASK             0xfffffff0
+
+		u32 phyid = priv->phydev->phy_id;
+
+		if ((phyid & MARVELL_PHY_ID_MASK) == MARVELL_PHY_ID_88E1111){
+			mv88e1111_config_init(priv->phydev);
+		}
+#endif
 		phy_start(priv->phydev);
+	}
 
 	return 0;
 }

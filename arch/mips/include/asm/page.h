@@ -200,10 +200,15 @@ typedef struct { unsigned long pgprot; } pgprot_t;
 
 static inline int pfn_valid(unsigned long pfn)
 {
+#if defined(CONFIG_CPU_LOONGSON2K)
+	extern int page_is_ram(unsigned long pagenr);
+	return page_is_ram(pfn);
+#else
 	/* avoid <linux/mm.h> include hell */
 	extern unsigned long max_mapnr;
 
 	return pfn >= ARCH_PFN_OFFSET && pfn < max_mapnr;
+#endif
 }
 
 #elif defined(CONFIG_SPARSEMEM)

@@ -20,6 +20,7 @@
 #include <linux/module.h>
 #include <linux/string.h>
 #include <linux/io.h>
+#include <linux/of.h>
 #include <linux/of_fdt.h>
 #include <asm/bootinfo.h>
 #include <asm/prom.h>
@@ -35,11 +36,30 @@ u32 gpu_brust_type;
 u32 vram_type;
 u64 uma_vram_addr;
 u64 uma_vram_size;
+u64 suspend_addr = 0;
 
 
 extern struct boot_param_header  __dtb_start;
 
 void prom_init_env(void);
+
+int __init early_init_dt_scan_s3(unsigned long node,	const char *uname,
+				    int depth, void *data)
+{
+	unsigned long len;
+	__be32 *prop;
+
+	if (depth != 1 || (strcmp(uname, "suspend_to_ram") != 0))
+		return 0;
+
+	prop = of_get_flat_dt_prop(node, "suspend_addr", &len);
+	if (!prop)
+		return 0;
+
+	suspend_addr = (u64)of_read_ulong(prop, len/4);
+
+	return 0;
+}
 
 void __init prom_init(void)
 {
@@ -73,6 +93,8 @@ void __init prom_init(void)
 
 	pr_info("FDT point@%p\n", fdtp);
 	__dt_setup_arch(fdtp);
+
+	of_scan_flat_dt(early_init_dt_scan_s3, NULL);
 
 	printk("loongson2k dmi_scan_machine \n");
 	dmi_scan_machine();

@@ -354,6 +354,9 @@ int32_t dwc_otg_hcd_handle_port_intr(dwc_otg_hcd_t * dwc_otg_hcd)
 
 			/* B-Device has connected, Delete the connection timer. */
 			DWC_TIMER_CANCEL(dwc_otg_hcd->conn_timer);
+
+			if (dwc_otg_hcd->core_if->lx_state != DWC_OTG_L0)
+				dwc_otg_resume_root_hub(dwc_otg_hcd);
 		}
 		/* The Hub driver asserts a reset when it sees port connect
 		 * status change flag */

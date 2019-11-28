@@ -873,6 +873,7 @@ int32_t dwc_otg_handle_restore_done_intr(dwc_otg_core_if_t * core_if)
 int32_t dwc_otg_handle_disconnect_intr(dwc_otg_core_if_t * core_if)
 {
 	gintsts_data_t gintsts;
+	hprt0_data_t hprt0 = {.d32 = 0 };
 
 	DWC_DEBUGPL(DBG_ANY, "++Disconnect Detected Interrupt++ (%s) %s\n",
 		    (dwc_otg_is_host_mode(core_if) ? "Host" : "Device"),
@@ -956,6 +957,12 @@ int32_t dwc_otg_handle_disconnect_intr(dwc_otg_core_if_t * core_if)
 	gintsts.d32 = 0;
 	gintsts.b.disconnect = 1;
 	DWC_WRITE_REG32(&core_if->core_global_regs->gintsts, gintsts.d32);
+
+	hprt0.d32 = DWC_READ_REG32(core_if->host_if->hprt0);
+	if (!(hprt0.b.prtconndet) && (hprt0.b.prtconnsts)){
+		cil_hcd_connect(core_if);
+	}
+
 	return 1;
 }
 
