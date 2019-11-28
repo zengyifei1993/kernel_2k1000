@@ -1190,7 +1190,7 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 {
 	enum emulation_result er = EMULATE_DONE;
 	u32 rs, rd,offset,cpu;
-	u64 tmp_data;
+	u64 tmp_data,data_mask;
 	unsigned long curr_pc, flags, any_send_data,any_send_addr;
 	void *data = run->mmio.data;
 	int ret;
@@ -1296,6 +1296,15 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 					vcpu->mmio_needed = 1;
 					vcpu->mmio_is_write = 1;
 				}
+			} else if (((vcpu->arch.gprs[rs] & 0xff00) == 0x1600) ||
+			                        ((vcpu->arch.gprs[rs] & 0xff00) == 0x1C00) ||
+			                (vcpu->arch.gprs[rs] >= 0x0420 && vcpu->arch.gprs[rs] < 0x0428) ||
+			                  (vcpu->arch.gprs[rs] >= 0x14A0 && vcpu->arch.gprs[rs] < 0x14C8)) {
+			                ls7a_ioapic_lock(vcpu->kvm->arch.v_ioapic, &flags);
+			                ls3a_ext_intctl_write(vcpu->kvm,vcpu->arch.gprs[rs],4,vcpu->arch.gprs[rd]&0xffffffffUL);
+			                ls7a_ioapic_unlock(vcpu->kvm->arch.v_ioapic, &flags);
+			                vcpu->mmio_needed = 0;
+			                er = EMULATE_DONE;
 			} else {
 				kvm_info("Not implement--wrcsr @ %lx--rs %lx cpu %d\n", curr_pc, vcpu->arch.gprs[rs], vcpu->vcpu_id);
 			}
@@ -1304,8 +1313,12 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 		/* DRDCSR */
 		case 0x2:
 			++vcpu->stat.lsvz_drdcsr_exits;
-
-			if(vcpu->arch.gprs[rs] == 0x420) {
+			if(vcpu->arch.gprs[rs] == 0x8) {
+				++vcpu->stat.lsvz_rdcsr_cpu_feature_exits;
+				vcpu->arch.gprs[rd] = dread_csr(LOONGSON_CPU_FEATURE_OFFSET);
+				/*Attention for not return some feature for guest,such as TEMPERATURE and EXT_IOI */
+				vcpu->arch.gprs[rd] &= ~(LOONGSON_CPU_FEATURE_TEMP);
+			} else if(vcpu->arch.gprs[rs] == 0x420) {
 				vcpu->arch.gprs[rd] = dread_csr(LOONGSON_OTHER_FUNC_OFFSET);
 			} else if(vcpu->arch.gprs[rs] == 0x408) {
 				/* dread node counter */
@@ -1382,6 +1395,7 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 			}else if(vcpu->arch.gprs[rs] == 0x1158){
 				/*3A any send */
 				cpu = ((*((u64 *)data)) >> 16) & 0x3ff;
+				data_mask = ((*((u64 *)data)) >> 27) & 0xfUL;
 				offset = (unsigned int)((*((u64 *)data)) & 0xffffUL);
 				any_send_data = ((*((u64 *)data)) >> 32) & 0xffffffffUL;
 				any_send_addr = ((unsigned long)(cpu/4) << NODE_ADDRSPACE_SHIFT) | LOONGSON_REG_BASE |
@@ -1389,9 +1403,19 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 				kvm_debug("any_send dwrcsr addr %x data %lx for now\n",offset,any_send_addr);
 				if((((offset & 0xff00) == 0x1600) || ((offset & 0xff00) == 0x1C00) ||(offset >= 0x0420 && offset < 0x0428)||(offset >= 0x14A0 && offset < 0x14C8))
 				&& (ls3a_extirq_in_kernel(vcpu->kvm))){
-					ls7a_ioapic_lock(vcpu->kvm->arch.v_ioapic, &flags);
-					ls3a_ext_intctl_write(vcpu->kvm,any_send_addr,4,any_send_data);
-					ls7a_ioapic_unlock(vcpu->kvm->arch.v_ioapic, &flags);
+					if(data_mask == 0) {
+						ls7a_ioapic_lock(vcpu->kvm->arch.v_ioapic, &flags);
+						ls3a_ext_intctl_write(vcpu->kvm,any_send_addr,4,any_send_data);
+						ls7a_ioapic_unlock(vcpu->kvm->arch.v_ioapic, &flags);
+					} else {
+						ls7a_ioapic_lock(vcpu->kvm->arch.v_ioapic, &flags);
+						for(tmp_data = 0 ; tmp_data < 4 ;tmp_data ++) {
+							if(!(data_mask & (0x1UL << tmp_data))) {
+								ls3a_ext_intctl_write(vcpu->kvm,any_send_addr + tmp_data,1,(any_send_data >> (8*tmp_data)));
+							}
+						}
+						ls7a_ioapic_unlock(vcpu->kvm->arch.v_ioapic, &flags);	
+					}
 				}else{
 					kvm_err("err anysent,addr = 0x%lx,data = 0x%lx\n",any_send_addr,any_send_data);
 				}
@@ -1430,6 +1454,15 @@ static enum emulation_result kvm_vz_gpsi_lwc2(union mips_instruction inst,
 						}
 					}
 				}
+			} else if (((vcpu->arch.gprs[rs] & 0xff00) == 0x1600) ||
+				((vcpu->arch.gprs[rs] & 0xff00) == 0x1C00) ||
+				(vcpu->arch.gprs[rs] >= 0x0420 && vcpu->arch.gprs[rs] < 0x0428) ||
+				(vcpu->arch.gprs[rs] >= 0x14A0 && vcpu->arch.gprs[rs] < 0x14C8)) {
+			                ls7a_ioapic_lock(vcpu->kvm->arch.v_ioapic, &flags);
+			                ls3a_ext_intctl_write(vcpu->kvm,vcpu->arch.gprs[rs],8,*(u64 *)data);
+			                ls7a_ioapic_unlock(vcpu->kvm->arch.v_ioapic, &flags);
+			                vcpu->mmio_needed = 0;
+			                er = EMULATE_DONE;
 			} else {
 				kvm_err("Should depend on the condition for dwrcsr %lx @ %lx",
 									vcpu->arch.gprs[rs], curr_pc);

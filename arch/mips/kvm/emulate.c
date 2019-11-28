@@ -1614,7 +1614,7 @@ enum emulation_result kvm_mips_emulate_store(union mips_instruction inst,
 	void *data = run->mmio.data;
 	unsigned long curr_pc;
 	unsigned int imme;
-	unsigned long ls7a_ioapic_reg_base;
+	unsigned long ls7a_ioapic_reg_base,ls7a_ioapic_reg_base_alias;
 	unsigned long ht_control_reg_base, flags;
 	int ret = 0;
 
@@ -1639,9 +1639,11 @@ enum emulation_result kvm_mips_emulate_store(union mips_instruction inst,
 	if(current_cpu_type() == CPU_LOONGSON3_COMP) {
 		ls7a_ioapic_reg_base = LS3A4000_LS7A_IOAPIC_GUEST_REG_BASE;
 		ht_control_reg_base = LS3A4000_HT_CONTROL_REGS_BASE;
+		ls7a_ioapic_reg_base_alias = LS3A4000_LS7A_IOAPIC_GUEST_REG_BASE_ALIAS;
 	} else {
 		ls7a_ioapic_reg_base = LS7A_IOAPIC_GUEST_REG_BASE;
 		ht_control_reg_base = HT_CONTROL_REGS_BASE;
+		ls7a_ioapic_reg_base_alias = LS7A_IOAPIC_GUEST_REG_BASE_ALIAS;
 	}
 
 	switch (inst.i_format.opcode) {
@@ -1876,7 +1878,7 @@ enum emulation_result kvm_mips_emulate_store(union mips_instruction inst,
 		goto out_fail;
 	}
 
-	if(((run->mmio.phys_addr & (~0xfffUL))== ls7a_ioapic_reg_base) &&
+	if((((run->mmio.phys_addr & (~0xfffUL))== ls7a_ioapic_reg_base)||((run->mmio.phys_addr & (~0xfffUL))== ls7a_ioapic_reg_base_alias)) &&
 					ls7a_ioapic_in_kernel(vcpu->kvm)) {
 		vcpu->stat.lsvz_ls7a_pic_write_exits++;
 		ls7a_ioapic_lock(vcpu->kvm->arch.v_ioapic, &flags);
@@ -1972,7 +1974,7 @@ enum emulation_result kvm_mips_emulate_load(union mips_instruction inst,
 	u32 rs;
 	int offset;
 	unsigned int imme;
-	unsigned long ls7a_ioapic_reg_base, flags;
+	unsigned long ls7a_ioapic_reg_base, flags, ls7a_ioapic_reg_base_alias;
 	unsigned long ht_control_reg_base;
 	unsigned long dma_nodeid_offset_base;
 	int ret = 0;
@@ -1998,10 +2000,12 @@ enum emulation_result kvm_mips_emulate_load(union mips_instruction inst,
 		ls7a_ioapic_reg_base = LS3A4000_LS7A_IOAPIC_GUEST_REG_BASE;
 		ht_control_reg_base = LS3A4000_HT_CONTROL_REGS_BASE;
 		dma_nodeid_offset_base = LS3A4000_NODE_ID_OFFSET_ADDR;
+		ls7a_ioapic_reg_base_alias = LS3A4000_LS7A_IOAPIC_GUEST_REG_BASE_ALIAS;
 	} else {
 		ls7a_ioapic_reg_base = LS7A_IOAPIC_GUEST_REG_BASE;
 		ht_control_reg_base = HT_CONTROL_REGS_BASE;
 		dma_nodeid_offset_base = NODE_ID_OFFSET_ADDR;
+		ls7a_ioapic_reg_base_alias = LS7A_IOAPIC_GUEST_REG_BASE_ALIAS;
 	}
 
 	/* Emulate nodecounter read */
@@ -2266,7 +2270,7 @@ enum emulation_result kvm_mips_emulate_load(union mips_instruction inst,
 		return EMULATE_FAIL;
 	}
 
-	if(((run->mmio.phys_addr & (~0xfffUL))== ls7a_ioapic_reg_base) &&
+	if((((run->mmio.phys_addr & (~0xfffUL))== ls7a_ioapic_reg_base)||((run->mmio.phys_addr & (~0xfffUL))== ls7a_ioapic_reg_base_alias)) &&
 					ls7a_ioapic_in_kernel(vcpu->kvm)){
 		vcpu->stat.lsvz_ls7a_pic_read_exits++;
 		ls7a_ioapic_lock(vcpu->kvm->arch.v_ioapic, &flags);

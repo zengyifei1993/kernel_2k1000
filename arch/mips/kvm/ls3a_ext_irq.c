@@ -235,6 +235,7 @@ int ls3a_ext_intctl_write(struct kvm *kvm , gpa_t addr, unsigned size, unsigned 
 {
 	uint64_t offset,val_data_u64,reg_count;
 	uint32_t val_data_u32;
+	uint8_t val_data_u8;
 
 	struct loongson_kvm_ls3a_extirq *s = ls3a_ext_irqchip(kvm);
 	struct kvm_ls3a_extirq_state *state = &(s->ls3a_ext_irq);
@@ -242,6 +243,7 @@ int ls3a_ext_intctl_write(struct kvm *kvm , gpa_t addr, unsigned size, unsigned 
 	offset = addr&0xffff;
 	val_data_u64 = val;
 	val_data_u32 = (uint32_t) (val & 0xffffffffUL);
+	val_data_u8 = (uint8_t) (val & 0xffUL);
 
 	kvm_debug("ls3a_ext_intctl_write:addr = 0x%llx,size = %d,val = 0x%lx\n",addr,size,val);
 
@@ -252,6 +254,9 @@ int ls3a_ext_intctl_write(struct kvm *kvm , gpa_t addr, unsigned size, unsigned 
 		}else if(size == 4){
 			reg_count = (offset-0x1600)/4;
 			state->en.reg_u32[reg_count] = val_data_u32;
+		} else if (size == 1) {
+			reg_count = (offset - 0x1600);
+			state->en.reg_u8[reg_count] = val_data_u8;
 		}
 		ext_irq_update_core(kvm,0,(offset -0x1b00)/8);
 	}else if(offset >= 0x1680 && offset < 0x16a0){
@@ -261,6 +266,9 @@ int ls3a_ext_intctl_write(struct kvm *kvm , gpa_t addr, unsigned size, unsigned 
 		}else if(size == 4){
 			reg_count = (offset-0x1680)/4;
 			state->bounce.reg_u32[reg_count] = val_data_u32;
+		} else if (size == 1) {
+			reg_count = (offset - 0x1680);
+			state->bounce.reg_u8[reg_count] = val_data_u8;
 		}
 	}else if(offset >= 0x1700 && offset < 0x1720){
 		/*can not be writen*/
@@ -273,6 +281,10 @@ int ls3a_ext_intctl_write(struct kvm *kvm , gpa_t addr, unsigned size, unsigned 
 			reg_count = (offset -0x1800)/4;
 			state->core_isr.reg_u32[0][reg_count] &= ~val_data_u32;
 			state->isr.reg_u32[reg_count] &= ~val_data_u32;
+		} else if (size == 1) {
+			reg_count = (offset - 0x1800);
+			state->core_isr.reg_u8[0][reg_count] &= ~val_data_u8;
+			state->isr.reg_u8[reg_count] &= ~val_data_u8;
 		}
 		ext_irq_update_core(kvm,0,(offset -0x1800)/8);
 	}else if(offset >= 0x1900 && offset < 0x1920){
@@ -284,6 +296,10 @@ int ls3a_ext_intctl_write(struct kvm *kvm , gpa_t addr, unsigned size, unsigned 
 			reg_count = (offset -0x1900)/4;
 			state->core_isr.reg_u64[1][reg_count] &= ~val_data_u32;
 			state->isr.reg_u32[reg_count] &= ~val_data_u32;
+		} else if (size == 1) {
+			reg_count = (offset - 0x1900);
+			state->core_isr.reg_u8[1][reg_count] &= ~val_data_u8;
+			state->isr.reg_u8[reg_count] &= ~val_data_u8;
 		}
 		ext_irq_update_core(kvm,1,(offset -0x1900)/8);
 	}else if(offset >= 0x1a00 && offset < 0x1a20){
@@ -295,6 +311,10 @@ int ls3a_ext_intctl_write(struct kvm *kvm , gpa_t addr, unsigned size, unsigned 
 			reg_count = (offset -0x1a00)/4;
 			state->core_isr.reg_u64[2][reg_count] &= ~val_data_u32;
 			state->isr.reg_u32[reg_count] &= ~val_data_u32;
+		} else if (size == 1) {
+			reg_count = (offset - 0x1a00);
+			state->core_isr.reg_u8[2][reg_count] &= ~val_data_u8;
+			state->isr.reg_u8[reg_count] &= ~val_data_u8;
 		}
 		ext_irq_update_core(kvm,2,(offset -0x1a00)/8);
 	}else if(offset >= 0x1b00 && offset < 0x1b20){
@@ -306,6 +326,10 @@ int ls3a_ext_intctl_write(struct kvm *kvm , gpa_t addr, unsigned size, unsigned 
 			reg_count = (offset -0x1b00)/4;
 			state->core_isr.reg_u64[3][reg_count] &= ~val_data_u32;
 			state->isr.reg_u32[reg_count] &= ~val_data_u32;
+		} else if (size == 1) {
+			reg_count = (offset - 0x1b00);
+			state->core_isr.reg_u8[3][reg_count] &= ~val_data_u8;
+			state->isr.reg_u8[reg_count] &= ~val_data_u8;
 		}
 		ext_irq_update_core(kvm,3,(offset -0x1b00)/8);
 	}else if(offset >= 0x14c0 && offset < 0x14C8){
@@ -314,6 +338,9 @@ int ls3a_ext_intctl_write(struct kvm *kvm , gpa_t addr, unsigned size, unsigned 
 		}else if(size == 4){
 			reg_count = (offset -0x14c0)/4;
 			state->map.reg_u32[reg_count] = val_data_u32;
+		} else if (size == 1) {
+			reg_count = (offset - 0x14c0);
+			state->map.reg_u8[reg_count] = val_data_u8;
 		}
 	}else if(offset >= 0x1c00 && offset < 0x1cff){
 		if(size == 8){
@@ -322,6 +349,9 @@ int ls3a_ext_intctl_write(struct kvm *kvm , gpa_t addr, unsigned size, unsigned 
 		}else if(size == 4){
 			reg_count = (offset -0x1c00)/4;
 			state->core_map.reg_u32[reg_count] = val_data_u32;
+		} else if (size == 1) {
+			reg_count = (offset - 0x1c00);
+			state->core_map.reg_u8[reg_count] = val_data_u8;
 		}
 	}else if(offset >= 0x14a0 && offset < 0x14bf){
 		if(size == 8){
@@ -330,6 +360,9 @@ int ls3a_ext_intctl_write(struct kvm *kvm , gpa_t addr, unsigned size, unsigned 
 		}else if(size == 4){
 			reg_count = (offset -0x14a0)/4;
 			state->node_type.reg_u32[reg_count] = val_data_u32;
+		} else if (size == 1) {
+			reg_count = (offset - 0x14a0);
+			state->node_type.reg_u8[reg_count] = val_data_u8;
 		}
 
 	}else if(offset >= 0x0420 && offset < 0x0428){
@@ -338,6 +371,9 @@ int ls3a_ext_intctl_write(struct kvm *kvm , gpa_t addr, unsigned size, unsigned 
 		}else if(size == 4){
 			reg_count = (offset -0x0420)/4;
 			state->ext_en.reg_u32[reg_count] = val_data_u32;
+		} else if (size == 1) {
+			reg_count = (offset - 0x0420);
+			state->ext_en.reg_u8[reg_count] = val_data_u8;
 		}
 	}
 	return 0;
