@@ -11,6 +11,8 @@
 
 #define HT1LO_PCICFG_BASE      0x1a000000
 #define HT1LO_PCICFG_BASE_TP1  0x1b000000
+#define HT1LO_EXT_PCICFG_BASE  0xefe00000000UL
+#define HT1LO_EXT_PCICFG_BASE_TP1  0xefe10000000UL
 
 #define PCI_byte_BAD 0
 #define PCI_word_BAD (pos & 1)
@@ -122,13 +124,23 @@ static int ls7a_pci_config_access(unsigned char access_type,
 		 */
 		if (device > 23)
 			return PCIBIOS_DEVICE_NOT_FOUND;
-		addr = (device << 11) | (function << 8) | reg;
-		addrp = (void *)(TO_UNCAC(HT1LO_PCICFG_BASE) | (addr & 0xffff));
+		if (reg < 0x100) {
+			addr = (device << 11) | (function << 8) | reg;
+			addrp = (void *)(TO_UNCAC(HT1LO_PCICFG_BASE) | (addr & 0xffff));
+		} else {
+			addr = (device << 11) | (function << 8) | (reg & 0xff) | ((reg & 0xf00) << 16);
+			addrp = (void *)(TO_UNCAC(HT1LO_EXT_PCICFG_BASE) | addr);
+		}
 		type = 0;
 
 	} else {
-		addr = (busnum << 16) | (device << 11) | (function << 8) | reg;
-		addrp = (void *)(TO_UNCAC(HT1LO_PCICFG_BASE_TP1) | (addr));
+		if (reg < 0x100) {
+			addr = (busnum << 16) | (device << 11) | (function << 8) | reg;
+			addrp = (void *)(TO_UNCAC(HT1LO_PCICFG_BASE_TP1) | (addr));
+		} else {
+			addr = (busnum << 16) | (device << 11) | (function << 8) | (reg & 0xff) | ((reg & 0xf00) << 16);
+			addrp = (void *)(TO_UNCAC(HT1LO_EXT_PCICFG_BASE_TP1) | addr);
+		}
 		type = 0x10000;
 	}
 
