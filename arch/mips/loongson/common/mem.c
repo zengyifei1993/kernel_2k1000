@@ -58,7 +58,64 @@ void __init prom_init_memory(void)
 
 extern unsigned int has_systab;
 extern unsigned long systab_addr;
+extern struct loongsonlist_mem_map *loongson_mem_map;
 
+void __init prom_init_memory_new(void)
+{
+	int i;
+	u32 mem_type;
+	u64 mem_start, mem_end, mem_size;
+	/* parse memory information */
+	for (i = 0; i < loongson_mem_map->map_count; i++){
+		mem_type = loongson_mem_map->map[i].mem_type;
+		mem_start = loongson_mem_map->map[i].mem_start;
+		mem_size = loongson_mem_map->map[i].mem_size;
+		mem_end = mem_start + mem_size;
+
+		switch (mem_type) {
+		case SYSTEM_RAM_LOW:
+			mem_start = PFN_ALIGN(mem_start);
+			mem_end = PFN_ALIGN(mem_end - PAGE_SIZE + 1);
+			if (mem_start >= mem_end)
+				break;
+			low_physmem_start = loongson_mem_map->map[i].mem_start;
+			add_memory_region(loongson_mem_map->map[i].mem_start,
+				loongson_mem_map->map[i].mem_size,
+				BOOT_MEM_RAM);
+			break;
+		case SYSTEM_RAM_HIGH:
+
+			mem_start = PFN_ALIGN(mem_start);
+			mem_end = PFN_ALIGN(mem_end - PAGE_SIZE + 1);
+			if (mem_start >= mem_end)
+				break;
+			high_physmem_start = loongson_mem_map->map[i].mem_start;
+			add_memory_region(loongson_mem_map->map[i].mem_start,
+				loongson_mem_map->map[i].mem_size,
+				BOOT_MEM_RAM);
+			break;
+		case MEM_RESERVED:
+			add_memory_region(loongson_mem_map->map[i].mem_start,
+				loongson_mem_map->map[i].mem_size,
+				BOOT_MEM_RESERVED);
+			break;
+		case SMBIOS_TABLE:
+			has_systab = 1;
+			systab_addr = loongson_mem_map->map[i].mem_start;
+			add_memory_region(loongson_mem_map->map[i].mem_start,
+				loongson_mem_map->map[i].mem_size, BOOT_MEM_RESERVED);
+			break;
+		case UMA_VIDEO_RAM:
+			vram_type = VRAM_TYPE_UMA;
+			uma_vram_addr = loongson_mem_map->map[i].mem_start & 0xffffffff;
+			uma_vram_size = loongson_mem_map->map[i].mem_size;
+			add_memory_region(loongson_mem_map->map[i].mem_start,
+				loongson_mem_map->map[i].mem_size,
+				BOOT_MEM_RESERVED);
+			break;
+		}
+	}
+}
 void __init prom_init_memory(void)
 {
 	int i;

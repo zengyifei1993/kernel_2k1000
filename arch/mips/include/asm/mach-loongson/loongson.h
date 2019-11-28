@@ -36,6 +36,7 @@ extern u32 loongson_hwmon;
 
 /* loongson-specific command line, env and memory initialization */
 extern void __init prom_init_memory(void);
+extern void __init prom_init_memory_new(void);
 extern void __init prom_init_cmdline(void);
 extern void __init prom_init_machtype(void);
 extern void __init prom_init_env(void);

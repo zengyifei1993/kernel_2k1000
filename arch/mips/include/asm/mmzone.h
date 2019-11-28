@@ -7,6 +7,7 @@
 
 #include <asm/page.h>
 #include <mmzone.h>
+#include <asm/numa.h>
 
 #ifdef CONFIG_DISCONTIGMEM
 

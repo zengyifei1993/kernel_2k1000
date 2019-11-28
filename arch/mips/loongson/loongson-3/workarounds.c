@@ -89,7 +89,7 @@ void ea_turn_on_lvds(void);
 void turn_off_lvds(void)
 {
 	if (loongson_workarounds & WORKAROUND_LVDS_EC)
-		ec_write(INDEX_BACKLIGHT_STSCTRL, BACKLIGHT_OFF);
+		wpce775l_ec_write(INDEX_BACKLIGHT_STSCTRL, BACKLIGHT_OFF);
 	if (loongson_workarounds & WORKAROUND_LVDS_GPIO)
 		gpio_lvds_off();
 #if defined(CONFIG_LOONGSON_EA_PM_HOTKEY)
@@ -102,7 +102,7 @@ EXPORT_SYMBOL(turn_off_lvds);
 void turn_on_lvds(void)
 {
 	if (loongson_workarounds & WORKAROUND_LVDS_EC)
-		ec_write(INDEX_BACKLIGHT_STSCTRL, BACKLIGHT_ON);
+		wpce775l_ec_write(INDEX_BACKLIGHT_STSCTRL, BACKLIGHT_ON);
 	if (loongson_workarounds & WORKAROUND_LVDS_GPIO)
 		gpio_lvds_on();
 #if defined(CONFIG_LOONGSON_EA_PM_HOTKEY)
@@ -140,40 +140,12 @@ static int __init usb_fix_for_tmcs(void)
 
 late_initcall(usb_fix_for_tmcs);
 
-static inline int loongson3_ccnuma_platform(void)
-{
-	struct loongson_params *loongson_p;
-	struct efi_cpuinfo_loongson *ecpu;
-
-	loongson_p = &(((struct boot_params *)fw_arg2)->efi.smbios.lp);
-	ecpu = (struct efi_cpuinfo_loongson *)((u64)loongson_p + loongson_p->cpu_offset);
-
-	if (ecpu->nr_cpus <= 4)
-		return 0;
-
-	return 1;
-}
-
 extern u32 nr_nodes_loongson;
 void loongson3_arch_func_optimize(unsigned int cpu_type)
 {
 	unsigned int *p __maybe_unused;
 	struct uasm_label labels[3] __maybe_unused;
 	struct uasm_reloc relocs[3] __maybe_unused;
-
-	if (!loongson3_ccnuma_platform()) {
-#ifdef CONFIG_PHASE_LOCK
-		/* optimize loongson3_phase_lock_acquire for SMP */
-		p = (unsigned int *)&loongson3_phase_lock_acquire;
-		uasm_i_jr(&p, RA);
-		uasm_i_nop(&p);
-
-		/* optimize loongson3_phase_lock_release for SMP */
-		p = (unsigned int *)&loongson3_phase_lock_release;
-		uasm_i_jr(&p, RA);
-		uasm_i_nop(&p);
-#endif
-	}
 
 	switch(cpu_type) {
 	case PRID_REV_LOONGSON3A_R1:

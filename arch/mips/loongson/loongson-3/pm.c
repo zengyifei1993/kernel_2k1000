@@ -145,7 +145,7 @@ void mach_suspend(suspend_state_t state)
 
 	/* Workaround: disable spurious IRQ1 via EC */
 	if (state == PM_SUSPEND_STANDBY) {
-		ec_write_noindex(CMD_RESET, STANDBY_ON);
+		wpce775l_ec_write_noindex(CMD_RESET, STANDBY_ON);
 		mdelay(900);
 	}
 }

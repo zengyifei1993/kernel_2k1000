@@ -72,6 +72,12 @@ void start_thread(struct pt_regs * regs, unsigned long pc, unsigned long sp)
 	regs->cp0_epc = pc;
 	regs->regs[29] = sp;
 }
+/*
+ * Idle related variables and functions
+ */
+
+unsigned long boot_option_idle_override = IDLE_NO_OVERRIDE;
+EXPORT_SYMBOL(boot_option_idle_override);
 
 void exit_thread(void)
 {

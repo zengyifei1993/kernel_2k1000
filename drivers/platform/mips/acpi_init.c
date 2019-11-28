@@ -144,7 +144,7 @@ static irqreturn_t acpi_int_routine(int irq, void *dev_id)
 	return IRQ_NONE;
 }
 
-static int __init power_button_init(void)
+int __init power_button_init(void)
 {
 	int ret;
 
@@ -177,7 +177,6 @@ static int __init power_button_init(void)
 
 	return 0;
 }
-device_initcall(power_button_init);
 
 void acpi_registers_setup(void)
 {

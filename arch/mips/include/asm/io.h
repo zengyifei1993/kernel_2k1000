@@ -282,6 +282,8 @@ static inline void __iomem * __ioremap_mode(phys_t offset, unsigned long size,
 #define ioremap_cachable(offset, size)					\
 	__ioremap_mode((offset), (size), _page_cachable_default)
 
+
+#define ioremap_cache(offset, size) ioremap((offset), (size))
 /*
  * These two are MIPS specific ioremap variant.	 ioremap_cacheable_cow
  * requests a cachable mapping, ioremap_uncached_accelerated requests a

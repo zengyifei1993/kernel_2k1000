@@ -36,7 +36,7 @@ extern int __cpu_logical_map[NR_CPUS];
 #define cpu_logical_map(cpu)  __cpu_logical_map[cpu]
 
 #define NO_PROC_ID	(-1)
-
+#define cpu_physical_id(cpu)	cpu_logical_map(cpu)
 
 #define SMP_RESCHEDULE_YOURSELF 0x1	/* XXX braindead */
 #define SMP_CALL_FUNCTION	0x2

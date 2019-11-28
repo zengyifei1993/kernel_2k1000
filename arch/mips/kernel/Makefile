@@ -52,6 +52,7 @@ obj-$(CONFIG_CPU_R6000)		+= r6000_fpu.o
 obj-$(CONFIG_CPU_LOONGSON3)	+= loongson_fpu.o
 obj-$(CONFIG_CPU_LOONGSON2K)	+= loongson_fpu.o
 
+obj-y				+= acpi/
 obj-$(CONFIG_SMP)		+= smp.o
 obj-$(CONFIG_SMP_UP)		+= smp-up.o
 obj-$(CONFIG_CPU_BMIPS)		+= smp-bmips.o bmips_vec.o

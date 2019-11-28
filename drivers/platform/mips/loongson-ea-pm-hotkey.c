@@ -258,7 +258,7 @@ struct sci_device
 };
 
 extern void prom_printf(char *fmt, ...);
-extern int ec_query_get_event_num(void);
+extern int it8528_query_get_event_num(void);
 /* SCI device object */
 static struct sci_device *loongson_sci_device = NULL;
 static int loongson_sci_event_probe(struct platform_device *);
@@ -460,7 +460,7 @@ static irqreturn_t loongson_sci_int_routine(int irq, void *dev_id)
 	if (loongson_pch->board_type == RS780E)
 		clean_it8528_event_status();
 
-	event = ec_query_get_event_num();
+	event = it8528_query_get_event_num();
 	if ((SCI_EVENT_NUM_AC > event) || (SCI_EVENT_NUM_POWERBTN < event))
 		goto exit_event_action;
 	loongson_ea_sci_hotkey_handler(event);

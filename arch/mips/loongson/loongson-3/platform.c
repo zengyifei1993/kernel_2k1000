@@ -23,6 +23,7 @@
 #include <workarounds.h>
 #include <linux/of.h>
 #include <loongson.h>
+#include <linux/acpi.h>
 
 int hpet_enabled = 0;
 
@@ -205,11 +206,14 @@ static int __init loongson3_platform_init(void)
 	return 0;
 }
 
+extern void power_button_init(void);
 static int __init loongson3_device_init(void)
 {
 	if (loongson_pch)
 		loongson_pch->pch_device_initcall();
 
+	if (acpi_disabled)
+		power_button_init();
 	return 0;
 }
 

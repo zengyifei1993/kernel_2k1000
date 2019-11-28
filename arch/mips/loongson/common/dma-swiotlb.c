@@ -12,6 +12,7 @@
 #include <dma-coherence.h>
 #include <loongson.h>
 
+extern bool loongson_acpiboot_flag;
 static inline void *dma_to_virt(struct device *dev, dma_addr_t dma_addr)
 {
 	return phys_to_virt(dma_to_phys(dev, dma_addr));
@@ -349,10 +350,18 @@ static struct loongson_dma_map_ops loongson_linear_dma_map_ops = {
 
 void __init plat_swiotlb_setup(void)
 {
+	bool support_dma_map = false;
 	swiotlb_init(1);
 	mips_dma_map_ops = &loongson_linear_dma_map_ops.dma_map_ops;
+	
+	if (loongson_acpiboot_flag) {
+		support_dma_map = true;
+	} else {
+		if (emap->vers >= 2)
+			support_dma_map = true;	
+	}
 
-	if(emap->vers >= 2 && ls_dma_map[0].mem_size){
+	if(support_dma_map && ls_dma_map[0].mem_size){
 		loongson_linear_dma_map_ops.phys_to_dma = loongson_phys_to_dma;
 		loongson_linear_dma_map_ops.dma_to_phys = loongson_dma_to_phys;
 	}else{

@@ -28,6 +28,16 @@
 
 #define LOONGSON3_BOOT_MEM_MAP_MAX 128
 #define LOONGSON3_BOOT_MEM_MAP 64
+
+
+#define PCI_MEM_START_ADDR		0x40000000
+#define PCI_MEM_END_ADDR		0x7fffffff
+#define LOONGSON_PCI_IOBASE		0xefdfc000000
+#define LOONGSON_DMA_MASK_BIT		64
+#define LOONGSON_MEM_LINKLIST		"MEM"
+#define LOONGSON_VBIOS_LINKLIST		"VBIOS"
+#define LOONGSON_EFIBOOT_SIGNATURE	"BPI"
+
 struct efi_memory_map_loongson{
 	u16 vers;	/* version of efi_memory_map */
 	u32 nr_map;	/* number of memory_maps */
@@ -214,6 +224,34 @@ struct boot_params{
 struct ls_temp_id {
 	int max_id;
 };
+
+struct bootparamsinterface {
+	u64	signature;	/*{"B", "P", "I", "_", "0", "_", "1"}*/
+	void	*systemtable;
+	struct	_extention_list_hdr	*extlist;
+}__attribute__((packed));
+struct _extention_list_hdr {
+	u64	signature;
+	u32	length;
+	u8	revision;
+	u8	checksum;
+	struct	_extention_list_hdr *next;
+}__attribute__((packed));
+
+struct loongsonlist_mem_map {
+	struct	_extention_list_hdr header;	/*{"M", "E", "M"}*/
+	u8	map_count;
+	struct	_loongson_mem_map {
+		u32 mem_type;
+		u64 mem_start;
+		u64 mem_size;
+	}__attribute__((packed))map[LOONGSON3_BOOT_MEM_MAP_MAX];
+}__attribute__((packed));
+
+struct loongsonlist_vbios {
+	struct	_extention_list_hdr header;	/* {VBIOS} */
+	u64	vbios_addr;
+}__attribute__((packed));
 
 extern u32 nr_cpus_loongson;
 extern u32 possible_cpus_loongson;

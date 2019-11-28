@@ -38,6 +38,22 @@ unsigned long PCIBIOS_MIN_MEM;
 extern int pci_sort_bf_cmp_depth(const struct device *d_a,
 		const struct device *d_b, struct predev *d_p);
 static int pci_initialized;
+int raw_pci_read(unsigned int domain, unsigned int bus, unsigned int devfn,int reg, int len, u32 *val)
+{
+	struct pci_bus * bus_tmp = pci_find_bus(domain, bus);
+	if (bus_tmp)
+		return bus_tmp->ops->read(bus_tmp, devfn, reg, len, val);
+	return -EINVAL;
+}
+
+int raw_pci_write(unsigned int domain, unsigned int bus, unsigned int devfn,
+						int reg, int len, u32 val)
+{
+	struct pci_bus * bus_tmp = pci_find_bus(domain, bus);
+	if (bus_tmp)
+		return bus_tmp->ops->write(bus_tmp, devfn, reg, len, val);
+	return -EINVAL;
+}
 
 /*
  * We need to avoid collisions with `mirrored' VGA ports

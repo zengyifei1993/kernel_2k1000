@@ -10,7 +10,6 @@
 #define __ASM_MACH_LOONGSON_IOREMAP_H
 
 #include <linux/types.h>
-
 /*
  * Allow physical addresses to be fixed up to help peripherals located
  * outside the low 32-bit range -- generic pass-through version.
@@ -40,5 +39,21 @@ static inline int plat_iounmap(const volatile void __iomem *addr)
 {
 	return 0;
 }
+
+static inline void __iomem *early_ioremap(u64 phys_addr, unsigned long size)
+{
+	if (phys_addr == 0xF0000)
+		phys_addr = 0xfffe000;
+
+	return ((void *)TO_CAC(phys_addr));
+}
+
+static inline void early_iounmap(void __iomem *addr, unsigned long size)
+{
+
+}
+
+#define early_memremap early_ioremap
+#define early_memunmap early_iounmap
 
 #endif /* __ASM_MACH_LOONGSON_IOREMAP_H */

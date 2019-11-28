@@ -18,6 +18,7 @@ obj-y += kernel/
 obj-y += mm/
 obj-y += math-emu/
 
+obj-y += platform/
 ifdef CONFIG_KVM
 obj-y += kvm/
 endif

@@ -13,6 +13,7 @@
 #include <linux/err.h>
 #include <linux/io.h>
 #include <linux/console.h>
+#include <linux/acpi.h>
 
 /**
  * ktime_mono_to_real - Convert monotonic time to clock realtime
@@ -174,7 +175,9 @@ enum acpi_backlight_type {
 
 static inline enum acpi_backlight_type acpi_video_get_backlight_type(void)
 {
+#ifndef CONFIG_ACPI
 	int acpi_video_backlight_support(void);
+#endif
 #if IS_ENABLED(CONFIG_ACPI_VIDEO)
 	bool acpi_video_verify_backlight_support(void);
 	if (acpi_video_backlight_support() &&

@@ -25,15 +25,18 @@
 #include <workarounds.h>
 #include <loongson-pch.h>
 #include <linux/efi.h>
+#include <linux/acpi.h>
 
 struct boot_params *boot_p;
 struct loongson_params *loongson_p;
 
+bool loongson_acpiboot_flag;
 struct efi_cpuinfo_loongson *ecpu;
 struct efi_memory_map_loongson *emap;
 struct system_loongson *esys;
 struct board_devices *eboard;
 struct irq_source_routing_table *eirq_source;
+struct bootparamsinterface *efi_bp;
 
 u32 cpu_guestmode;
 u64 ht_control_base;
@@ -84,15 +87,17 @@ extern struct platform_controller_hub ls2h_pch;
 extern struct platform_controller_hub ls7a_pch;
 extern struct platform_controller_hub rs780_pch;
 
-struct board_devices *eboard;
 struct interface_info *einter;
 struct loongson_special_attribute *especial;
 
+struct loongsonlist_vbios *pvbios;
+struct loongsonlist_mem_map *loongson_mem_map;
 extern char *bios_vendor;
 extern char *bios_release_date;
 extern char *board_manufacturer;
 extern char _bios_info[];
 extern char _board_info[];
+extern char *loongson_cpuname;
 
 unsigned long loongson_max_dma32_pfn;
 u32 cpu_clock_freq;
@@ -110,12 +115,12 @@ do {									\
 		tmp = kstrtou32((char *)p + strlen(option"="), 10, &res); \
 } while (0)
 
-void __init prom_init_env(void)
+void __init no_efiboot_env(void)
 {
 	/* pmon passes arguments in 32bit pointers */
 	unsigned int processor_id;
-        char *bios_info __maybe_unused;
-        char *board_info __maybe_unused;
+	char *bios_info __maybe_unused;
+	char *board_info __maybe_unused;
 
 #ifndef CONFIG_UEFI_FIRMWARE_INTERFACE
 	int *_prom_envp;
@@ -266,14 +271,14 @@ void __init prom_init_env(void)
 	if (strstr(eboard->name,"2H")) {
 		int ls2h_board_ver;
 
-                ls2h_board_ver = ls2h_readl(LS2H_GPIO_IN_REG);
-                ls2h_board_ver = (ls2h_board_ver >> 8) & 0xf;
+		ls2h_board_ver = ls2h_readl(LS2H_GPIO_IN_REG);
+		ls2h_board_ver = (ls2h_board_ver >> 8) & 0xf;
 
-                if (ls2h_board_ver == LS3A2H_BOARD_VER_2_2) {
-                        loongson_pciio_base = 0x1bf00000;
+		if (ls2h_board_ver == LS3A2H_BOARD_VER_2_2) {
+			loongson_pciio_base = 0x1bf00000;
 			ls_lpc_reg_base = LS2H_LPC_REG_BASE;
-              	 } else {
-                        loongson_pciio_base = 0x1ff00000;
+		} else {
+			loongson_pciio_base = 0x1ff00000;
 			ls_lpc_reg_base = LS3_LPC_REG_BASE;
 		}
 
@@ -302,28 +307,28 @@ void __init prom_init_env(void)
 		loongson_max_dma32_pfn = 0x100000000ULL>> PAGE_SHIFT;
 	}
 
-        /* parse bios info */
-        strcpy(_bios_info, einter->description);
-        bios_info = _bios_info;
-        bios_vendor = strsep(&bios_info, "-");
-        strsep(&bios_info, "-");
-        strsep(&bios_info, "-");
-        bios_release_date = strsep(&bios_info, "-");
-        if (!bios_release_date)
-                bios_release_date = especial->special_name;
+	/* parse bios info */
+	strcpy(_bios_info, einter->description);
+	bios_info = _bios_info;
+	bios_vendor = strsep(&bios_info, "-");
+	strsep(&bios_info, "-");
+	strsep(&bios_info, "-");
+	bios_release_date = strsep(&bios_info, "-");
+	if (!bios_release_date)
+	bios_release_date = especial->special_name;
 
-        /* parse board info */
-        strcpy(_board_info, eboard->name);
-        board_info = _board_info;
-        board_manufacturer = strsep(&board_info, "-");
+	/* parse board info */
+	strcpy(_board_info, eboard->name);
+	board_info = _board_info;
+	board_manufacturer = strsep(&board_info, "-");
 #ifdef CONFIG_EFI_PARTITION
-    if (strstr(einter->description,"uefi") || strstr(einter->description,"UEFI")) {
-        pr_info("The BIOS is EFI Mode! \n");
-        set_bit(EFI_BOOT, &loongson_efi_facility);
-    } else
-        clear_bit(EFI_BOOT, &loongson_efi_facility);
+	if (strstr(einter->description,"uefi") || strstr(einter->description,"UEFI")) {
+		pr_info("The BIOS is EFI Mode! \n");
+		set_bit(EFI_BOOT, &loongson_efi_facility);
+	} else
+		clear_bit(EFI_BOOT, &loongson_efi_facility);
 #endif
-    pr_info("The BIOS Version: %s\n",einter->description);
+	pr_info("The BIOS Version: %s\n",einter->description);
 
 	poweroff_addr = boot_p->reset_system.Shutdown;
 	restart_addr = boot_p->reset_system.ResetWarm;
@@ -394,14 +399,142 @@ void __init prom_init_env(void)
 #endif
 }
 
+u8 ext_listhdr_checksum(u8 *buffer, u32 length)
+{
+	u8 sum = 0;
+	u8 *end = buffer + length;
+
+	while (buffer < end) {
+		sum = (u8)(sum + *(buffer++));
+	}
+
+	return (sum);
+}
+int parse_mem(struct _extention_list_hdr *head)
+{
+	loongson_mem_map = (struct loongsonlist_mem_map *)head;
+	if (ext_listhdr_checksum((u8 *)loongson_mem_map, head->length)) {
+		prom_printf("mem checksum error\n");
+		return -EPERM;
+	}
+	return 0;
+}
+
+
+int parse_vbios(struct _extention_list_hdr *head)
+{
+	pvbios = (struct loongsonlist_vbios *)head;
+
+	if (ext_listhdr_checksum((u8 *)pvbios, head->length)) {
+		prom_printf("vbios_addr checksum error\n");
+		return -EPERM;
+	} else {
+		vgabios_addr = pvbios->vbios_addr;
+	}
+
+	return 0;
+}
+
+static int list_find(struct _extention_list_hdr *head)
+{
+	struct _extention_list_hdr *fhead = head;
+
+	if (fhead == NULL) {
+		prom_printf("the link is empty!\n");
+		return -1;
+	}
+
+	while(fhead != NULL) {
+		if (memcmp(&(fhead->signature), LOONGSON_MEM_LINKLIST, 3) == 0) {
+			if (parse_mem(fhead) !=0) {
+				prom_printf("parse mem failed\n");
+				return -EPERM;
+			}
+		} else if (memcmp(&(fhead->signature), LOONGSON_VBIOS_LINKLIST, 5) == 0) {
+			if (parse_vbios(fhead) != 0) {
+				prom_printf("parse vbios failed\n");
+				return -EPERM;
+			}
+		}
+		fhead = fhead->next;
+	}
+	return 0;
+
+}
+extern void init_suspend_addr(void);
+void __init prom_init_env(void)
+{
+	efi_bp = (struct bootparamsinterface *)fw_arg2;
+
+	if (memcmp(&(efi_bp->signature), LOONGSON_EFIBOOT_SIGNATURE, 3) != 0) {
+		no_efiboot_env();
+	}else {
+
+		smp_group[0] = 0x900000003ff01000;
+		smp_group[1] = 0x900010003ff01000;
+		smp_group[2] = 0x900020003ff01000;
+		smp_group[3] = 0x900030003ff01000;
+
+		ht_control_base = 0x90000EFDFB000000;
+		loongson_chipcfg[0] = 0x900000001fe00180;
+		loongson_chipcfg[1] = 0x900010001fe00180;
+		loongson_chipcfg[2] = 0x900020001fe00180;
+		loongson_chipcfg[3] = 0x900030001fe00180;
+
+		loongson_chiptemp[0] = 0x900000001fe0019c;
+		loongson_chiptemp[1] = 0x900010001fe0019c;
+		loongson_chiptemp[2] = 0x900020001fe0019c;
+		loongson_chiptemp[3] = 0x900030001fe0019c;
+		loongson_freqctrl[0] = 0x900000001fe001d0;
+		loongson_freqctrl[1] = 0x900010001fe001d0;
+		loongson_freqctrl[2] = 0x900020001fe001d0;
+		loongson_freqctrl[3] = 0x900030001fe001d0;
+
+		loongson_workarounds = WORKAROUND_CPUFREQ;
+		hw_coherentio = 1;
+		loongson_nr_uarts = 1;
+		loongson_acpiboot_flag = 1;
+#ifdef CONFIG_ACPI
+		acpi_disabled = 0;
+#endif
+		pci_mem_start_addr = PCI_MEM_START_ADDR;
+		pci_mem_end_addr = PCI_MEM_END_ADDR;
+		loongson_pciio_base = LOONGSON_PCI_IOBASE;
+		loongson_dma_mask_bits = LOONGSON_DMA_MASK_BIT;
+		init_suspend_addr();
+
+		if (((read_c0_prid() & 0xf) == PRID_REV_LOONGSON3A_R2_0)
+		|| ((read_c0_prid() & 0xf) == PRID_REV_LOONGSON3A_R3_0))
+			loongson3_perf_irq_mask = 0;
+
+		if (strstr(arcs_cmdline, "hwmon"))
+			loongson_hwmon = 1;
+		else
+			loongson_hwmon = 0;
+
+		if (list_find(efi_bp->extlist))
+			prom_printf("Scan bootparm failed\n");
+
+	}
+
+
+}
+
 static int __init init_cpu_fullname(void)
 {
 	int cpu;
 
 	/* get the __cpu_full_name from bios */
-	if((ecpu->vers > 1) && (ecpu->cpuname[0] != 0))
-		for(cpu = 0; cpu < NR_CPUS; cpu++)
-		__cpu_full_name[cpu] = ecpu->cpuname;
+	if (ecpu) {
+		if((ecpu->vers > 1) && (ecpu->cpuname[0] != 0))
+			for(cpu = 0; cpu < NR_CPUS; cpu++)
+				__cpu_full_name[cpu] = ecpu->cpuname;
+	} else {
+		if (loongson_acpiboot_flag == 1) {
+			for(cpu = 0; cpu < NR_CPUS; cpu++)
+				__cpu_full_name[cpu] = loongson_cpuname;
+		}
+	}
 	return 0;
 }
 arch_initcall(init_cpu_fullname);

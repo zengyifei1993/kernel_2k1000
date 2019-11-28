@@ -17,7 +17,7 @@
 #include <asm/i8259.h>
 #include <asm/mipsregs.h>
 #include <asm/bootinfo.h>
-
+#include <loongson-pch.h>
 #include <loongson.h>
 #include <mc146818rtc.h>
 
@@ -35,6 +35,12 @@ u32 loongson_pcache_sets;
 u32 loongson_scache_sets;
 u32 loongson_pcache_linesz;
 u32 loongson_scache_linesz;
+
+void init_suspend_addr(void)
+{
+	suspend_addr = readl((const volatile void *)TO_UNCAC(LS7A_RTC_RAM));
+	suspend_addr |= ((u64)readl((const volatile void *)TO_UNCAC(LS7A_RTC_RAM + 4)) << 32);
+}
 
 uint64_t cmos_read64(unsigned long addr)
 {
@@ -199,7 +205,6 @@ void __weak mach_suspend(suspend_state_t state)
 void __weak mach_resume(suspend_state_t state)
 {
 }
-
 static int loongson_pm_enter(suspend_state_t state)
 {
 	mach_suspend(state);

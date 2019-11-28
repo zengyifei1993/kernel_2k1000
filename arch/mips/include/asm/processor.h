@@ -348,7 +348,10 @@ struct task_struct;
 #define release_thread(thread) do { } while(0)
 
 extern unsigned long thread_saved_pc(struct task_struct *tsk);
+enum idle_boot_override {IDLE_NO_OVERRIDE=0, IDLE_HALT, IDLE_NOMWAIT,
+			 IDLE_POLL};
 
+extern unsigned long		boot_option_idle_override;
 /*
  * Do necessary setup to start up a newly executed thread.
  */

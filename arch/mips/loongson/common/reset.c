@@ -16,6 +16,7 @@
 #include <linux/delay.h>
 #include <linux/kexec.h>
 #include <linux/reboot.h>
+#include <linux/efi.h>
 
 #include <asm/idle.h>
 #include <asm/reboot.h>
@@ -41,6 +42,7 @@ static inline void loongson_reboot(void)
 #endif
 }
 
+extern bool loongson_acpiboot_flag;
 static void loongson_restart(char *command)
 {
 #ifndef CONFIG_UEFI_FIRMWARE_INTERFACE
@@ -50,10 +52,18 @@ static void loongson_restart(char *command)
 	/* reboot via jumping to boot base address */
 	loongson_reboot();
 #else
-	extern u64 restart_addr;
-	void (*fw_restart)(void) = (void *)restart_addr;
+	if (loongson_acpiboot_flag) {
+#ifdef CONFIG_EFI
+		efi_runtime_services_t *runtime = (efi_runtime_services_t *)efi.runtime;
+		efi_reset_system_t * reset_system = (efi_reset_system_t *)runtime->reset_system;
+		reset_system(EFI_RESET_COLD, 0, 0, NULL);
+#endif
+	} else {
+		extern u64 restart_addr;
+		void (*fw_restart)(void) = (void *)restart_addr;
 
-	fw_restart();
+		fw_restart();
+	}
 	while (1) {}
 #endif
 }
@@ -64,10 +74,18 @@ static void loongson_poweroff(void)
 	mach_prepare_shutdown();
 	unreachable();
 #else
-	extern u64 poweroff_addr;
-	void (*fw_poweroff)(void) = (void *)poweroff_addr;
+	if (loongson_acpiboot_flag) {
+#ifdef CONFIG_EFI
+		efi_runtime_services_t *runtime = (efi_runtime_services_t *)efi.runtime;
+		efi_reset_system_t * reset_system = (efi_reset_system_t *)runtime->reset_system;
+		reset_system(EFI_RESET_SHUTDOWN, 0, 0, NULL);
+#endif
+	} else {
+		extern u64 poweroff_addr;
+		void (*fw_poweroff)(void) = (void *)poweroff_addr;
 
-	fw_poweroff();
+		fw_poweroff();
+	}
 	while (1) {}
 #endif
 }

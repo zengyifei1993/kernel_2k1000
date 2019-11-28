@@ -4,31 +4,17 @@
 #include <linux/efi.h>
 #include <linux/slab.h>
 
-#define dmi_early_remap     early_ioremap
-#define dmi_early_unmap     early_unmap
+#define dmi_early_remap	early_ioremap
+#define dmi_early_unmap	early_iounmap
 
 #define dmi_remap     dmi_ioremap
 #define dmi_unmap     dmi_iounmap
 
-#define dmi_alloc(l)   	    __alloc_bootmem_low(l, l, 0) 
-
-
-void __init __iomem *early_ioremap(u64 phys_addr, unsigned long size)
-{
-    if (phys_addr == 0xF0000)
-        phys_addr = 0xfffe000;
-
-    return ((void *)TO_CAC(phys_addr));
-}
+#define dmi_alloc(l)   	    __alloc_bootmem_low(l, l, 0)
 
 void __init __iomem *dmi_ioremap(u64 phys_addr, unsigned long size)
 {
-    return ((void *)TO_CAC(phys_addr));
-}
-
-void early_unmap(void __iomem *addr, unsigned long size)
-{
-
+	return ((void *)TO_CAC(phys_addr));
 }
 
 void dmi_iounmap(volatile void __iomem *addr)
