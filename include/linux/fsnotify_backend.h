@@ -79,6 +79,7 @@ struct fsnotify_event;
 struct fsnotify_mark;
 struct fsnotify_event_private_data;
 struct fsnotify_fname;
+struct fsnotify_iter_info;
 
 /*
  * Each group much define these ops.  The fsnotify infrastructure will call
@@ -97,7 +98,8 @@ struct fsnotify_ops {
 			    struct fsnotify_mark *inode_mark,
 			    struct fsnotify_mark *vfsmount_mark,
 			    u32 mask, const void *data, int data_type,
-			    const unsigned char *file_name, u32 cookie);
+			    const unsigned char *file_name, u32 cookie,
+			    struct fsnotify_iter_info *iter_info);
 	void (*free_group_priv)(struct fsnotify_group *group);
 	void (*freeing_mark)(struct fsnotify_mark *mark, struct fsnotify_group *group);
 	void (*free_event)(struct fsnotify_event *event);
@@ -162,6 +164,8 @@ struct fsnotify_group {
 	struct fsnotify_event *overflow_event;	/* Event we queue when the
 						 * notification list is too
 						 * full */
+	atomic_t user_waits;		/* Number of tasks waiting for user
+					 * response */
 
 	/* groups can define private fields here or use the void *private */
 	union {
@@ -364,6 +368,9 @@ extern void fsnotify_clear_marks_by_group_flags(struct fsnotify_group *group, un
 extern void fsnotify_get_mark(struct fsnotify_mark *mark);
 extern void fsnotify_put_mark(struct fsnotify_mark *mark);
 extern void fsnotify_unmount_inodes(struct list_head *list);
+extern void fsnotify_finish_user_wait(struct fsnotify_iter_info *iter_info);
+extern bool fsnotify_prepare_user_wait(struct fsnotify_iter_info *iter_info);
+
 
 /* put here because inotify does some weird stuff when destroying watches */
 extern void fsnotify_init_event(struct fsnotify_event *event,
