@@ -95,7 +95,11 @@ static int __init pcibios_init(void)
 		setup_pcimap();
 		loongson_pci_controller.pci_ops = &loongson_780e_pci_ops;
 	} else if (loongson_pch && loongson_pch->board_type == LS7A) {
-		loongson_pci_controller.pci_ops = &loongson_ls7a_pci_ops;
+		if(cpu_guestmode){
+			loongson_pci_controller.pci_ops = &vz_ls7a_pci_ops;
+		} else {
+			loongson_pci_controller.pci_ops = &loongson_ls7a_pci_ops;
+		}
 	} 
 #else
 	setup_pcimap();
