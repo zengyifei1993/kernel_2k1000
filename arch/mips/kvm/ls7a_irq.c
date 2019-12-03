@@ -148,6 +148,13 @@ int ls7a_ioapic_reg_write(struct loongson_kvm_7a_ioapic *s,
         offset = addr&0xfff;
 	kvm = s->kvm;
 	state = &(s->ls7a_ioapic);
+
+	if (offset & (len -1 )) {
+		printk("%s(%d):unaligned address access %llx size %d \n",
+				__FUNCTION__, __LINE__, addr, len);
+		return 0;
+	}
+
         if(8 == len){
 		data = *(uint64_t *)val;
                 switch(offset){
@@ -182,7 +189,8 @@ int ls7a_ioapic_reg_write(struct loongson_kvm_7a_ioapic *s,
 				ls7a_update_read_page_long(s,offset,state->htmsi_en);
                                 break;
                         default:
-                             break;
+				WARN_ONCE(1,"Abnormal address access:addr 0x%llx,len %d\n",addr,len);
+				break;
                 }
         }else if(1 == len){
 		data = *(unsigned char *)val;
@@ -198,8 +206,12 @@ int ls7a_ioapic_reg_write(struct loongson_kvm_7a_ioapic *s,
                                 state->route_entry[offset_tmp] = (uint8_t)(data & 0xff);
 				ls7a_update_read_page_char(s,offset,state->route_entry[offset_tmp]);
                         }
-                }
-        }
+                } else {
+			WARN_ONCE(1,"Abnormal address access:addr 0x%llx,len %d\n",addr,len);
+		}
+        } else {
+		WARN_ONCE(1,"Abnormal address access:addr 0x%llx,len %d\n",addr,len);
+	}
 	kvm->stat.lsvz_ls7a_ioapic_reg_write++;
 	return 0;
 
@@ -225,6 +237,13 @@ int ls7a_ioapic_reg_read(struct loongson_kvm_7a_ioapic *s,
 	state = &(s->ls7a_ioapic);
 	kvm = s->kvm;
         offset = addr&0xfff;
+
+	if (offset & (len -1 )) {
+		printk("%s(%d):unaligned address access %llx size %d \n",
+				__FUNCTION__, __LINE__, addr, len);
+		return 0;
+	}
+
 	if(8 == len){
                 switch(offset){
                         case LS7A_IOAPIC_INT_MASK_OFFSET:
@@ -243,6 +262,7 @@ int ls7a_ioapic_reg_read(struct loongson_kvm_7a_ioapic *s,
                                 result = state->htmsi_en;
                                 break;
                         default:
+				WARN_ONCE(1,"Abnormal address access:addr 0x%llx,len %d\n",addr,len);
                                 break;
                 }
 		if(val != NULL)
@@ -259,10 +279,14 @@ int ls7a_ioapic_reg_read(struct loongson_kvm_7a_ioapic *s,
                         if(offset_tmp >= 0 && offset_tmp < 64){
                                 result = state->route_entry[offset_tmp];
                         }
-                }
+                } else {
+			WARN_ONCE(1,"Abnormal address access:addr 0x%llx,len %d\n",addr,len);
+		}                
 		if(val != NULL)
 			*(unsigned char *)val = result;
-        }
+        }else{
+		WARN_ONCE(1,"Abnormal address access:addr 0x%llx,len %d\n",addr,len);
+	}
 	kvm->stat.lsvz_ls7a_ioapic_reg_read++;
 	return result;
 }
