@@ -106,6 +106,13 @@ uint64_t ls3a_ht_intctl_read(struct kvm *kvm, gpa_t addr, unsigned size,void* va
 	mem = s->ht_irq_reg;
 	offset = addr&0xff;
 
+	if (offset & (size -1 )) {
+		printk("%s(%d):unaligned address access %llx size %d \n",
+				__FUNCTION__, __LINE__, addr, size);
+		return 0;
+
+	}
+
 	switch(size){
 		case 8:
 			*(uint64_t *)val = *(uint64_t *)(mem + offset);
@@ -126,6 +133,7 @@ uint64_t ls3a_ht_intctl_read(struct kvm *kvm, gpa_t addr, unsigned size,void* va
 			*(uint8_t *)val = (uint8_t)(*(uint8_t *)(mem + offset));
 			break;
 		default:
+			WARN_ONCE(1,"Abnormal address access:addr 0x%llx,size %d\n",addr,size);
 			ret = 0;
 	}
 	return ret;
@@ -197,14 +205,26 @@ void ls3a_ht_intctl_write(struct kvm *kvm, gpa_t addr,unsigned size, const void 
 		default:
 			if(8 == size){
 				*(uint64_t *)(mem + offset) = data;
+				size -= 8;
+				offset += 8;
 			}else if(4 == size){
 				*(uint32_t *)(mem + offset) = (uint32_t)data;
+				size -= 4;
+				offset += 4;
 			}else if(2 == size){
 				*(uint16_t *)(mem + offset) = (uint16_t)data;
+				size -= 2;
+				offset += 2;
 			}else if(1 == size){
 				*(uint8_t *)(mem + offset) = (uint8_t)data;
+				size --;
+				offset ++;
 			}
 			break;
+	}
+	if(size != 0){
+		printk("%s(%d):Abnormal register write %llx size %d \n",
+				__FUNCTION__, __LINE__, offset, size);
 	}
 }
 

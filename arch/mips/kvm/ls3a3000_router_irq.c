@@ -59,7 +59,7 @@ void route_update_reg(struct kvm *kvm,int irqnum,int level)
 		*(uint32_t *)(mem + core_route_state[i]) |= (1ULL<<irqnum);
 		irq.cpu = i;
 		irq.irq = ip_num;
-		kvm->arch.core_ip_mask [i][ip_num] |= 0x1;
+		kvm->arch.core_ip_mask [i][ip_num - 2] |= 0x1;
 		kvm_vcpu_ioctl_interrupt(kvm->vcpus[i],&irq);
 
 	} else {
@@ -109,42 +109,55 @@ uint64_t ls3a_router_intctl_read(struct kvm *kvm, gpa_t addr, unsigned size,void
 int ls3a_router_intctl_write(struct kvm *kvm , gpa_t addr, unsigned size, const void *val)
 {
 	uint64_t val_data,offset;
-	int i,change;
-	uint8_t old;
 	uint8_t *mem;
 	struct loongson_kvm_ls3a_routerirq *s = ls3a_router_irqchip(kvm);
 
 	mem = s->ls3a_router_reg;
 	offset = addr & 0xff;
-	change = 0;
 	val_data = *(uint64_t *)val;
 	if(offset >= 0 && (offset < 0x20)){
-		for(i=0;i < size;i++){
-			if(offset + i < 0x20){
-				old = *(uint8_t *)(mem + offset + i);
-				if(old != (uint8_t)(val_data >> (i*8))){
-					route_update_reg(kvm,offset+i,0);
-					*(uint8_t *)(mem + offset) = (uint8_t)(val_data >> (i*8));
-					route_update_reg(kvm,offset+i,1);
-				}
-			}
+		while ((size > 0) && (offset < 0x20)) {
+			*(uint8_t *)(mem + offset) = (uint8_t)(val_data);
+			size --;
+			offset ++;
+			val_data = val_data >> 8;
 		}
 	}
-	if(offset == INT_ROUTER_REGS_EN_SET){
-		if(4 == size){
+
+	/* offset == 0x28 */
+	if(offset == INT_ROUTER_REGS_EN_SET) {
+		if(size >= 4) {
 			*(uint32_t *)(mem + INT_ROUTER_REGS_EN) |= (uint32_t)(val_data);
+			offset += 4;
+			size -= 4;
+			val_data = val_data >> 32;
 		}
 	}
-	if(offset == INT_ROUTER_REGS_EN_CLR){
-		if(4 == size){
+
+
+	/* offset == 0x2c */
+	if(offset == INT_ROUTER_REGS_EN_CLR) {
+		if(size >= 4){
 			*(uint32_t *)(mem + INT_ROUTER_REGS_EN) &= ~((uint32_t)(val_data));
 			*(uint32_t *)(mem + INT_ROUTER_REGS_ISR) &= ~((~((uint32_t)(val_data))) & (*(uint32_t *)(mem + INT_ROUTER_REGS_EDGE)));
+			offset += 4;
+			size -= 4;
+			val_data = val_data >> 32;
 		}
 	}
-	if(offset == INT_ROUTER_REGS_EDGE){
-		if(4 == size){
+
+	/* offset == 0x38 */
+	if(offset == INT_ROUTER_REGS_EDGE) {
+		if (size >=4 ) {
 			*(uint32_t *)(mem + offset) = (uint32_t)(val_data);
+			offset += 4;
+			size -= 4;
+			val_data = val_data >> 32;
 		}
+	}
+
+	if (size) {
+		printk("%s remaining size %d offset %llx\n", __FUNCTION__, size, offset);
 	}
 	return 0;
 }
