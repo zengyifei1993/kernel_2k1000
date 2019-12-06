@@ -201,6 +201,17 @@ static int stmmac_pltfr_remove(struct platform_device *pdev)
 	return ret;
 }
 
+static int stmmac_pltfr_shutdown(struct platform_device *pdev)
+{
+	struct net_device *ndev = platform_get_drvdata(pdev);
+	struct stmmac_priv *priv = netdev_priv(ndev);
+
+	if (device_may_wakeup(priv->device))
+		priv->hw->mac->pmt(priv->ioaddr, priv->wolopts);
+
+	return 0;
+}
+
 #ifdef CONFIG_PM
 static int stmmac_pltfr_suspend(struct device *dev)
 {
@@ -264,6 +275,7 @@ MODULE_DEVICE_TABLE(of, stmmac_dt_ids);
 struct platform_driver stmmac_pltfr_driver = {
 	.probe = stmmac_pltfr_probe,
 	.remove = stmmac_pltfr_remove,
+	.shutdown = stmmac_pltfr_shutdown,
 	.driver = {
 		   .name = STMMAC_RESOURCE_NAME,
 		   .owner = THIS_MODULE,
