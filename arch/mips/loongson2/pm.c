@@ -66,6 +66,25 @@ static void ls2k_pm(enum ACPI_Sx sx)
 	acpi_ctrl &= 0xffffffff;
 	writel(acpi_ctrl, (void*)(base + PM1_STS));
 
+	acpi_ctrl = readl((void*)(base + GPE0_STS));
+	acpi_ctrl &= 0xffffffff;
+	writel(acpi_ctrl, (void*)(base + GPE0_STS));
+
+	/*GMAC0_EN and GMAC1_EN*/
+	acpi_ctrl = readl((void*)(base + GPE0_SR));
+	acpi_ctrl |= 0x00000060;
+	writel(acpi_ctrl, (void*)(base + GPE0_SR));
+
+	/*WOL_BAT_EN*/
+	acpi_ctrl = readl((void*)(base + RTC_GPMCR));
+	acpi_ctrl |= 0x00000080;
+	writel(acpi_ctrl, (void*)(base + RTC_GPMCR));
+
+	/*USB_GMAC_OK set 1*/
+	acpi_ctrl = readl((void*)(base + R_GPMCR));
+	acpi_ctrl |= 0x00000080;
+	writel(acpi_ctrl, (void*)(base + R_GPMCR));
+
 	acpi_ctrl = ((sx << 10) | (1 << 13));
 	writel(acpi_ctrl, (void*)(base + PM1_CTR));
 
