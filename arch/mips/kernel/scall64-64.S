@@ -76,6 +76,7 @@ syscall_common:
 	sd	t1, PT_R0(sp)		# save it for syscall restarting
 1:	sd	v0, PT_R2(sp)		# result
 
+	.align 6
 n64_syscall_exit:
 	j	syscall_exit_partial
 

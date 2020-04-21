@@ -247,6 +247,10 @@ EXCQ(	gslq, t3, t2, 0(src),		.Ll_exc)
 EXCQ(	gssq, t3, t2, 0(dst),		.Ls_exc_p16)
 	beqz	len, .Ldone
 	 ADDU	dst, 16
+	la	t0, .L_memcpy_1_15B_8B_aligned
+	jr.hb	t0
+	nop
+	.align 6
 /*
  * copy 1 - 15B, src & dst are 8B aligned
  */

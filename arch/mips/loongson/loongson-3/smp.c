@@ -116,6 +116,7 @@ unsigned int addr_read_clear_ipi(int cpu)
 unsigned int csr_read_clear_ipi(int cpu)
 {
 	unsigned int action = read_csr(LOONGSON_IPI_STATUS_OFFSET);
+	smp_mb();
 	write_csr(LOONGSON_IPI_CLEAR_OFFSET, (unsigned int)action);
 	return action;
 }
