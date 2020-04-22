@@ -41,7 +41,7 @@ endif
 # by GAS.  The cc-option can't probe for this behaviour so -march=loongson3a
 # can't easily be used safely within the kbuild framework.
 #
-ifeq ($(call cc-ifversion, -ge, 0409, y), y)
+ifeq ($(call cc-option-yn,$(mips-cflags) -march=loongson3a), y)
     cflags-$(CONFIG_CPU_LOONGSON3)  += \
       $(call cc-option,-march=loongson3a -falign-functions=64 -falign-jumps=64 -falign-labels=64  -falign-loops=64 -U_MIPS_ISA -D_MIPS_ISA=_MIPS_ISA_MIPS64)
 else
