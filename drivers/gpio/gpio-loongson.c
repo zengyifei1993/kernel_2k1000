@@ -284,6 +284,7 @@ static int loongson_gpio_remove(struct platform_device *pdev)
 static const struct of_device_id loongson_gpio_dt_ids[] = {
 	{ .compatible = "loongson,ls7a-gpio"},
 	{ .compatible = "loongson,ls7a-dc-gpio"},
+	{ .compatible = "loongson-gpio"},
 	{}
 };
 
