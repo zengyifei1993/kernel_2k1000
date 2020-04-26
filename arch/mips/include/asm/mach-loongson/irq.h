@@ -8,6 +8,7 @@
 
 #define LS_IRC_ENT(x)	LS_IRC_OFF(x)
 #define LS_IRC_ENT_LPC	LS_IRC_ENT(0xa)
+#define LS_IRC_ENT_UART1	LS_IRC_ENT(0xf)
 #define LS_IRC_ENT_HT0(n)	LS_IRC_ENT(n + 0x10)
 #define LS_IRC_ENT_HT1(n)	LS_IRC_ENT(n + 0x18)
 #define LS_IRC_ENT_PCI(n)	LS_IRC_ENT(n + 0x4)
@@ -29,6 +30,7 @@
 /* cpu core interrupt numbers */
 #define MIPS_CPU_IRQ_BASE 56
 
+#define LOONGSON_UART1_IRQ  (MIPS_CPU_IRQ_BASE + 1) /* uart1 */
 #define LOONGSON_UART_IRQ   (MIPS_CPU_IRQ_BASE + 2) /* uart */
 #define LOONGSON_BRIDGE_IRQ (MIPS_CPU_IRQ_BASE + 3) /* CASCADE */
 #define LOONGSON_TIMER_IRQ  (MIPS_CPU_IRQ_BASE + 7) /* cpu timer */

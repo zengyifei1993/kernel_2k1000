@@ -80,7 +80,7 @@ extern struct platform_controller_hub rs780_pch;
 
 extern unsigned long long smp_group[4];
 extern enum irq_chip_model msi_chip_model;
-
+extern bool need_cpu_uart1;
 int ls3a_msi_enabled = 0;
 EXPORT_SYMBOL(ls3a_msi_enabled);
 extern unsigned int ls2h_irq2pos[];
@@ -350,13 +350,13 @@ asmlinkage void ip6_dispatch(void)
 asmlinkage void ip2_dispatch(void)
 {
 	int cpu = cpu_logical_map(smp_processor_id());
-	int irqs, irq, irqs_pci, irq_lpc;
+	int irqs, irq, irqs_pci, irq_lpc, irq_uart1;
 
 	if(cpu == loongson_boot_cpu_id)
 	{
 		int core_index = loongson_boot_cpu_id % cores_per_node;
-		irqs_pci = ls64_conf_read32(LS_IRC_ISR(core_index)) & 0xf0;
-		irq_lpc = ls64_conf_read32(LS_IRC_ISR(core_index)) & 0x400;
+		int isr = ls64_conf_read32(LS_IRC_ISR(core_index));
+		irqs_pci = isr & 0xf0;
 		if(irqs_pci)
 		{
 			while ((irq = ffs(irqs_pci)) != 0) {
@@ -364,7 +364,9 @@ asmlinkage void ip2_dispatch(void)
 				irqs_pci &= ~(1 << (irq-1));
 			}
 		}
-		else if(irq_lpc)
+
+		irq_lpc = isr & 0x400;
+		if(irq_lpc)
 		{
 			if(ls_lpc_reg_base == LS3_LPC_REG_BASE)
 			{
@@ -376,8 +378,12 @@ asmlinkage void ip2_dispatch(void)
 					}
 				}
 			}
-
 			do_IRQ(LOONGSON_UART_IRQ);
+		}
+
+		irq_uart1 = isr & 0x8000;
+		if(irq_uart1) {
+			do_IRQ(LOONGSON_UART1_IRQ);
 		}
 	}
 	else
@@ -404,13 +410,13 @@ void mach_irq_dispatch(unsigned int pending)
 	if (pending & CAUSEF_IP2)
 	{
 		int cpu = cpu_logical_map(smp_processor_id());
-		int irqs, irq, irqs_pci, irq_lpc;
+		int irqs, irq, irqs_pci, irq_lpc, irq_uart1;
 
 		if(cpu == loongson_boot_cpu_id)
 		{
 			int core_index = loongson_boot_cpu_id % cores_per_node;
-			irqs_pci = ls64_conf_read32(LS_IRC_ISR(core_index)) & 0xf0;
-			irq_lpc = ls64_conf_read32(LS_IRC_ISR(core_index)) & 0x400;
+			int isr = ls64_conf_read32(LS_IRC_ISR(core_index));
+			irqs_pci = isr & 0xf0;
 			if(irqs_pci)
 			{
 				while ((irq = ffs(irqs_pci)) != 0) {
@@ -418,7 +424,9 @@ void mach_irq_dispatch(unsigned int pending)
 					irqs_pci &= ~(1 << (irq-1));
 				}
 			}
-			else if(irq_lpc)
+
+			irq_lpc = isr & 0x400;
+			if(irq_lpc)
 			{
 				if(ls_lpc_reg_base == LS3_LPC_REG_BASE)
 				{
@@ -430,8 +438,12 @@ void mach_irq_dispatch(unsigned int pending)
 						}
 					}
 				}
-
 				do_IRQ(LOONGSON_UART_IRQ);
+			}
+
+			irq_uart1 = isr & 0x8000;
+			if(irq_uart1) {
+				do_IRQ(LOONGSON_UART1_IRQ);
 			}
 		}
 		else
@@ -457,11 +469,15 @@ static inline void mask_loongson_irq(struct irq_data *d)
 	if(!desc->action)
 		return;
 
-	if ((d->irq != LOONGSON_UART_IRQ) && (d->irq < LOONGSON_SUPPORT_IP5_BASE_IRQ))
+	if ((d->irq != LOONGSON_UART_IRQ) &&
+	    (d->irq != LOONGSON_UART1_IRQ) &&
+	    (d->irq < LOONGSON_SUPPORT_IP5_BASE_IRQ))
 		return;
 	/* Workaround: UART IRQ may deliver to any core */
 	if (d->irq == LOONGSON_UART_IRQ)
-		ls64_conf_write32(1 << 10, LS_IRC_ENCLR);
+		ls64_conf_write32((1 << 10), LS_IRC_ENCLR);
+	else if (d->irq == LOONGSON_UART1_IRQ)
+		ls64_conf_write32((1 << 15), LS_IRC_ENCLR);
 	else
 		ls64_conf_write32(1 << (16 + d->irq - LOONGSON_SUPPORT_IP5_BASE_IRQ), LS_IRC_ENCLR);
 #else
@@ -469,7 +485,9 @@ static inline void mask_loongson_irq(struct irq_data *d)
 		return;
 
 	if (d->irq == LOONGSON_UART_IRQ)
-		ls64_conf_write32(1 << 10, LS_IRC_ENCLR);
+		ls64_conf_write32((1 << 10), LS_IRC_ENCLR);
+	else if (d->irq == LOONGSON_UART1_IRQ)
+		ls64_conf_write32((1 << 15), LS_IRC_ENCLR);
 
 #endif
 }
@@ -477,16 +495,22 @@ static inline void mask_loongson_irq(struct irq_data *d)
 static inline void unmask_loongson_irq(struct irq_data *d)
 {
 #ifdef CONFIG_LOONGSON_SUPPORT_IP5
-	if ((d->irq != LOONGSON_UART_IRQ) && (d->irq < LOONGSON_SUPPORT_IP5_BASE_IRQ))
+	if ((d->irq != LOONGSON_UART_IRQ) &&
+	    (d->irq != LOONGSON_UART1_IRQ) &&
+	    (d->irq < LOONGSON_SUPPORT_IP5_BASE_IRQ))
 		return;
 	/* Workaround: UART IRQ may deliver to any core */
 	if (d->irq == LOONGSON_UART_IRQ)
-		ls64_conf_write32(1 << 10, LS_IRC_ENSET);
+		ls64_conf_write32((1 << 10), LS_IRC_ENSET);
+	else if (d->irq == LOONGSON_UART1_IRQ)
+		ls64_conf_write32((1 << 15), LS_IRC_ENSET);
 	else
 		ls64_conf_write32(1 << (16 + d->irq - LOONGSON_SUPPORT_IP5_BASE_IRQ), LS_IRC_ENSET);
 #else
 	if (d->irq == LOONGSON_UART_IRQ)
-		ls64_conf_write32(1 << 10, LS_IRC_ENSET);
+		ls64_conf_write32((1 << 10), LS_IRC_ENSET);
+	else if (d->irq == LOONGSON_UART1_IRQ)
+		ls64_conf_write32((1 << 15), LS_IRC_ENSET);
 
 #endif
 }
@@ -525,8 +549,7 @@ static void set_irq_mode(void)
 void __init mach_init_irq(void)
 {
 	int i;
-	u64 intenset_addr;
-	u64 introuter_lpc_addr;
+	unsigned data;
 
 	clear_c0_status(ST0_IM | ST0_BEV);
 
@@ -543,25 +566,27 @@ void __init mach_init_irq(void)
 
 	irq_set_chip_and_handler(LOONGSON_UART_IRQ,
 			&loongson_irq_chip, handle_level_irq);
+	data = LOONGSON_INT_COREx_INTy(loongson_boot_cpu_id, 0);
+	ls64_conf_write8(data, LS_IRC_ENT_LPC);
+	data = ls64_conf_read32(LS_IRC_EN);
+	data |= (1 << 10);
+	ls64_conf_write32(data, LS_IRC_ENSET);
 
-	for (i = 0; i < nr_nodes_loongson; i++) {
-		intenset_addr = smp_group[i] | (u64)(&LOONGSON_INT_ROUTER_INTENSET);
-		introuter_lpc_addr = smp_group[i] | (u64)(&LOONGSON_INT_ROUTER_LPC);
-		if (i == 0) {
-			*(volatile u8 *)introuter_lpc_addr = LOONGSON_INT_COREx_INTy(loongson_boot_cpu_id, 0);
-		} else {
-			*(volatile u8 *)introuter_lpc_addr = LOONGSON_INT_COREx_INTy(0, 0);
-		}
-		*(volatile u32 *)intenset_addr = 1 << 10;
+	if (need_cpu_uart1) {
+		irq_set_chip_and_handler(LOONGSON_UART1_IRQ,
+				&loongson_irq_chip, handle_level_irq);
+		data = LOONGSON_INT_COREx_INTy(loongson_boot_cpu_id, 0);
+		ls64_conf_write8(data, LS_IRC_ENT_UART1);
+		data = ls64_conf_read32(LS_IRC_EN);
+		data |= (1 << 15);
+		ls64_conf_write32(data, LS_IRC_ENSET);
 	}
-
 
 #ifdef CONFIG_LOONGSON_SUPPORT_IP5
 	if (((*(volatile unsigned int *)0x900000001fe00404) | 0xf00000) != 0xf00000)
 		(*(volatile unsigned int *)0x900000001fe00404) |= 0xf00000;
 
 	for (i = 0; i < LOONGSON_SUPPORT_IP5_IRQ_NUM; i++) {
-		unsigned data = 0;
 		irq_set_chip_and_handler(LOONGSON_SUPPORT_IP5_BASE_IRQ + i,
 			&loongson_irq_chip, handle_level_irq);
 

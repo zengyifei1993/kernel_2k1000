@@ -58,6 +58,7 @@ static struct platform_device uart8250_device = {
 	.id = PLAT8250_DEV_PLATFORM,
 };
 
+extern struct system_loongson *esys;
 static int __init serial_init(void)
 {
 	int i;
@@ -75,34 +76,32 @@ static int __init serial_init(void)
 		uart8250_data[mips_machtype][0].iobase =
 			loongson_uart_base[0] - LOONGSON_PCIIO_BASE;
 
-	if (loongson_uarts[0].uartclk)
-		uart8250_data[mips_machtype][0].uartclk =
-			loongson_uarts[0].uartclk;
+	if (esys && esys->nr_uarts) {
+		for (i = 0; i < esys->nr_uarts; i++) {
+			iotype = loongson_uarts[i].iotype;
+			uart8250_data[mips_machtype][i].iotype = iotype;
+			loongson_uart_base[i] = loongson_uarts[i].uart_base;
 
-	for (i=1; i<loongson_nr_uarts; i++) {
-		iotype = loongson_uarts[i].iotype;
-		uart8250_data[mips_machtype][i].iotype = iotype;
-		loongson_uart_base[i] = loongson_uarts[i].uart_base;
+			if (UPIO_MEM == iotype) {
+				uart8250_data[mips_machtype][i].irq =
+					MIPS_CPU_IRQ_BASE + loongson_uarts[i].int_offset;
+				uart8250_data[mips_machtype][i].mapbase =
+					loongson_uart_base[i];
+				uart8250_data[mips_machtype][i].membase =
+					ioremap_nocache(loongson_uart_base[i], 8);
+			}
+			else if (UPIO_PORT == iotype) {
+				uart8250_data[mips_machtype][i].irq =
+					loongson_uarts[i].int_offset;
+				uart8250_data[mips_machtype][i].iobase =
+					loongson_uart_base[i] - LOONGSON_PCIIO_BASE;
+			}
 
-		if (UPIO_MEM == iotype) {
-			uart8250_data[mips_machtype][i].irq =
-				MIPS_CPU_IRQ_BASE + loongson_uarts[i].int_offset;
-			uart8250_data[mips_machtype][i].mapbase =
-				loongson_uart_base[i];
-			uart8250_data[mips_machtype][i].membase =
-				ioremap_nocache(loongson_uart_base[i], 8);
+			uart8250_data[mips_machtype][i].uartclk =
+				loongson_uarts[i].uartclk;
+			uart8250_data[mips_machtype][i].flags =
+				UPF_BOOT_AUTOCONF | UPF_SKIP_TEST;
 		}
-		else if (UPIO_PORT == iotype) {
-			uart8250_data[mips_machtype][i].irq =
-				loongson_uarts[i].int_offset;
-			uart8250_data[mips_machtype][i].iobase =
-				loongson_uart_base[i] - LOONGSON_PCIIO_BASE;
-		}
-
-		uart8250_data[mips_machtype][i].uartclk =
-			loongson_uarts[i].uartclk;
-		uart8250_data[mips_machtype][i].flags =
-			UPF_BOOT_AUTOCONF | UPF_SKIP_TEST;
 	}
 
 	memset(&uart8250_data[mips_machtype][loongson_nr_uarts],

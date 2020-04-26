@@ -133,6 +133,9 @@ static inline void do_perfcnt_IRQ(void)
 #define LOONGSON_PCIIO_SIZE	0x00100000	/* 1M */
 #define LOONGSON_PCIIO_TOP	(LOONGSON_PCIIO_BASE+LOONGSON_PCIIO_SIZE-1)
 
+#define LOONGSON_UART0_OFFSET	0x1E0
+#define LOONGSON_UART1_OFFSET	0x1E8
+
 /* Loongson Register Bases */
 
 #define LOONGSON_PCICONFIGBASE	0x00

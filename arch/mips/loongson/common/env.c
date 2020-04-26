@@ -115,6 +115,18 @@ do {									\
 		tmp = kstrtou32((char *)p + strlen(option"="), 10, &res); \
 } while (0)
 
+static bool has_cpu_uart1(void)
+{
+	int i;
+	for (i = 0; i < esys->nr_uarts; i++) {
+		if (current_cpu_type() == CPU_LOONGSON3_COMP &&
+				esys->uarts[i].uart_base == LOONGSON_REG_BASE + LOONGSON_UART1_OFFSET)
+			return true;
+	}
+	return false;
+}
+
+bool need_cpu_uart1;
 void __init no_efiboot_env(void)
 {
 	/* pmon passes arguments in 32bit pointers */
@@ -339,8 +351,9 @@ void __init no_efiboot_env(void)
 		loongson_workarounds |= WORKAROUND_LVDS_EA_EC;
 #endif
 
-	loongson_nr_uarts = esys->nr_uarts;
-	if (loongson_nr_uarts < 1 || loongson_nr_uarts > MAX_UARTS)
+	need_cpu_uart1 = has_cpu_uart1();
+	loongson_nr_uarts = esys->nr_uarts ? esys->nr_uarts : 1;
+	if (loongson_nr_uarts > MAX_UARTS)
 		loongson_nr_uarts = 1;
 	memcpy(loongson_uarts, esys->uarts,
 		sizeof(struct uart_device) * loongson_nr_uarts);
