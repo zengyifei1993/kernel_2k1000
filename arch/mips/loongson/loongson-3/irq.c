@@ -583,18 +583,20 @@ void __init mach_init_irq(void)
 	}
 
 #ifdef CONFIG_LOONGSON_SUPPORT_IP5
-	if (((*(volatile unsigned int *)0x900000001fe00404) | 0xf00000) != 0xf00000)
-		(*(volatile unsigned int *)0x900000001fe00404) |= 0xf00000;
+	if (current_cpu_type() == CPU_LOONGSON3_COMP) {
+		if (((*(volatile unsigned int *)0x900000003ff00404) & 0xf00000) != 0xf00000)
+			(*(volatile unsigned int *)0x900000003ff00404) |= 0xf00000;
 
-	for (i = 0; i < LOONGSON_SUPPORT_IP5_IRQ_NUM; i++) {
-		irq_set_chip_and_handler(LOONGSON_SUPPORT_IP5_BASE_IRQ + i,
-			&loongson_irq_chip, handle_level_irq);
+		for (i = 0; i < LOONGSON_SUPPORT_IP5_IRQ_NUM; i++) {
+			irq_set_chip_and_handler(LOONGSON_SUPPORT_IP5_BASE_IRQ + i,
+				&loongson_irq_chip, handle_level_irq);
 
-		data = LOONGSON_INT_COREx_INTy(loongson_boot_cpu_id, 3);
-		ls64_conf_write8(data, LS_IRC_ENT_HT0(i));
-		data = ls64_conf_read32(LS_IRC_EN);
-		data |= (1 << (i + 16));
-		ls64_conf_write32(data, LS_IRC_ENSET);
+			data = LOONGSON_INT_COREx_INTy(loongson_boot_cpu_id, 3);
+			ls64_conf_write8(data, LS_IRC_ENT_HT0(i));
+			data = ls64_conf_read32(LS_IRC_EN);
+			data |= (1 << (i + 16));
+			ls64_conf_write32(data, LS_IRC_ENSET);
+		}
 	}
 #endif
 
