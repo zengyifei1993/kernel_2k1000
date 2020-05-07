@@ -63,6 +63,12 @@ unsigned long long read_stable_counter(void)
 }
 
 unsigned long long (* read_sched_clock)(void);
+static unsigned long long legacy_sched_clock(void)
+{
+	return (unsigned long long)(jiffies - INITIAL_JIFFIES)
+					* (NSEC_PER_SEC / HZ);
+}
+
 static void loongson3_init_clock(void)
 {
 	unsigned long freq;
@@ -77,8 +83,10 @@ static void loongson3_init_clock(void)
 		clocksource_loongson.rating = 380;
 		freq = calc_const_freq();
 		read_sched_clock = read_stable_counter;
-	} else
-		panic("old loongson 3 cpu does not support const-frequence counter!");
+	} else {
+		read_sched_clock = legacy_sched_clock;
+		return;
+	}
 
 	clocksource_register_hz(&clocksource_loongson, freq);
 	pr_info("loongson const clocksource register @%ldMhz!\n", freq/1000000);
