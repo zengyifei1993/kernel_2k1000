@@ -108,6 +108,7 @@ static int ls7a_pci_config_access(unsigned char access_type,
 		int where, u32 *data)
 {
 	unsigned char busnum = bus->number;
+	unsigned int val;
 	u_int64_t addr, type;
 	void *addrp;
 	int device = PCI_SLOT(devfn);
@@ -149,10 +150,12 @@ static int ls7a_pci_config_access(unsigned char access_type,
 
 		if (pos != 0 && (pos + PCI_EXP_DEVCTL) == reg)
 		{
-			if (((*data & PCI_EXP_DEVCTL_READRQ) >> 12) > 1) {
-				printk(KERN_ERR "MAX READ REQUEST SIZE shuould not greater than 256");
+			/* need pmon/uefi configure mrrs to pcie solt max mrrs capability */
+			val = *(volatile unsigned int *)addrp;
+			if ((*data & PCI_EXP_DEVCTL_READRQ) > (val & PCI_EXP_DEVCTL_READRQ)) {
+				printk(KERN_ERR "MAX READ REQUEST SIZE shuould not greater than the slot max capability");
 				*data = *data & ~PCI_EXP_DEVCTL_READRQ;
-				*data = *data | (1 << 12);
+				*data = *data | (val & PCI_EXP_DEVCTL_READRQ);
 			}
 		}
 
