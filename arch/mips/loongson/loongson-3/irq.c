@@ -548,7 +548,6 @@ static void set_irq_mode(void)
 
 void __init mach_init_irq(void)
 {
-	int i;
 	unsigned data;
 
 	clear_c0_status(ST0_IM | ST0_BEV);
@@ -584,6 +583,7 @@ void __init mach_init_irq(void)
 
 #ifdef CONFIG_LOONGSON_SUPPORT_IP5
 	if (current_cpu_type() == CPU_LOONGSON3_COMP) {
+		int i;
 		if (((*(volatile unsigned int *)0x900000003ff00404) & 0xf00000) != 0xf00000)
 			(*(volatile unsigned int *)0x900000003ff00404) |= 0xf00000;
 
