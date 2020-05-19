@@ -93,10 +93,16 @@ static void ls2k_pm(enum ACPI_Sx sx)
 static void ls2k_reboot(char *cmd)
 {
 	unsigned long base;
-	base = CKSEG1ADDR(APB_BASE) + ACPI_OFF;
+	 volatile unsigned long tmp;	
+ 	base = CKSEG1ADDR(APB_BASE) + ACPI_OFF;
 
 	writel(1, (void*)(base + RST_CTR));
-
+ //fixup for ATmode reboot used gpio3
+	 *(volatile unsigned int *)0xffffffffbfe10500 = 0xfffffff7;
+	tmp = *(volatile unsigned int *)0xffffffffbfe10510;
+	tmp |= 0x8;
+	*(volatile unsigned int *)0xffffffffbfe10510 = tmp;//gpio3 write high	
+	
 	while (1) {};
 
 }
